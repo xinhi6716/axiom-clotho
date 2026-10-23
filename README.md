@@ -60,6 +60,10 @@ The target and group columns are excluded from features automatically. Use `--fe
 
 Group labels are preserved as text when reading CSV, including leading zeros. Blank or missing groups, non-finite targets, duplicate headers, unsupported datetime/complex features, and impossible split requests fail with an actionable error. Rows with missing targets are **not** silently dropped.
 
+CSV files must use UTF-8 (an optional UTF-8 BOM is supported), with unique, non-blank column names. Each non-blank record must have exactly as many fields as the header: malformed short/long records are rejected **before fitting**, rather than silently padded or shifted into the wrong columns. Represent missing values with explicit empty fields, such as `001,,2`, and quote values containing commas or newlines. Empty lines and lines containing only ASCII spaces/tabs outside quoted values are ignored. Structure errors report physical line numbers and field counts, not cell contents.
+
+The CLI checks a bounded input snapshot before pandas type inference, preserving the original quoted text and group identifiers. Python's CSV parser field-size limit applies to both headers and data cells (131,072 characters per field under its default setting); a parser-limit or quoting failure returns an actionable error. This per-field guard is specific to CSV input, not the DataFrame API, and is not a hard memory limit for the whole file.
+
 ### Predict new rows
 
 First evaluate the procedure with `run`. Then supply a second CSV containing **exactly the feature columns**, without target or group columns:

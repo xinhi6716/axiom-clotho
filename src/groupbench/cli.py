@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import io
 from pathlib import Path
 import sys
 
@@ -45,16 +46,54 @@ def protect_input_files(inputs, output_dir):
 
 
 def _read_csv(path: Path, *, group=None):
+    # pandas may silently use excess fields as an index, shift the remaining
+    # values under the wrong names, or pad short records. Validate a bounded
+    # snapshot before type inference so those repairs cannot change the data.
+    snapshot = io.StringIO(newline="")
     with path.open("r", encoding="utf-8-sig", newline="") as handle:
-        header = next(csv.reader(handle), [])
-    if not header or len(set(header)) != len(header):
-        raise ValueError("CSV must have a non-empty header with unique column names.")
+        record_lines = []
+
+        def source_lines():
+            for line in handle:
+                record_lines.append(line)
+                yield line
+
+        reader = csv.reader(source_lines(), strict=True)
+        try:
+            header = next(reader, [])
+            if not header or len(set(header)) != len(header) or any(not name.strip() for name in header):
+                raise ValueError("CSV must have a non-empty header with unique column names; names cannot be blank.")
+            snapshot.write("".join(record_lines))
+            record_lines.clear()
+            n_rows = 0
+            for record in reader:
+                raw_record = "".join(record_lines)
+                record_lines.clear()
+                # Match pandas' blank-line behavior without dropping quoted
+                # empty/whitespace values or blank lines inside quoted values.
+                if not raw_record.strip(" \t\r\n"):
+                    continue
+                n_rows += 1
+                if n_rows > MAX_ROWS:
+                    raise ValueError(f"CSV exceeds the MVP limit of {MAX_ROWS:,} rows.")
+                if len(record) != len(header):
+                    raise ValueError(
+                        f"CSV record ending at physical line {reader.line_num} has {len(record)} fields; "
+                        f"the header defines {len(header)}. Use explicit empty fields for missing values "
+                        "and quote values containing commas."
+                    )
+                snapshot.write(raw_record)
+        except csv.Error as exc:
+            raise ValueError(
+                f"CSV could not be parsed near physical line {reader.line_num}. "
+                f"Check quoting and the CSV field-size limit ({csv.field_size_limit():,} characters)."
+            ) from exc
+        except UnicodeDecodeError as exc:
+            raise ValueError("CSV must use UTF-8 encoding (an optional UTF-8 BOM is supported).") from exc
     # Group labels are identifiers: preserve leading zeros and literal 'NA'.
     converters = {group: str} if group else None
-    frame = pd.read_csv(path, converters=converters, nrows=MAX_ROWS + 1)
-    if len(frame) > MAX_ROWS:
-        raise ValueError(f"CSV exceeds the MVP limit of {MAX_ROWS:,} rows.")
-    return frame
+    snapshot.seek(0)
+    return pd.read_csv(snapshot, converters=converters)
 
 
 def main(argv=None) -> int:
