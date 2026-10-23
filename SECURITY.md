@@ -9,6 +9,7 @@ This alpha is a local Python/CLI tool, not a hardened service for untrusted mult
 - CSV values are preserved exactly; spreadsheet applications may interpret formula-leading identifiers. Import untrusted CSV columns as text.
 - Input-size checks and one-thread execution are not a sandbox or hard memory/time limit. Use OS quotas and isolated environments for untrusted files.
 - CSV records are checked for consistent field counts before type inference. UTF-8 decoding, strict quoting, non-blank unique headers, and Python's CSV parser field-size limit apply; errors omit raw cell contents. These checks do not replace OS-level resource limits.
+- CLI source hashes are computed incrementally from the same byte stream used for CSV validation, not from a later pathname lookup. This binds the digest to observed bytes but does not lock files or guarantee a filesystem-atomic snapshot during concurrent writes.
 - Writes are staged, with atomic per-file no-clobber behavior unless overwrite is explicit. The bundle as a whole is not transactional.
 
 Do not publish exploit details alongside private data or credentials. Use the repository's private security reporting mechanism if one is available; otherwise provide only a minimal, non-sensitive description and request a private contact before sending sensitive details. No dedicated security response SLA is promised.

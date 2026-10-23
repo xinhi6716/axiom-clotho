@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import io
 from pathlib import Path
 import sys
@@ -11,7 +12,7 @@ import sys
 import pandas as pd
 
 from . import __version__
-from .data import MAX_ROWS, file_sha256, make_materials_fixture
+from .data import MAX_ROWS, make_materials_fixture
 from .evaluation import benchmark
 from .prediction import ensure_prediction_output, fit_predict
 
@@ -45,12 +46,45 @@ def protect_input_files(inputs, output_dir):
                 raise ValueError("Output would overwrite an input file; choose a separate --out directory.")
 
 
+class _HashingReader(io.RawIOBase):
+    """Hash only bytes returned to the decoder, without reopening the source."""
+
+    def __init__(self, source, digest):
+        super().__init__()
+        self.source = source
+        self.digest = digest
+
+    def readable(self):
+        return True
+
+    def readinto(self, buffer):
+        count = self.source.readinto(buffer)
+        if count:
+            self.digest.update(memoryview(buffer)[:count])
+        return count
+
+
 def _read_csv(path: Path, *, group=None):
+    """Keep the existing DataFrame-only interface for CSV input callers."""
+    return _read_csv_with_hash(path, group=group)[0]
+
+
+def _read_csv_with_hash(path: Path, *, group=None):
+    """Return validated data and SHA-256 of its exact, single-read byte stream.
+
+    Successful validation consumes the stream to EOF, including the BOM and
+    ignored blank lines in the digest. Invalid/oversized input returns no hash.
+    This binds provenance to the bytes read, not to a later pathname lookup;
+    it does not promise filesystem-atomic reads of concurrently edited files.
+    """
     # pandas may silently use excess fields as an index, shift the remaining
     # values under the wrong names, or pad short records. Validate a bounded
     # snapshot before type inference so those repairs cannot change the data.
     snapshot = io.StringIO(newline="")
-    with path.open("r", encoding="utf-8-sig", newline="") as handle:
+    digest = hashlib.sha256()
+    with path.open("rb") as source, io.TextIOWrapper(
+        _HashingReader(source, digest), encoding="utf-8-sig", newline=""
+    ) as handle:
         record_lines = []
 
         def source_lines():
@@ -93,7 +127,7 @@ def _read_csv(path: Path, *, group=None):
     # Group labels are identifiers: preserve leading zeros and literal 'NA'.
     converters = {group: str} if group else None
     snapshot.seek(0)
-    return pd.read_csv(snapshot, converters=converters)
+    return pd.read_csv(snapshot, converters=converters), digest.hexdigest()
 
 
 def main(argv=None) -> int:
@@ -139,8 +173,7 @@ def main(argv=None) -> int:
             frame = make_materials_fixture(args.groups, args.rows_per_group, args.seed)
             target, group, features = "response", "batch", None
         else:
-            frame = _read_csv(args.csv_path, group=args.group)
-            source_hash = file_sha256(args.csv_path)
+            frame, source_hash = _read_csv_with_hash(args.csv_path, group=args.group)
             target, group = args.target, args.group
             features = [c.strip() for c in args.features.split(",")] if args.features else None
         options = dict(target=target, group=group, features=features,
@@ -148,8 +181,8 @@ def main(argv=None) -> int:
                        baselines=tuple(x.strip() for x in args.baselines.split(",")),
                        objective=args.objective, source_sha256=source_hash)
         if args.command == "predict":
-            incoming = _read_csv(args.new_csv_path)
-            result = fit_predict(frame, incoming, **options, prediction_source_sha256=file_sha256(args.new_csv_path))
+            incoming, prediction_source_hash = _read_csv_with_hash(args.new_csv_path)
+            result = fit_predict(frame, incoming, **options, prediction_source_sha256=prediction_source_hash)
             destination = result.write(args.out, overwrite=args.overwrite)
             print(f"Predictions: {destination}\nInner-selected candidate: {result.manifest['selected_candidate']}")
             print("Full-data refit predictions, not held-out evaluation. Use `run` to evaluate generalization first.")
