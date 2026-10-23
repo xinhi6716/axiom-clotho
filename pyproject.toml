@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ml-super-calculator"
+version = "0.1.0"
+description = "Local-first ML Super Calculator: grouped tabular regression, evaluation, and prediction"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "GroupBench contributors"}]
+keywords = ["machine-learning", "materials", "regression", "group-cross-validation", "reproducibility"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "Programming Language :: Python :: 3",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = ["numpy>=1.24,<3", "pandas>=2,<3", "scikit-learn>=1.4,<2", "threadpoolctl>=3,<4"]
+
+[project.scripts]
+mlcalc = "groupbench.cli:main"
+groupbench = "groupbench.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

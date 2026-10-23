@@ -1,0 +1,171 @@
+"""A small sklearn-like selector whose every learned transform stays in-fold."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+import numpy as np
+import pandas as pd
+from sklearn.base import BaseEstimator, RegressorMixin
+from sklearn.compose import ColumnTransformer
+from sklearn.dummy import DummyRegressor
+from sklearn.ensemble import ExtraTreesRegressor
+from sklearn.impute import SimpleImputer
+from sklearn.linear_model import Ridge
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.utils.validation import check_is_fitted
+from threadpoolctl import threadpool_limits
+
+from .data import validate_features, validate_groups, validate_seed, validate_target
+from .metrics import grouped_metrics
+from .splitting import GroupKFold, audit_split
+
+
+@dataclass(frozen=True)
+class Candidate:
+    name: str
+    family: str
+    params: dict
+
+
+def candidates_for(baselines) -> list[Candidate]:
+    if isinstance(baselines, str) or not baselines or len(set(baselines)) != len(baselines):
+        raise ValueError("baselines must be a non-empty sequence of distinct model family names.")
+    known = {"dummy", "ridge", "extra_trees"}
+    if set(baselines) - known:
+        raise ValueError(f"Unknown baseline. Choose from {sorted(known)}.")
+    result = []
+    for family in baselines:
+        if family == "dummy":
+            result.append(Candidate("dummy_mean", family, {"strategy": "mean"}))
+        elif family == "ridge":
+            result.extend(Candidate(f"ridge_alpha_{alpha:g}", family, {"alpha": alpha}) for alpha in (0.1, 1.0, 10.0))
+        else:
+            result.extend(Candidate(f"extra_trees_depth_{depth or 'none'}", family, {"max_depth": depth, "n_estimators": 64, "min_samples_leaf": 2}) for depth in (6, None))
+    return result
+
+
+def make_pipeline(X: pd.DataFrame, candidate: Candidate, random_state: int) -> Pipeline:
+    numeric = list(X.select_dtypes(include="number").columns)
+    categorical = [c for c in X if c not in numeric]
+    transforms = []
+    if numeric:
+        transforms.append(("numeric", Pipeline([
+            ("impute", SimpleImputer(strategy="median", keep_empty_features=True)),
+            ("scale", StandardScaler()),
+        ]), numeric))
+    if categorical:
+        transforms.append(("categorical", Pipeline([
+            ("impute", SimpleImputer(strategy="constant", fill_value="__GROUPBENCH_MISSING__", keep_empty_features=True)),
+            ("encode", OneHotEncoder(handle_unknown="ignore", max_categories=64, sparse_output=True)),
+        ]), categorical))
+    preprocessing = ColumnTransformer(transforms, remainder="drop", sparse_threshold=1.0)
+    if candidate.family == "dummy":
+        model = DummyRegressor(**candidate.params)
+    elif candidate.family == "ridge":
+        model = Ridge(**candidate.params, solver="lsqr")
+    else:
+        model = ExtraTreesRegressor(**candidate.params, random_state=random_state, n_jobs=1)
+    return Pipeline([("preprocess", preprocessing), ("model", model)])
+
+
+class GroupBenchRegressor(RegressorMixin, BaseEstimator):
+    """Select a local baseline with group-disjoint inner cross-validation.
+
+    X must be a named pandas DataFrame without target or group identifiers.
+    ``fit`` selects by inner out-of-fold error, then refits on all supplied rows.
+    Evaluate generalization with ``benchmark``, not the returned training fit.
+    No remote service, model weights, or accelerator is used.
+    """
+
+    def __init__(self, baselines=("dummy", "ridge", "extra_trees"), inner_splits=3,
+                 random_state=0, objective="group_mae"):
+        self.baselines = baselines
+        self.inner_splits = inner_splits
+        self.random_state = random_state
+        self.objective = objective
+
+    def fit(self, X, y, groups=None):
+        if groups is None:
+            raise ValueError("groups is required; there is no row-random fallback.")
+        if self.objective not in ("group_mae", "mae"):
+            raise ValueError("objective must be 'group_mae' or 'mae'.")
+        seed = validate_seed(self.random_state)
+        X = validate_features(X)
+        y = validate_target(y, len(X))
+        groups = validate_groups(groups, len(X))
+        candidates = candidates_for(self.baselines)
+        splits = list(GroupKFold(self.inner_splits, seed).split(X, groups=groups))
+        self.inner_audit_ = [{"fold": i, **audit_split(train, test, groups)} for i, (train, test) in enumerate(splits)]
+        records = []
+        # Limit BLAS/OpenMP as well as the tree estimator to one thread.
+        with threadpool_limits(limits=1):
+            for candidate in candidates:
+                oof = np.full(len(X), np.nan)
+                fold_scores = []
+                for train, test in splits:
+                    pipeline = make_pipeline(X.iloc[train], candidate, seed)
+                    pipeline.fit(X.iloc[train], y[train])
+                    prediction = pipeline.predict(X.iloc[test])
+                    oof[test] = prediction
+                    scores, _ = grouped_metrics(y[test], prediction, groups[test])
+                    fold_scores.append(scores[self.objective])
+                scores, _ = grouped_metrics(y, oof, groups)
+                records.append({
+                    "candidate": candidate.name, "family": candidate.family,
+                    "params": candidate.params, "selection_score": scores[self.objective],
+                    "objective": self.objective, "inner_fold_scores": fold_scores,
+                })
+            # A fixed candidate order gives deterministic tie-breaking.
+            winner = min(range(len(records)), key=lambda i: records[i]["selection_score"])
+            self.family_models_ = {}
+            self.family_candidates_ = {}
+            for family in self.baselines:
+                best = min((i for i, c in enumerate(candidates) if c.family == family), key=lambda i: records[i]["selection_score"])
+                chosen = candidates[best]
+                pipeline = make_pipeline(X, chosen, seed)
+                pipeline.fit(X, y)
+                self.family_models_[family] = pipeline
+                self.family_candidates_[family] = chosen.name
+        self.best_candidate_ = candidates[winner].name
+        self.best_family_ = candidates[winner].family
+        self.best_estimator_ = self.family_models_[self.best_family_]
+        self.selection_results_ = records
+        self.feature_names_in_ = np.array(X.columns, dtype=object)
+        self.n_features_in_ = X.shape[1]
+        self.feature_types_ = [str(X[c].dtype) for c in X]
+        self.n_groups_seen_ = len(pd.unique(groups))
+        return self
+
+    def _validated_predict_frame(self, X):
+        check_is_fitted(self, "best_estimator_")
+        X = validate_features(X)
+        if set(X.columns) != set(self.feature_names_in_):
+            raise ValueError("Prediction columns must exactly match training feature names.")
+        X = X[list(self.feature_names_in_)]
+        for col, expected_type in zip(X.columns, self.feature_types_):
+            if X[col].isna().all():
+                X[col] = X[col].astype(expected_type)
+        if [str(X[c].dtype) for c in X] != self.feature_types_:
+            raise ValueError("Prediction feature types differ from training; check numeric/categorical columns.")
+        return X
+
+    @staticmethod
+    def _finite_predictions(prediction):
+        prediction = np.asarray(prediction, dtype=float)
+        if not np.isfinite(prediction).all():
+            raise ValueError("Model produced non-finite predictions. Check or rescale numeric inputs and avoid extreme extrapolation.")
+        return prediction
+
+    def predict(self, X):
+        X = self._validated_predict_frame(X)
+        with threadpool_limits(limits=1):
+            return self._finite_predictions(self.best_estimator_.predict(X))
+
+    def predict_baselines(self, X) -> dict[str, np.ndarray]:
+        X = self._validated_predict_frame(X)
+        with threadpool_limits(limits=1):
+            result = {family: self._finite_predictions(model.predict(X)) for family, model in self.family_models_.items()}
+        result["selected"] = result[self.best_family_].copy()
+        return result
