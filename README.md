@@ -10,7 +10,7 @@ Read a CSV → hold out entire groups → compare local baselines → inspect an
 
 中文：這不是另一個只會呼叫雲端模型的外殼。第一版先把小型材料／製程表格資料的「分組驗證、模型比較、在本機重新訓練與預測」做扎實。依批次、試片或實驗來源切開驗證，讓同一批資料不會同時出現在訓練與測試裡。這是長期產品的可用起點，不是已完成的基礎模型。
 
-**Status:** v0.1.0 alpha. Regression only. An original sklearn-based selection/evaluation toolkit, not a pretrained foundation model, full AutoML system, or TabPFN equivalent. Synthetic examples demonstrate the workflow, not real-world accuracy.
+**Status:** v0.1.0 alpha plus an unreleased, explicitly selected binary-classification workflow. An original sklearn-based selection/evaluation toolkit, not a pretrained foundation model, full AutoML system, or TabPFN equivalent. Synthetic examples demonstrate the workflow, not real-world accuracy.
 
 ## Try it in one minute
 
@@ -40,7 +40,21 @@ mlcalc predict examples/synthetic_materials.csv examples/new_process_settings.cs
 
 The `groupbench` command is an alias for `mlcalc`. This project is installable from the checkout; no public package-registry release is assumed.
 
-## Use your own data
+## Explicit binary pass/fail workflow (unreleased)
+
+For a numeric 0/1 target, explicitly select the new binary namespace. Existing regression commands remain regression even for a 0/1 target.
+
+```bash
+mlcalc binary plan run examples/synthetic_binary_process.csv --target fail --group lot
+mlcalc binary run examples/synthetic_binary_process.csv --target fail --group lot --out runs/binary
+mlcalc binary predict examples/synthetic_binary_process.csv examples/new_binary_process.csv --target fail --group lot --out runs/binary-new
+```
+
+Fixed group-balanced Brier selects among prior Dummy, regularized Logistic, and bounded Extra Trees. Both labels must occur in every training partition; single-class held-out groups remain included. Raw probabilities, class counts, false negatives/positives and adverse group results are retained. Prediction labels use p1 >= 0.5, not an optimized manufacturing threshold. Binary output directories must be fresh; no overwrite, calibration, model loading or automatic physical decisions. The fixture is wholly invented, not real semiconductor performance.
+
+See [binary protocol, precise metrics, schemas and limits](docs/BINARY_PROTOCOL.md) and [Python example](examples/binary_python_api.py). Default no-fit plans show 105 evaluation or 21 prediction pipeline fits, with no models or output files created. Training/new-row data stay local.
+
+## Use your own regression data
 
 Your CSV should have:
 

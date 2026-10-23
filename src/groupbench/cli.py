@@ -185,8 +185,12 @@ def main(argv=None) -> int:
     fixture.add_argument("--groups", type=int, default=24)
     fixture.add_argument("--rows-per-group", type=int, default=12)
     fixture.add_argument("--seed", type=int, default=7)
+    from .binary.cli import add_binary_parser, run_binary
+    add_binary_parser(sub)
     args = parser.parse_args(argv)
     try:
+        if args.command == "binary":
+            return run_binary(args)
         if args.command == "verify":
             result = verify_bundle(args.run_dir)
             print(f"Verified {result.bundle_type} bundle: {len(result.files)} files, {result.total_bytes} payload bytes match checksums.json.")

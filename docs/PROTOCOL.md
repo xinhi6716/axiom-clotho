@@ -42,3 +42,7 @@ The manifest contains raw group IDs and schema, but not raw feature values. Pred
 ## Known boundaries
 
 A correct implementation cannot rescue an incorrect scientific protocol. Precomputed global normalization, duplicate/near-duplicate measurements, crossed dependence, a group-identifying proxy, or post-outcome predictors can invalidate evaluation. Exact feature+target copies across group labels trigger a diagnostic; near-duplicates and semantic leakage remain the user's responsibility. A real benchmark publication requires documented datasets and rights, independently justified grouping, multiple seeds where appropriate, realistic deployment conditions, resource reporting, and independent scientific review.
+
+## Separate explicit binary protocol
+
+The original regression contracts above are unchanged. Numeric 0/1 classification is a separately selected additive workflow with its own schemas and fixed group-Brier objective; see [BINARY_PROTOCOL.md](BINARY_PROTOCOL.md). Regression targets containing 0/1 do not trigger automatic classification.

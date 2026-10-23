@@ -12,6 +12,12 @@ ML Super Calculator is a product direction. GroupBench v0.1 is the first usable 
 - Synthetic materials-process fixture and adversarial integrity tests.
 - Aggregate train-derived new-row numeric-range, source-category and missingness diagnostics, available without fitting through `plan predict`.
 
+## Unreleased: explicit local binary classification
+
+- A separately selected numeric-0/1 workflow with fixed group Brier, prior/Logistic/bounded-tree baselines, nested group-disjoint evaluation, new-row prediction, and fresh-only bundles.
+- No-fit exact budgets, class-feasibility safeguards, raw probabilities, adverse-group/class-support diagnostics, original software fixtures, and a dedicated schema/protocol.
+- This is not multiclass, calibrated risk, a real semiconductor benchmark, or automatic process control. See docs/BINARY_PROTOCOL.md.
+
 ## Next: reliability and independent real-data validation
 
 Acceptance criteria:
@@ -34,7 +40,7 @@ Acceptance criteria:
 - Temporal and truly multi-axis grouped holdouts with explicit estimands.
 - Additional local model adapters with transparent budgets and fair comparisons.
 - Group-aware uncertainty calibration and independently evaluated coverage.
-- Classification and other task types only with appropriate metrics/protocols.
+- Beyond the explicit binary milestone, multiclass and other task types only with appropriate metrics/protocols.
 - Domain feature transforms with tests for train-only fitting and explicit units.
 - Optional separately installed foundation-model adapters only after version-specific license review and explicit local resource design. No bundled third-party weights by default.
 

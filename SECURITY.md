@@ -18,3 +18,11 @@ This alpha is a local Python/CLI tool, not a hardened service for untrusted mult
 - Verification checks observed bytes against unauthenticated checksums, not authorship, scientific/model correctness, proof of execution, or a whole-directory atomic snapshot. Do not modify a bundle during verification. An attacker who controls the payloads and checksum file can produce a matching bundle.
 
 Do not publish exploit details alongside private data or credentials. Use the repository's private security reporting mechanism if one is available; otherwise provide only a minimal, non-sensitive description and request a private contact before sending sensitive details. No dedicated security response SLA is promised.
+
+## Binary workflow boundaries
+
+The explicit binary namespace adds no network, dependency, arbitrary estimator, model-file loader or executable deserialization. Its JSON schemas are separate from regression; the byte verifier is unchanged and does not parse or validate classifier semantics. Binary writers are fresh-only, reject all five known output names (including symlinks), preflight strict JSON and 64 MiB payload sizes, and reuse atomic per-file no-clobber writes. No whole-bundle transaction is promised.
+
+Targets are checked before coercion and every actual training partition needs both classes before any fitting. Probability guards reject malformed/nonfinite/out-of-range/complex or wider-than-float64 output rather than repair it. Brier arithmetic rejects positive losses rounded to zero while retaining nonzero subnormals. Model nonconvergence fails the run without skipping candidates or expanding resources. Algorithm limits are not hard time/RAM isolation; long input strings and dependency allocations still matter.
+
+Raw group labels, observed binary outcomes and probabilities can be sensitive. Probabilities/threshold labels are not calibrated risk, causal evidence, OOD safety or authorization for autonomous physical/process decisions. See docs/BINARY_PROTOCOL.md.
