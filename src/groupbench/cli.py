@@ -15,6 +15,7 @@ from . import __version__
 from .data import MAX_ROWS, make_materials_fixture
 from .evaluation import benchmark
 from .prediction import ensure_prediction_output, fit_predict
+from .verification import verify_bundle
 
 OUTPUT_NAMES = ("report.html", "manifest.json", "summary.json", "predictions.csv", "checksums.json")
 
@@ -147,6 +148,10 @@ def main(argv=None) -> int:
     predict.add_argument("new_csv_path", type=Path, help="New rows: exactly the feature columns")
     _add_columns(predict)
     _add_protocol(predict, outer=False)
+    verify = sub.add_parser("verify", help="Check existing bundle SHA-256 byte integrity without fitting or writing",
+                            description="Check SHA-256 byte integrity only, not scientific/model correctness. No fitting, writes, or model loading.",
+                            epilog="Requires POSIX no-follow file access. Limits: 16 KiB checksums.json; 64 MiB per payload. Exit status: 0 verified, 2 failed.")
+    verify.add_argument("run_dir", type=Path, help="Existing evaluation or prediction directory (no symlink components)")
     fixture = sub.add_parser("fixture", help="Write a wholly synthetic materials-process CSV")
     fixture.add_argument("--out", type=Path, required=True)
     fixture.add_argument("--groups", type=int, default=24)
@@ -154,6 +159,12 @@ def main(argv=None) -> int:
     fixture.add_argument("--seed", type=int, default=7)
     args = parser.parse_args(argv)
     try:
+        if args.command == "verify":
+            result = verify_bundle(args.run_dir)
+            print(f"Verified {result.bundle_type} bundle: {len(result.files)} files, {result.total_bytes} payload bytes match checksums.json.")
+            print("Byte integrity only, not scientific/model correctness, authenticity, or proof of execution.")
+            print("Unlisted files are not checked. This is not an atomic directory snapshot; verify an idle directory.")
+            return 0
         if args.command == "fixture":
             frame = make_materials_fixture(args.groups, args.rows_per_group, args.seed)
             args.out.parent.mkdir(parents=True, exist_ok=True)

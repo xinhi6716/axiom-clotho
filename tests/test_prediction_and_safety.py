@@ -16,6 +16,7 @@ import pandas as pd
 from groupbench import benchmark, fit_predict, make_materials_fixture
 from groupbench.cli import _read_csv, main, protect_input_files
 import groupbench.report as report_module
+from groupbench.verification import _SAFE_OPEN_SUPPORTED, verify_bundle
 
 
 class PredictionTests(unittest.TestCase):
@@ -79,6 +80,8 @@ class PredictionTests(unittest.TestCase):
             checks = json.loads((out / "checksums.json").read_text())
             for name, digest in checks["files"].items():
                 self.assertEqual(hashlib.sha256((out / name).read_bytes()).hexdigest(), digest)
+            if _SAFE_OPEN_SUPPORTED:
+                self.assertEqual(verify_bundle(out.resolve()).bundle_type, "prediction")
             with self.assertRaises(FileExistsError):
                 self.result.write(out)
 

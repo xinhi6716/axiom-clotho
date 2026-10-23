@@ -161,6 +161,22 @@ For CLI CSV inputs, `source_file_sha256` and, in prediction mode, `prediction_so
 
 Existing files are preserved unless `--overwrite` is explicit. Atomic per-file no-clobber writes protect against a racing writer; the multi-file bundle is not a filesystem transaction. An interrupted final write may leave a partial bundle, which must be checked against `checksums.json`. The CLI refuses to overwrite either input through a direct, symlink, or hardlink output alias. Prediction mode refuses an evaluation output directory even with overwrite enabled, so an old report cannot be mistaken for the new predictions.
 
+### Verify an existing bundle offline
+
+```bash
+mlcalc verify runs/example
+mlcalc verify runs/example-predictions
+# The groupbench alias and python -m groupbench support the same command.
+```
+
+`verify` only reads an existing directory. It does not fit a model, open the report in a browser, parse payload contents, load serialized models, read source datasets, access the network, or create/repair files. Exit status **0** means every expected file's observed bytes match `checksums.json`; **2** means verification or command usage failed. A missing file, changed byte, malformed/duplicate checksum record, unsupported file set, or unsafe file path fails verification.
+
+The existing checksum format is exactly `{"algorithm": "sha256", "files": {"filename": "64 lowercase hexadecimal characters"}}`. Evaluation bundles must list exactly `report.html`, `summary.json`, `manifest.json`, and `predictions.csv`. Prediction bundles must list exactly `manifest.json` and `predictions.csv`, with no stale `report.html` or `summary.json` entries in the directory. Other unlisted files are not opened or verified. This command does not validate the manifest, CSV, report, or model semantics and does not recognize arbitrary checksum manifests.
+
+Verification requires POSIX directory-relative file access and no-follow opens. It fails closed on platforms without these primitives. Use a direct relative or absolute directory path without `..`, a network-style `//` root, or symlink components; checksum/payload entries must be regular files, not symlinks, directories, or FIFOs. Metadata is capped at **16 KiB** and each of at most four payloads at **64 MiB**, with **64 KiB** streaming reads. Larger bundles are rejected rather than partially verified. These are byte/read bounds, not a wall-clock deadline or a sandbox; use trusted local storage and OS limits where needed.
+
+**Integrity is not authenticity or scientific correctness.** Someone who changes both a payload and its checksum can pass this check. It does not prove a run occurred, establish an unbiased scientific protocol, validate predictions, or assess the checksum author's trustworthiness. Verify an idle directory: detected file changes fail, but sequential reads and metadata checks are not a lock, an atomic directory snapshot, or a guarantee against all concurrent modifications. Keep an independently trusted copy of checksums when provenance matters.
+
 **Privacy:** reports include group IDs, target values, predictions, and feature names. Keep private datasets and run directories out of public commits. CSV values are faithfully preserved, not spreadsheet-formula sanitized: import group IDs as text rather than opening an untrusted CSV with formula evaluation enabled. Do not upload a report without reviewing its contents.
 
 ## Limits to understand before trusting a result

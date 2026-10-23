@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Add offline `mlcalc verify RUN_DIR` for existing evaluation/prediction bundles: strict duplicate-aware checksum validation, bounded streaming hashes, POSIX no-follow reads, clear failure statuses, and integrity-only limitations. No fitting, model loading, network access, repair, or bundle-schema changes.
 - Bind CLI training/new-row source hashes to the same incrementally read bytes used for CSV validation, including BOMs and line endings. Prevent later path replacement or edits from mismatching the recorded hash and consumed data; add deterministic mutation and bounded-read regression tests.
 - Reject malformed CSV records before fitting, preventing pandas from silently shifting extra fields into an index or padding absent fields.
 - Validate non-blank headers, UTF-8, and quoting with line/count diagnostics that omit raw cell values. Preserve quoted commas/newlines, blank-line behavior, explicit empty fields, and textual group identifiers.

@@ -22,6 +22,7 @@ from groupbench.data import data_fingerprint, duplicate_diagnostics, prepare_dat
 from groupbench.metrics import grouped_metrics, regression_metrics
 from groupbench.model import Candidate, make_pipeline
 from groupbench.report import render_html
+from groupbench.verification import _SAFE_OPEN_SUPPORTED, verify_bundle
 
 
 class DataTests(unittest.TestCase):
@@ -217,6 +218,8 @@ class EndToEndTests(unittest.TestCase):
             checks = json.loads(Path(directory, "checksums.json").read_text())
             for filename, digest in checks["files"].items():
                 self.assertEqual(hashlib.sha256(Path(directory, filename).read_bytes()).hexdigest(), digest)
+            if _SAFE_OPEN_SUPPORTED:
+                self.assertEqual(verify_bundle(Path(directory).resolve()).bundle_type, "evaluation")
             with self.assertRaises(FileExistsError):
                 self.result.write(directory)
             self.result.write(directory, overwrite=True)
