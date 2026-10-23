@@ -56,7 +56,7 @@ mlcalc run measurements.csv \
   --out runs/mobility
 ```
 
-The target and group columns are excluded from features automatically. Use `--features` as an explicit allowlist to exclude specimen IDs, post-outcome measurements, operator notes, or other leakage-prone columns. If omitted, all other columns become features; the software cannot infer which of them are scientifically valid.
+The target and group columns are excluded from features automatically. Use `--features` or `--features-file` as an explicit allowlist to exclude specimen IDs, post-outcome measurements, operator notes, or other leakage-prone columns. If neither is given, all other columns become features; the software cannot infer which of them are scientifically valid.
 
 Group labels are preserved as text when reading CSV, including leading zeros. Blank or missing groups, non-finite targets, duplicate headers, unsupported datetime/complex features, and impossible split requests fail with an actionable error. Rows with missing targets are **not** silently dropped.
 
@@ -79,6 +79,57 @@ mlcalc predict measurements.csv new_process_settings.csv \
 This performs grouped inner selection on all labeled rows, refits locally, and writes `predictions.csv`, `manifest.json`, and `checksums.json`. It does **not** claim new test-set performance. New rows retain a zero-based `row_position`; predictions are in target units. Unknown categorical values are handled, but there are no uncertainty intervals or out-of-distribution guarantees.
 
 No executable model file is loaded or saved. The Python API can retain the fitted estimator in memory; the CLI refits when called again.
+
+### Reuse a declared feature schema
+
+Both `run` and `predict` accept `--features-file PATH` instead of `--features`.
+It reads the version-1 `feature_schema.json` emitted by Semiconductor Toolbox's
+[synthetic RRAM measurement-to-features example](https://github.com/xinhi6716/semiconductor-machine-learning-toolbox/blob/b485b68021160cd0eb1124084464b355c24a7b23/examples/measurement-to-features/README.md). Only the names in
+`model_feature_allowlist`, in their declared order, become predictors. IDs,
+counts, conditions, row keys, units and other metadata are **not** added as
+features. An explicit `--target` and `--group` are still required; the JSON does
+not infer them or supply labels. For a separately reviewed, labeled table:
+
+```bash
+mlcalc run labeled_devices.csv \
+  --target separately_measured_endpoint --group split_group \
+  --features-file feature_schema.json --out runs/device-evaluation
+
+mlcalc predict labeled_devices.csv new_predictors_only.csv \
+  --target separately_measured_endpoint --group split_group \
+  --features-file feature_schema.json --out runs/device-predictions
+```
+
+These commands are workflow templates, not commands that train on the upstream
+example as-is. That example has **no target** and only six invented devices in
+two invented batches, insufficient for this nested evaluation. Do not manufacture
+a scientific endpoint from its HRS/LRS resistances or their derived ratio. A real
+endpoint, feature timing, dependency grouping and adequate sample size require
+separate review. A valid declaration is **not proof against scientific leakage**.
+
+The input is strict UTF-8 JSON, at most **64 KiB**, with exactly these fields:
+`schema_version` (integer `1`), `row_key`, `model_feature_allowlist`,
+`metadata_columns`, `target_columns`, `feature_units`, and `warnings`.
+The four name lists have at most 100 unique, non-blank, unpadded strings;
+`row_key` and the feature allowlist must be nonempty. Predictor, metadata and
+target roles must be disjoint; row keys must be metadata. `feature_units` maps
+exactly the allowed feature names to non-blank strings. `warnings` is a list of
+non-blank strings. Units and warnings are declarations, not physically validated
+or acted upon. Unknown fields/versions, duplicate keys or names, non-finite JSON
+constants and malformed/empty declarations fail without fitting or writing.
+Names are matched exactly against the training CSV, and the usual target/group
+exclusion remains enforced. Prediction rows must still contain **exactly** the
+selected features. The existing output manifest records these selected names in
+`config.features`; no separate feature-file hash or authentication is claimed.
+
+This is a bounded local JSON reader, not a general manifest/model loader: no
+referenced files, executable imports, URLs or network resources are loaded.
+Like CSV source paths, an explicitly supplied symlink to a regular local file
+is followed. Directories, FIFOs and other non-regular files are rejected; the
+feature schema is also protected from input/output path aliases. Use trusted,
+idle local files. This is not a hostile-filesystem sandbox or an atomic read
+guarantee, and platform-specific race behavior is not universally verified.
+The separate `verify` command below has stricter POSIX **no-symlink** semantics.
 
 ## Python API
 

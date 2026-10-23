@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Add optional, mutually exclusive `run`/`predict --features-file` for the version-1 feature schema emitted by Semiconductor Toolbox's synthetic RRAM example. Read only its explicit predictor allowlist through bounded, strict JSON validation; preserve existing CLI defaults, actual target/group protections, model protocol and selected-feature provenance. No target invention, executable loading, network access or scientific leakage-proof claim.
 - Add offline `mlcalc verify RUN_DIR` for existing evaluation/prediction bundles: strict duplicate-aware checksum validation, bounded streaming hashes, POSIX no-follow reads, clear failure statuses, and integrity-only limitations. No fitting, model loading, network access, repair, or bundle-schema changes.
 - Bind CLI training/new-row source hashes to the same incrementally read bytes used for CSV validation, including BOMs and line endings. Prevent later path replacement or edits from mismatching the recorded hash and consumed data; add deterministic mutation and bounded-read regression tests.
 - Reject malformed CSV records before fitting, preventing pandas from silently shifting extra fields into an index or padding absent fields.

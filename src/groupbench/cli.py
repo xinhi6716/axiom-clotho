@@ -14,6 +14,7 @@ import pandas as pd
 from . import __version__
 from .data import MAX_ROWS, make_materials_fixture
 from .evaluation import benchmark
+from .feature_manifest import read_feature_manifest
 from .prediction import ensure_prediction_output, fit_predict
 from .verification import verify_bundle
 
@@ -34,7 +35,10 @@ def _add_protocol(parser, *, outer=True):
 def _add_columns(parser):
     parser.add_argument("--target", required=True)
     parser.add_argument("--group", required=True)
-    parser.add_argument("--features", help="Optional comma-separated feature allowlist")
+    selection = parser.add_mutually_exclusive_group()
+    selection.add_argument("--features", help="Optional comma-separated feature allowlist")
+    selection.add_argument("--features-file", type=Path,
+                           help="Local version-1 feature_schema.json; use only its model_feature_allowlist")
 
 
 def protect_input_files(inputs, output_dir):
@@ -177,6 +181,8 @@ def main(argv=None) -> int:
             ensure_prediction_output(args.out)
         if args.command in ("run", "predict"):
             sources = [args.csv_path] + ([args.new_csv_path] if args.command == "predict" else [])
+            if args.features_file is not None:
+                sources.append(args.features_file)
             protect_input_files(sources, args.out)
         if not args.overwrite and any((args.out / name).exists() or (args.out / name).is_symlink() for name in OUTPUT_NAMES):
             raise FileExistsError("Output already contains a report; choose a new --out or use --overwrite.")
@@ -186,7 +192,10 @@ def main(argv=None) -> int:
         else:
             frame, source_hash = _read_csv_with_hash(args.csv_path, group=args.group)
             target, group = args.target, args.group
-            features = [c.strip() for c in args.features.split(",")] if args.features else None
+            if args.features_file is not None:
+                features = read_feature_manifest(args.features_file)
+            else:
+                features = [c.strip() for c in args.features.split(",")] if args.features else None
         options = dict(target=target, group=group, features=features,
                        inner_splits=args.inner_splits, random_state=args.seed,
                        baselines=tuple(x.strip() for x in args.baselines.split(",")),
