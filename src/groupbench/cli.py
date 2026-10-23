@@ -6,6 +6,7 @@ import argparse
 import csv
 import hashlib
 import io
+import json
 from pathlib import Path
 import sys
 
@@ -16,20 +17,23 @@ from .data import MAX_ROWS, make_materials_fixture
 from .evaluation import benchmark
 from .feature_manifest import read_feature_manifest
 from .prediction import ensure_prediction_output, fit_predict
+from .planning import plan_benchmark, plan_prediction
 from .verification import verify_bundle
 
 OUTPUT_NAMES = ("report.html", "manifest.json", "summary.json", "predictions.csv", "checksums.json")
 
 
-def _add_protocol(parser, *, outer=True):
-    parser.add_argument("--out", type=Path, required=True, help="Local output directory")
+def _add_protocol(parser, *, outer=True, output=True):
+    if output:
+        parser.add_argument("--out", type=Path, required=True, help="Local output directory")
     if outer:
         parser.add_argument("--outer-splits", type=int, default=5)
     parser.add_argument("--inner-splits", type=int, default=3)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--baselines", default="dummy,ridge,extra_trees", help="Comma-separated families: dummy,ridge,extra_trees")
     parser.add_argument("--objective", choices=("group_mae", "mae"), default="group_mae")
-    parser.add_argument("--overwrite", action="store_true", help="Replace known output files in --out")
+    if output:
+        parser.add_argument("--overwrite", action="store_true", help="Replace known output files in --out")
 
 
 def _add_columns(parser):
@@ -135,6 +139,16 @@ def _read_csv_with_hash(path: Path, *, group=None):
     return pd.read_csv(snapshot, converters=converters), digest.hexdigest()
 
 
+def _read_training(args):
+    """Shared CSV/feature-allowlist handling for execution and no-fit plans."""
+    frame, source_hash = _read_csv_with_hash(args.csv_path, group=args.group)
+    if args.features_file is not None:
+        features = read_feature_manifest(args.features_file)
+    else:
+        features = [c.strip() for c in args.features.split(",")] if args.features else None
+    return frame, features, source_hash
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="groupbench", description="ML Super Calculator: local grouped regression, powered by GroupBench.")
     parser.add_argument("--version", action="version", version=__version__)
@@ -152,6 +166,16 @@ def main(argv=None) -> int:
     predict.add_argument("new_csv_path", type=Path, help="New rows: exactly the feature columns")
     _add_columns(predict)
     _add_protocol(predict, outer=False)
+    plan = sub.add_parser("plan", help="Validate inputs and preview exact split/fit counts without fitting or writing",
+                          description="Print a JSON execution plan to stdout only. No models, predictions or result files are created.")
+    plan_sub = plan.add_subparsers(dest="plan_mode", required=True)
+    for mode in ("run", "predict"):
+        preview = plan_sub.add_parser(mode, help=f"Preview {mode} without fitting or writing", allow_abbrev=False)
+        preview.add_argument("csv_path", type=Path, help="Labeled training CSV")
+        if mode == "predict":
+            preview.add_argument("new_csv_path", type=Path, help="New rows: exactly the feature columns")
+        _add_columns(preview)
+        _add_protocol(preview, outer=mode == "run", output=False)
     verify = sub.add_parser("verify", help="Check existing bundle SHA-256 byte integrity without fitting or writing",
                             description="Check SHA-256 byte integrity only, not scientific/model correctness. No fitting, writes, or model loading.",
                             epilog="Requires POSIX no-follow file access. Limits: 16 KiB checksums.json; 64 MiB per payload. Exit status: 0 verified, 2 failed.")
@@ -184,22 +208,26 @@ def main(argv=None) -> int:
             if args.features_file is not None:
                 sources.append(args.features_file)
             protect_input_files(sources, args.out)
-        if not args.overwrite and any((args.out / name).exists() or (args.out / name).is_symlink() for name in OUTPUT_NAMES):
+        if args.command != "plan" and not args.overwrite and any((args.out / name).exists() or (args.out / name).is_symlink() for name in OUTPUT_NAMES):
             raise FileExistsError("Output already contains a report; choose a new --out or use --overwrite.")
         if args.command == "demo":
             frame = make_materials_fixture(args.groups, args.rows_per_group, args.seed)
             target, group, features = "response", "batch", None
         else:
-            frame, source_hash = _read_csv_with_hash(args.csv_path, group=args.group)
+            frame, features, source_hash = _read_training(args)
             target, group = args.target, args.group
-            if args.features_file is not None:
-                features = read_feature_manifest(args.features_file)
-            else:
-                features = [c.strip() for c in args.features.split(",")] if args.features else None
         options = dict(target=target, group=group, features=features,
                        inner_splits=args.inner_splits, random_state=args.seed,
                        baselines=tuple(x.strip() for x in args.baselines.split(",")),
                        objective=args.objective, source_sha256=source_hash)
+        if args.command == "plan":
+            if args.plan_mode == "predict":
+                incoming, prediction_source_hash = _read_csv_with_hash(args.new_csv_path)
+                result = plan_prediction(frame, incoming, **options, prediction_source_sha256=prediction_source_hash)
+            else:
+                result = plan_benchmark(frame, **options, outer_splits=args.outer_splits)
+            print(json.dumps(result, indent=2, ensure_ascii=False, allow_nan=False))
+            return 0
         if args.command == "predict":
             incoming, prediction_source_hash = _read_csv_with_hash(args.new_csv_path)
             result = fit_predict(frame, incoming, **options, prediction_source_sha256=prediction_source_hash)

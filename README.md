@@ -64,6 +64,58 @@ CSV files must use UTF-8 (an optional UTF-8 BOM is supported), with unique, non-
 
 The CLI checks a bounded input snapshot before pandas type inference, preserving the original quoted text and group identifiers. Python's CSV parser field-size limit applies to both headers and data cells (131,072 characters per field under its default setting); a parser-limit or quoting failure returns an actionable error. This per-field guard is specific to CSV input, not the DataFrame API, and is not a hard memory limit for the whole file.
 
+### Preview the work before fitting
+
+Check inputs and see the exact intended split sizes, candidate hyperparameters,
+and fit-count budget before spending time on model fitting:
+
+```bash
+mlcalc plan run examples/synthetic_materials.csv --target response --group batch
+mlcalc plan predict examples/synthetic_materials.csv examples/new_process_settings.csv --target response --group batch
+```
+
+`plan run` and `plan predict` accept the matching command's target, group,
+`--features` / `--features-file`, baselines, seed, selection objective and split
+options. They print **JSON to stdout only**, with no `--out` or `--overwrite`
+option. They do not fit estimators or preprocessing, load saved models, create
+an output directory, or write predictions/results. Input validation is shared
+with execution, including malformed CSV rejection, target/group exclusion,
+feature allowlists, new-row schema/types and sufficient groups for every split.
+Group identifiers and row values are omitted from the plan.
+
+The schedule uses the same actual split seeds, candidate grid and per-family
+refits consumed by `run` / `predict`, not a separate estimate of the defaults.
+With the default six candidates, three families and three inner folds:
+
+- `plan run` with five outer folds: **90 inner-selection fits + 15 outer-family
+  refits = 105 pipeline fits**.
+- `plan predict`: **18 inner-selection fits + 3 full-data family refits = 21
+  pipeline fits**.
+
+Dummy is fitted like each requested family. The `selected` entry reuses its
+winning family's refit; it causes no extra fit. One pipeline fit includes
+preprocessing and one estimator, not one count per tree or transform. Custom
+baseline subsets and split counts change the reported budget automatically.
+
+These counts describe intended work **if every fit succeeds**. They are not an
+execution-time estimate, a hard compute/memory cap, performance evidence or a
+guarantee that training will succeed. Planning does not validate a future output
+path, identify scientifically invalid features or select a winner. Run again
+with the same inputs/options to execute; changed files or software may change
+the plan. If redirecting stdout yourself, choose a separate file: your shell can
+truncate a destination before the CLI starts.
+
+The Python equivalents return plain dictionaries without fitting or writing:
+
+```python
+from groupbench import plan_benchmark, plan_prediction
+
+plan = plan_benchmark(training, target="response", group="batch")
+print(plan["fit_budget"])
+# With feature-only new_rows:
+plan = plan_prediction(training, new_rows, target="response", group="batch")
+```
+
 ### Predict new rows
 
 First evaluate the procedure with `run`. Then supply a second CSV containing **exactly the feature columns**, without target or group columns:

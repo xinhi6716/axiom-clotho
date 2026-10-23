@@ -13,8 +13,9 @@ import pandas as pd
 import sklearn
 
 from . import __version__
-from .data import data_fingerprint, duplicate_diagnostics, prepare_data, validate_seed
-from .model import GroupBenchRegressor
+from .data import (data_fingerprint, duplicate_diagnostics, prepare_data,
+                   validate_features, validate_prediction_features)
+from .model import GroupBenchRegressor, selection_plan
 
 
 @dataclass
@@ -43,6 +44,21 @@ def ensure_prediction_output(output_dir):
         raise ValueError("Prediction output contains evaluation artifacts. Choose a separate output directory, even with overwrite enabled.")
 
 
+def _prepare_prediction(frame, new_rows, *, target, group, features, inner_splits,
+                        random_state, baselines, objective):
+    """Shared preflight of training, new-row schema and full-data fit schedule."""
+    X, y, groups = prepare_data(frame, target, group, features)
+    incoming = validate_features(new_rows)
+    if set(incoming.columns) != set(X.columns):
+        raise ValueError("New rows must contain exactly the training feature columns, without target or group columns.")
+    # No imputation/encoding is fitted; match the estimator's prediction type
+    # rules, including its all-missing-column accommodation, before training.
+    validate_prediction_features(incoming, X.columns, [str(X[c].dtype) for c in X])
+    plan = selection_plan(X, groups, baselines=baselines, inner_splits=inner_splits,
+                          random_state=random_state, objective=objective)
+    return X, y, groups, incoming, plan
+
+
 def fit_predict(frame: pd.DataFrame, new_rows: pd.DataFrame, *, target: str, group: str,
                 features=None, inner_splits: int = 3, random_state: int = 0,
                 baselines=("dummy", "ridge", "extra_trees"), objective="group_mae",
@@ -54,18 +70,14 @@ def fit_predict(frame: pd.DataFrame, new_rows: pd.DataFrame, *, target: str, gro
     column. Use ``benchmark`` on training data before trusting this prediction.
     No executable model file is loaded or saved.
     """
-    random_state = validate_seed(random_state)
-    X, y, groups = prepare_data(frame, target, group, features)
+    X, y, groups, incoming, plan = _prepare_prediction(
+        frame, new_rows, target=target, group=group, features=features,
+        inner_splits=inner_splits, random_state=random_state, baselines=baselines, objective=objective)
+    random_state = plan.seed
     estimator = GroupBenchRegressor(baselines=baselines, inner_splits=inner_splits,
                                     random_state=random_state, objective=objective)
-    # Fit validates the training protocol. Prediction's schema is checked before
-    # training here too, without learning any preprocessing statistics from it.
-    from .data import validate_features
-    incoming = validate_features(new_rows)
-    if set(incoming.columns) != set(X.columns):
-        raise ValueError("New rows must contain exactly the training feature columns, without target or group columns.")
-    estimator.fit(X, y, groups=groups)
-    inner_splits = int(inner_splits)
+    estimator._fit_prepared(X, y, groups, plan)
+    inner_splits = len(plan.splits)
     predictions = estimator.predict(incoming)
     new_hash = hashlib.sha256(pd.util.hash_pandas_object(incoming[list(X.columns)], index=False).values.tobytes()).hexdigest()
     manifest = {

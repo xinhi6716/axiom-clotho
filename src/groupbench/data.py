@@ -47,6 +47,20 @@ def validate_features(X: pd.DataFrame) -> pd.DataFrame:
     return X
 
 
+def validate_prediction_features(X, feature_names, feature_types):
+    """Use the same stateless schema/type checks before planning and inference."""
+    X = validate_features(X)
+    if set(X.columns) != set(feature_names):
+        raise ValueError("Prediction columns must exactly match training feature names.")
+    X = X[list(feature_names)]
+    for col, expected_type in zip(X.columns, feature_types):
+        if X[col].isna().all():
+            X[col] = X[col].astype(expected_type)
+    if [str(X[c].dtype) for c in X] != list(feature_types):
+        raise ValueError("Prediction feature types differ from training; check numeric/categorical columns.")
+    return X
+
+
 def validate_target(y, n_rows: int) -> np.ndarray:
     if np.iscomplexobj(y):
         raise ValueError("Complex target values are not supported.")

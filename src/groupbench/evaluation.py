@@ -16,7 +16,7 @@ import sklearn
 from . import __version__
 from .data import data_fingerprint, duplicate_diagnostics, prepare_data, validate_seed
 from .metrics import grouped_metrics
-from .model import GroupBenchRegressor, candidates_for
+from .model import GroupBenchRegressor, candidates_for, selection_plan
 from .splitting import GroupKFold, audit_split
 
 
@@ -38,6 +38,24 @@ class BenchmarkResult:
         return write_report(self, output_dir, overwrite=overwrite)
 
 
+def _prepare_benchmark(frame, *, target, group, features, outer_splits,
+                       inner_splits, random_state, baselines, objective):
+    """Shared no-fit validation and exact seeded nested schedule."""
+    seed = validate_seed(random_state)
+    X, y, groups = prepare_data(frame, target, group, features)
+    candidates_for(baselines)
+    splits = tuple(GroupKFold(outer_splits, seed).split(X, groups=groups))
+    schedule = []
+    # Validate every actual inner seed before any training, rather than checking
+    # only an approximation of the requested protocol.
+    for fold, (train, test) in enumerate(splits):
+        selection = selection_plan(X.iloc[train], groups[train], baselines=baselines,
+                                   inner_splits=inner_splits, random_state=seed + fold + 1,
+                                   objective=objective)
+        schedule.append((train, test, selection))
+    return X, y, groups, seed, schedule
+
+
 def benchmark(frame: pd.DataFrame, *, target: str, group: str, features=None,
               outer_splits: int = 5, inner_splits: int = 3,
               random_state: int = 0, baselines=("dummy", "ridge", "extra_trees"),
@@ -50,23 +68,21 @@ def benchmark(frame: pd.DataFrame, *, target: str, group: str, features=None,
     Every observation receives exactly one held-out prediction per entry.
     """
     started = time.perf_counter()
-    seed = validate_seed(random_state)
-    X, y, groups = prepare_data(frame, target, group, features)
-    candidates = candidates_for(baselines)
-    splits = list(GroupKFold(outer_splits, seed).split(X, groups=groups))
-    outer_splits = int(outer_splits)
-    # Fail before any training if the requested inner protocol is impossible.
-    for train, _ in splits:
-        list(GroupKFold(inner_splits, seed).split(X.iloc[train], groups=groups[train]))
-    inner_splits = int(inner_splits)
+    X, y, groups, seed, schedule = _prepare_benchmark(
+        frame, target=target, group=group, features=features, outer_splits=outer_splits,
+        inner_splits=inner_splits, random_state=random_state, baselines=baselines, objective=objective)
+    splits = [(train, test) for train, test, _ in schedule]
+    candidates = schedule[0][2].candidates
+    outer_splits = len(schedule)
+    inner_splits = len(schedule[0][2].splits)
     names = list(baselines) + ["selected"]
     oof = {name: np.full(len(X), np.nan) for name in names}
     fold_ids = np.full(len(X), -1, dtype=int)
     outer_audit = []
-    for fold, (train, test) in enumerate(splits):
+    for fold, (train, test, plan) in enumerate(schedule):
         estimator = GroupBenchRegressor(baselines=baselines, inner_splits=inner_splits,
                                         random_state=seed + fold + 1, objective=objective)
-        estimator.fit(X.iloc[train], y[train], groups=groups[train])
+        estimator._fit_prepared(X.iloc[train].reset_index(drop=True), y[train], groups[train], plan)
         predictions = estimator.predict_baselines(X.iloc[test])
         for name in names:
             oof[name][test] = predictions[name]

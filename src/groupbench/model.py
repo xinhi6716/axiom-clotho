@@ -17,7 +17,8 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.utils.validation import check_is_fitted
 from threadpoolctl import threadpool_limits
 
-from .data import validate_features, validate_groups, validate_seed, validate_target
+from .data import (validate_features, validate_groups, validate_prediction_features,
+                   validate_seed, validate_target)
 from .metrics import grouped_metrics
 from .splitting import GroupKFold, audit_split
 
@@ -44,6 +45,36 @@ def candidates_for(baselines) -> list[Candidate]:
         else:
             result.extend(Candidate(f"extra_trees_depth_{depth or 'none'}", family, {"max_depth": depth, "n_estimators": 64, "min_samples_leaf": 2}) for depth in (6, None))
     return result
+
+
+@dataclass(frozen=True)
+class SelectionPlan:
+    """The candidate, split and refit schedule consumed by fitting and preview."""
+
+    candidates: tuple[Candidate, ...]
+    splits: tuple[tuple[np.ndarray, np.ndarray], ...]
+    refit_families: tuple[str, ...]
+    seed: int
+    objective: str
+
+    @property
+    def fit_counts(self) -> dict:
+        # Count the same iterations consumed in _fit_prepared, not a separate
+        # formula tied to today's default models or requested split counts.
+        inner = sum(len(self.splits) for _ in self.candidates)
+        refits = len(self.refit_families)
+        return {"inner_selection_fits": inner, "family_refits": refits,
+                "total_fits": inner + refits}
+
+
+def selection_plan(X, groups, *, baselines, inner_splits, random_state, objective):
+    """Validate and materialize a selection schedule without fitting anything."""
+    if objective not in ("group_mae", "mae"):
+        raise ValueError("objective must be 'group_mae' or 'mae'.")
+    seed = validate_seed(random_state)
+    candidates = tuple(candidates_for(baselines))
+    splits = tuple(GroupKFold(inner_splits, seed).split(X, groups=groups))
+    return SelectionPlan(candidates, splits, tuple(baselines), seed, objective)
 
 
 def make_pipeline(X: pd.DataFrame, candidate: Candidate, random_state: int) -> Pipeline:
@@ -89,14 +120,16 @@ class GroupBenchRegressor(RegressorMixin, BaseEstimator):
     def fit(self, X, y, groups=None):
         if groups is None:
             raise ValueError("groups is required; there is no row-random fallback.")
-        if self.objective not in ("group_mae", "mae"):
-            raise ValueError("objective must be 'group_mae' or 'mae'.")
-        seed = validate_seed(self.random_state)
         X = validate_features(X)
         y = validate_target(y, len(X))
         groups = validate_groups(groups, len(X))
-        candidates = candidates_for(self.baselines)
-        splits = list(GroupKFold(self.inner_splits, seed).split(X, groups=groups))
+        plan = selection_plan(X, groups, baselines=self.baselines, inner_splits=self.inner_splits,
+                              random_state=self.random_state, objective=self.objective)
+        return self._fit_prepared(X, y, groups, plan)
+
+    def _fit_prepared(self, X, y, groups, plan: SelectionPlan):
+        """Execute a validated schedule; used by both nested and full-data fits."""
+        candidates, splits, seed = plan.candidates, plan.splits, plan.seed
         self.inner_audit_ = [{"fold": i, **audit_split(train, test, groups)} for i, (train, test) in enumerate(splits)]
         records = []
         # Limit BLAS/OpenMP as well as the tree estimator to one thread.
@@ -110,18 +143,18 @@ class GroupBenchRegressor(RegressorMixin, BaseEstimator):
                     prediction = pipeline.predict(X.iloc[test])
                     oof[test] = prediction
                     scores, _ = grouped_metrics(y[test], prediction, groups[test])
-                    fold_scores.append(scores[self.objective])
+                    fold_scores.append(scores[plan.objective])
                 scores, _ = grouped_metrics(y, oof, groups)
                 records.append({
                     "candidate": candidate.name, "family": candidate.family,
-                    "params": candidate.params, "selection_score": scores[self.objective],
-                    "objective": self.objective, "inner_fold_scores": fold_scores,
+                    "params": candidate.params, "selection_score": scores[plan.objective],
+                    "objective": plan.objective, "inner_fold_scores": fold_scores,
                 })
             # A fixed candidate order gives deterministic tie-breaking.
             winner = min(range(len(records)), key=lambda i: records[i]["selection_score"])
             self.family_models_ = {}
             self.family_candidates_ = {}
-            for family in self.baselines:
+            for family in plan.refit_families:
                 best = min((i for i, c in enumerate(candidates) if c.family == family), key=lambda i: records[i]["selection_score"])
                 chosen = candidates[best]
                 pipeline = make_pipeline(X, chosen, seed)
@@ -140,16 +173,7 @@ class GroupBenchRegressor(RegressorMixin, BaseEstimator):
 
     def _validated_predict_frame(self, X):
         check_is_fitted(self, "best_estimator_")
-        X = validate_features(X)
-        if set(X.columns) != set(self.feature_names_in_):
-            raise ValueError("Prediction columns must exactly match training feature names.")
-        X = X[list(self.feature_names_in_)]
-        for col, expected_type in zip(X.columns, self.feature_types_):
-            if X[col].isna().all():
-                X[col] = X[col].astype(expected_type)
-        if [str(X[c].dtype) for c in X] != self.feature_types_:
-            raise ValueError("Prediction feature types differ from training; check numeric/categorical columns.")
-        return X
+        return validate_prediction_features(X, self.feature_names_in_, self.feature_types_)
 
     @staticmethod
     def _finite_predictions(prediction):
