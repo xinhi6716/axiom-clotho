@@ -10,6 +10,7 @@ ML Super Calculator is a product direction. GroupBench v0.1 is the first usable 
 - Local full-training refit and new-row prediction.
 - Offline report, per-group errors, exact predictions, provenance, and checksums.
 - Synthetic materials-process fixture and adversarial integrity tests.
+- Aggregate train-derived new-row numeric-range, source-category and missingness diagnostics, available without fitting through `plan predict`.
 
 ## Next: reliability and independent real-data validation
 
@@ -25,7 +26,7 @@ Acceptance criteria:
 
 - Local/self-hosted interface for selecting a CSV, checking its schema, setting a target/group, and reading results. The current release is CLI/Python, not a browser-upload app.
 - Saved experiment configurations and run comparison without silently using test results for selection.
-- New-row schema diagnostics and clearer applicability/extrapolation warnings.
+- Extend the shipped source-level new-row diagnostics only with justified, independently evaluated applicability methods; current range/category flags are not uncertainty or a multivariate support test.
 - A safe, versioned model-state export format only after a security and reproducibility design review; no arbitrary untrusted pickle loading.
 
 ## Later: expand scientific capability carefully

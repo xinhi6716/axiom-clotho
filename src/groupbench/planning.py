@@ -7,6 +7,7 @@ import pandas as pd
 from . import __version__
 from .evaluation import _prepare_benchmark
 from .prediction import _prepare_prediction
+from .input_support import prediction_input_support
 from .splitting import audit_split
 
 
@@ -90,6 +91,10 @@ def plan_prediction(frame: pd.DataFrame, new_rows: pd.DataFrame, *, target: str,
         inner_splits=inner_splits, random_state=random_state, baselines=baselines, objective=objective)
     result = _base_report(X, groups, plan, mode="predict", target=target,
                           group=group, source_sha256=source_sha256)
+    result["schema_version"] = "1.1"
+    result["input_support"] = prediction_input_support(X, incoming)
+    result["limitations"].append(
+        "Input-support flags describe individual source features only, not uncertainty, calibration, multivariate support or prediction reliability; no flags is not evidence of safety.")
     result["config"]["random_state"] = plan.seed
     result["n_prediction_rows"] = len(incoming)
     result["prediction_source_file_sha256"] = prediction_source_sha256

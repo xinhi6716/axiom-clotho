@@ -132,6 +132,40 @@ This performs grouped inner selection on all labeled rows, refits locally, and w
 
 No executable model file is loaded or saved. The Python API can retain the fitted estimator in memory; the CLI refits when called again.
 
+### Check whether new inputs were observed in training
+
+`plan predict` includes an `input_support` summary before any fitting. `predict`
+and Python `fit_predict` put the same summary in `manifest.json` /
+`forecast.manifest["input_support"]`. It counts, per feature and across new rows:
+
+- Numeric values strictly below/above the finite, non-missing training minimum/maximum. Values equal to a boundary are not flagged.
+- Non-missing categorical values absent from the normalized training source values.
+- Missing prediction values, even when training also had missing values.
+- Non-missing prediction values in features that were entirely missing in training. Their training support is explicitly unavailable; numeric range counts are `null`, not a measured zero.
+
+Only selected training features define these checks, before imputation. New rows
+never expand their own reference range or category set. Counts can overlap; the
+summary's `rows_with_any_flag` counts each affected row once. Reports include
+feature names and aggregate counts, not training extrema, category inventories,
+raw values or row identifiers. Existing `row_position` and prediction CSV
+columns are unchanged. No inputs are removed or modified because of these flags.
+
+These are simple individual-feature checks, **not calibrated uncertainty, an
+out-of-distribution test, or evidence that a prediction is reliable**. A row can
+have no flags yet combine features in a way never observed in training. Counts
+describe source values, not the encoder's learned/infrequent category buckets;
+missing values and a literal `__GROUPBENCH_MISSING__` string remain distinct in
+this diagnostic even though preprocessing can encode them alike. Existing
+imputation, unknown-category handling, models, seeds, splits, selection and fit
+counts are unchanged. Use independent evaluation and domain judgment.
+
+Prediction manifests and prediction plans now have schema version **1.1**;
+evaluation manifests, summaries and plans remain **1.0**. No files were added to
+either bundle. Strict consumers should explicitly accept prediction schema 1.1
+and its additive `input_support` field; older 1.0 files have no support summary
+and must not be treated as having zero flags. See the
+[diagnostic semantics and schema migration note](docs/INPUT_SUPPORT.md).
+
 ### Reuse a declared feature schema
 
 Both `run` and `predict` accept `--features-file PATH` instead of `--features`.

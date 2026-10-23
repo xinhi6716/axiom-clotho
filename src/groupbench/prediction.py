@@ -16,6 +16,7 @@ from . import __version__
 from .data import (data_fingerprint, duplicate_diagnostics, prepare_data,
                    validate_features, validate_prediction_features)
 from .model import GroupBenchRegressor, selection_plan
+from .input_support import prediction_input_support
 
 
 @dataclass
@@ -81,7 +82,7 @@ def fit_predict(frame: pd.DataFrame, new_rows: pd.DataFrame, *, target: str, gro
     predictions = estimator.predict(incoming)
     new_hash = hashlib.sha256(pd.util.hash_pandas_object(incoming[list(X.columns)], index=False).values.tobytes()).hexdigest()
     manifest = {
-        "schema_version": "1.0", "groupbench_version": __version__, "mode": "fit_predict",
+        "schema_version": "1.1", "groupbench_version": __version__, "mode": "fit_predict",
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
         "training_data_sha256": data_fingerprint(X, y, groups), "new_features_sha256": new_hash,
         "source_file_sha256": source_sha256, "prediction_source_file_sha256": prediction_source_sha256,
@@ -92,11 +93,13 @@ def fit_predict(frame: pd.DataFrame, new_rows: pd.DataFrame, *, target: str, gro
         "selected_candidate": estimator.best_candidate_, "selected_family": estimator.best_family_,
         "inner_selection": estimator.selection_results_, "inner_folds": estimator.inner_audit_,
         "data_diagnostics": duplicate_diagnostics(X, y, groups),
+        "input_support": prediction_input_support(X, incoming),
         "environment": {"python": platform.python_version(), "numpy": np.__version__, "pandas": pd.__version__, "scikit_learn": sklearn.__version__},
         "limitations": [
             "These are new-row predictions from a full-data refit, not held-out evaluation metrics.",
             "Inner validation scores are selection diagnostics, not unbiased test-set performance.",
             "No uncertainty intervals or extrapolation guarantees are provided.",
+            "Input-support flags describe individual source features only, not uncertainty, calibration, multivariate support or prediction reliability; no flags is not evidence of safety.",
             "No serialized executable model is saved; repeat fit_predict to refit or retain the in-memory estimator.",
             "Manifest contains training group identifiers; review before sharing.",
         ],
