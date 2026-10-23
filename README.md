@@ -236,6 +236,19 @@ print(model.best_candidate_, model.selection_results_)
 
 Do not pick a new model or tune features by repeatedly looking at the outer leaderboard and then cite that same leaderboard as unbiased evidence. Use a new independent test set or a fresh preregistered evaluation for those changes.
 
+Metric arithmetic uses float64 and fails explicitly on overflow, underflow, or
+invalid intermediate operations, even when the input targets and predictions
+are finite. This conservative check can reject a scale whose final mathematical
+score would be representable; it does not silently emit infinite/NaN scores,
+round a tiny squared error down to zero, or call an underflowed target variance
+constant. Rescale targets and predictions consistently to practical units and
+rerun. A metric failure aborts selection/evaluation with `ValueError` (CLI exit
+status 2), rather than dropping a group or candidate. Exactly constant targets
+and one-row groups still have `null` R² when the other metric arithmetic is safe.
+The ordinary score formulas, row/group weighting, models, and split protocol
+are unchanged; this is not arbitrary-precision arithmetic or a guarantee that
+estimator training itself supports extreme scales.
+
 ## Baselines and resource budget
 
 | Family | Candidates | Settings |
