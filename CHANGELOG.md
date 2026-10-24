@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Require string `target` and `group` column selectors in regression/binary DataFrame workflows before planning or fitting. Non-string labels, including NumPy integer labels that previously failed JSON serialization only after fitting, must be explicitly renamed by the caller; no label coercion is performed. Preserve ordinary string names, numeric group values, selected-feature behavior, fingerprints, artifact schemas, and model protocols.
+
 - Reject observed NUL-containing categorical feature values in the DataFrame API before planning, fitting, source-support diagnostics, or training/prediction fingerprints. This explicit input-validation tightening prevents false unseen-category flags and ambiguous pandas-based fingerprints, even when model encoders distinguish the values. Preserve clean observed values with unused NUL category metadata, ordinary input behavior, numeric/group contracts, both encoding protocols, artifact schemas, and existing CSV rejection. No automatic stripping, escaping, or new NUL-safe encoding is claimed.
 
 - Reject NUL (U+0000) anywhere in DataFrame group identifiers before planning, splitting, fitting, or training-data fingerprinting. This explicit input-validation tightening prevents distinct string groups from silently merging through NumPy/pandas string operations; it does not preserve previously accepted NUL-group input. Ordinary Unicode/numeric group identity, non-group DataFrame feature handling, CSV NUL rejection, model protocols, and artifact schemas are unchanged.

@@ -247,6 +247,15 @@ The separate `verify` command below has stricter POSIX **no-symlink** semantics.
 
 ## Python API
 
+`target` and `group` must name two distinct existing columns using strings.
+Non-string column selectors (including Python/NumPy integers and tuples) are
+rejected before planning or fitting; explicitly rename those source columns
+first. This tightens accidental earlier support that could fail only when
+serializing a result after fitting. Names are not coerced, stripped, or escaped.
+This does not restrict numeric **values** in the group column, and unrelated
+metadata columns can still be excluded with an explicit feature allowlist.
+
+
 ```python
 from groupbench import benchmark, fit_predict, make_materials_fixture
 

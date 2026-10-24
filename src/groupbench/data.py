@@ -122,11 +122,20 @@ def validate_groups(groups, n_rows: int) -> np.ndarray:
     return a.astype(str).astype(object)
 
 
-def prepare_data(frame: pd.DataFrame, target: str, group: str, features=None):
+def validate_training_columns(frame: pd.DataFrame, target: str, group: str):
+    """Require string column selectors before reading rows or fitting."""
     if not isinstance(frame, pd.DataFrame) or not frame.columns.is_unique:
         raise ValueError("Input must be a DataFrame with unique column names.")
+    # Non-string pandas labels can pass lookup but fail JSON serialization
+    # only after fitting. Do not coerce labels: that can change their identity.
+    if not isinstance(target, str) or not isinstance(group, str):
+        raise ValueError("target and group must be string column names; explicitly rename non-string columns before use.")
     if target == group or target not in frame or group not in frame:
         raise ValueError("target and group must identify two distinct existing columns.")
+
+
+def prepare_data(frame: pd.DataFrame, target: str, group: str, features=None):
+    validate_training_columns(frame, target, group)
     names = list(features) if features is not None else [c for c in frame if c not in (target, group)]
     if target in names or group in names:
         raise ValueError("The target and grouping column cannot be input features.")

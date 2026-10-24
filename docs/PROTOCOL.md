@@ -28,6 +28,17 @@ candidate skipping or retry. This does not roll back constructor parameters
 changed by the caller, provide concurrent-fit/predict safety, or make artifact
 writes transactional.
 
+## Column selectors
+
+Regression and binary DataFrame workflows require `target` and `group` to be
+string names of distinct existing columns. Non-string selectors are rejected
+before planning, splitting or fitting, rather than accepting a pandas lookup
+that later fails artifact JSON serialization. This explicitly tightens earlier
+accidental acceptance; rename non-string source columns before use. There is no
+automatic label coercion or change to accepted string-name identity, feature
+selection, fingerprints, model protocols, or artifact schema versions. The rule
+concerns column names, not the numeric/string group values described below.
+
 ## Group identifiers
 
 The Python API identifies numeric groups by their exact stored values, not rounded display text or NumPy scalar comparison promotion. Equal values across integer/float types share one group; distinct values remain distinct. Ordinary float64 IDs retain decimal labels. Fractional values beyond float64 precision use exact hexadecimal-ratio labels; integers beyond Python's decimal-conversion limit use hexadecimal labels.

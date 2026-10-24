@@ -5,7 +5,7 @@ from numbers import Integral, Real
 import numpy as np
 import pandas as pd
 
-from ..data import MAX_ROWS, prepare_data, validate_seed
+from ..data import MAX_ROWS, prepare_data, validate_seed, validate_training_columns
 
 
 def label_contract():
@@ -50,10 +50,7 @@ def class_counts(y):
 
 
 def prepare_binary_data(frame, target, group, features=None):
-    if not isinstance(frame, pd.DataFrame) or not frame.columns.is_unique:
-        raise ValueError("Input must be a DataFrame with unique column names.")
-    if target == group or target not in frame or group not in frame:
-        raise ValueError("target and group must identify two distinct existing columns.")
+    validate_training_columns(frame, target, group)
     y = validate_binary_target(frame[target], len(frame))
     X, _, groups = prepare_data(frame, target, group, features)
     return X, y, groups
