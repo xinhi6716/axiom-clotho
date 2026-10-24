@@ -22,6 +22,10 @@ not a held-out evaluation diagnostic and is not used to select any candidate.
   non-missing source values. Existing normalization turns booleans and other
   supported non-numeric source values into strings. There is no whitespace
   trimming, fuzzy matching or new type conversion policy.
+  NUL (U+0000) in an observed categorical feature value is rejected by shared
+  input validation before diagnostics; unsupported values are not silently
+  merged, stripped, or labeled seen/unseen. Unused pandas category metadata
+  is not treated as an observed value.
 - Missing prediction values are counted separately and are never called unseen
   categories or out-of-range values. They are counted even if missing values
   occurred in training. Existing imputation still applies.

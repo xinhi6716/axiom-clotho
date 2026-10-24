@@ -34,6 +34,16 @@ Existing input validation still normalizes categorical non-missing values to
 strings and missing values to NaN. It does not change case, trim whitespace, or
 restore distinctions already lost during source normalization.
 
+Shared DataFrame validation now rejects NUL (U+0000) in observed normalized
+categorical values under both `legacy-v1` and `distinct-v2`, before planning,
+fitting, source-support diagnostics, or fingerprints. This is an explicit
+input-validation tightening: pandas uniqueness/hashing can merge such values
+even when the one-hot encoder distinguishes them. No characters are silently
+stripped or escaped to repair the source. Unused pandas category metadata is
+not rejected when actual observed values are clean. Low-level key-mapping tests
+may exercise NUL algebra directly on a broader string domain; that does not make
+NUL-containing values supported public API inputs. CSV still rejects NUL anywhere.
+
 Let `M` be `__GROUPBENCH_MISSING__`. Inside each categorical pipeline:
 
 1. Map a missing value to `M`.
@@ -71,8 +81,8 @@ matching non-missing values; this is not a hard memory/time guarantee.
 
 ## Compatibility and provenance
 
-Omitting the option and explicitly selecting `legacy-v1` retain the previous
-predictions, candidate selection, split schedule, fit counts, schemas, protocol
+For inputs accepted by shared validation, omitting the option and explicitly
+selecting `legacy-v1` retain the previous predictions, candidate selection, split schedule, fit counts, schemas, protocol
 strings, configuration fields, and evaluation run-key calculation. In legacy
 artifacts, absence of `config.categorical_encoding` means legacy-v1. No new warning
 or metadata field is added to those existing formats.

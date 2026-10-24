@@ -116,7 +116,7 @@ class CategoryKeyTests(unittest.TestCase):
 
     def test_ordinary_matrices_and_all_families_preserve_exact_cap_ties(self):
         cases = [[None, "plain", "X"], [None] + [f"lower-{i:02d}" for i in range(64)],
-                 [None, M + ":", M + "\x00", M + M, "", "中文", "😀"], [None, None]]
+                 [None, M + ":", M + "\x01", M + M, "", "中文", "😀"], [None, None]]
         for values in cases:
             X = validate_features(pd.DataFrame({"kind": pd.Series(values * 2, dtype=object)}))
             for factory, candidates in [(make_pipeline, candidates_for(("dummy", "ridge", "extra_trees"))),
@@ -239,7 +239,7 @@ class EncodingWorkflowTests(unittest.TestCase):
         for action, family in [(fit_predict, "ridge"), (fit_predict_binary, "logistic")]:
             opts = dict(target="y", group="g", inner_splits=2, baselines=(family,), categorical_encoding=DISTINCT)
             before = action(fixture(), new_rows(), **opts)
-            changed = pd.DataFrame({"kind": [M + ":", "never-trained", None, M + "\x00"]})
+            changed = pd.DataFrame({"kind": [M + ":", "never-trained", None, M + "\x01"]})
             after = action(fixture(), changed, **opts)
             self.assertEqual(before.manifest["inner_selection"], after.manifest["inner_selection"])
             self.assertEqual(before.manifest["selected_candidate"], after.manifest["selected_candidate"])

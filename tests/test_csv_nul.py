@@ -83,12 +83,13 @@ class CSVNULTests(unittest.TestCase):
         self.assertEqual(digest, hashlib.sha256(content).hexdigest())
 
     def test_dataframe_api_is_not_silently_sanitized(self):
-        # Non-group DataFrame features are not silently sanitized. Group IDs
-        # now reject NUL separately because downstream grouping can merge them.
+        # DataFrame categorical values now reject NUL explicitly, without
+        # silently stripping characters or changing the caller's input.
         frame = pd.DataFrame({"batch": ["g-a", "g-b"], "x": ["A\0B", "A\0C"], "y": [0, 1]})
-        X, _, groups = prepare_data(frame, "y", "batch")
-        self.assertEqual(X.x.tolist(), ["A\0B", "A\0C"])
-        self.assertEqual(groups.tolist(), ["g-a", "g-b"])
+        before = frame.copy(deep=True)
+        with self.assertRaisesRegex(ValueError, "Categorical feature values.*NUL"):
+            prepare_data(frame, "y", "batch")
+        pd.testing.assert_frame_equal(frame, before)
 
 
 class CSVNULCLITests(unittest.TestCase):

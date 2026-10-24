@@ -44,6 +44,11 @@ def validate_features(X: pd.DataFrame) -> pd.DataFrame:
         else:
             # This is stateless normalization, not a learned vocabulary.
             X[col] = X[col].map(lambda v: np.nan if pd.isna(v) else str(v)).astype(object)
+            # Check observed normalized values, not unused category metadata.
+            # pandas uniqueness/hashing can merge distinct NUL-containing
+            # strings even when the model encoder keeps them separate.
+            if any(isinstance(value, str) and "\x00" in value for value in X[col]):
+                raise ValueError("Categorical feature values cannot contain NUL (U+0000) characters; explicitly repair the source values before use.")
     return X
 
 

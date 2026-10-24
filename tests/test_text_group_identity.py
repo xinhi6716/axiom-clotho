@@ -119,11 +119,11 @@ class TextGroupIdentityTests(unittest.TestCase):
                 fitting.assert_not_called()
                 self.assertIs(estimator.best_estimator_, sentinel)
 
-    def test_non_group_dataframe_feature_policy_is_not_expanded(self):
+    def test_group_validation_does_not_inspect_non_group_columns(self):
         frame = pd.DataFrame({"g": ["a", "b"], "x": ["feature\0a", "feature\0b"], "y": [0, 1]})
         before = frame.copy(deep=True)
-        X, _, groups = prepare_data(frame, "y", "g")
-        self.assertEqual(X.x.tolist(), frame.x.tolist())
+        # The separate feature validator owns categorical-value rejection.
+        groups = validate_groups(frame.g, len(frame))
         self.assertEqual(groups.tolist(), ["a", "b"])
         pd.testing.assert_frame_equal(frame, before)
 
