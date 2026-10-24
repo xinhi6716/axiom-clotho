@@ -30,7 +30,7 @@ writes transactional.
 
 The Python API identifies numeric groups by their exact stored values, not rounded display text or NumPy scalar comparison promotion. Equal values across integer/float types share one group; distinct values remain distinct. Ordinary float64 IDs retain decimal labels. Fractional values beyond float64 precision use exact hexadecimal-ratio labels; integers beyond Python's decimal-conversion limit use hexadecimal labels.
 
-String IDs remain literal: `"1"`, `"01"` and `"1.0"` are different groups. Mixed string/numeric IDs are rejected. CSV CLI group columns are read as literal strings, so these numeric Python API normalization rules do not reinterpret CSV group labels.
+String IDs remain literal: `"1"`, `"01"` and `"1.0"` are different groups. NUL (U+0000) is prohibited anywhere in a group ID, including embedded, trailing, or repeated NULs. NumPy string conversion can trim trailing NULs, and pandas grouping can merge embedded-NUL strings, so the DataFrame API now rejects these identifiers before planning, splitting, fitting, or training-data fingerprinting. This validation tightening does not preserve previously accepted NUL-containing group input: explicitly repair the source identifiers and verify their intended grouping, rather than stripping characters automatically. Other Unicode strings and the numeric normalization contract are unchanged; non-group DataFrame features are not newly sanitized. Mixed string/numeric IDs are rejected. CSV CLI group columns are read as literal strings, so these numeric Python API normalization rules do not reinterpret CSV group labels.
 
 ## Metrics
 

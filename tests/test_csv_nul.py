@@ -83,11 +83,12 @@ class CSVNULTests(unittest.TestCase):
         self.assertEqual(digest, hashlib.sha256(content).hexdigest())
 
     def test_dataframe_api_is_not_silently_sanitized(self):
-        # This fix guards CSV decoding, not arbitrary in-memory string content.
-        frame = pd.DataFrame({"batch": ["g\0a", "g\0b"], "x": ["A\0B", "A\0C"], "y": [0, 1]})
+        # Non-group DataFrame features are not silently sanitized. Group IDs
+        # now reject NUL separately because downstream grouping can merge them.
+        frame = pd.DataFrame({"batch": ["g-a", "g-b"], "x": ["A\0B", "A\0C"], "y": [0, 1]})
         X, _, groups = prepare_data(frame, "y", "batch")
         self.assertEqual(X.x.tolist(), ["A\0B", "A\0C"])
-        self.assertEqual(groups.tolist(), ["g\0a", "g\0b"])
+        self.assertEqual(groups.tolist(), ["g-a", "g-b"])
 
 
 class CSVNULCLITests(unittest.TestCase):

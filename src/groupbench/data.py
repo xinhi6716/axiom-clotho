@@ -107,6 +107,11 @@ def validate_groups(groups, n_rows: int) -> np.ndarray:
         raise ValueError("Group identifiers must not mix strings and numbers.")
     if kinds == {"number"}:
         return np.asarray([_numeric_group_identifier(v) for v in a], dtype=object)
+    # NULs are not safe identifiers: NumPy string conversion can trim a
+    # trailing NUL, and pandas grouping can merge embedded-NUL strings too.
+    # Reject before either path instead of silently repairing group identity.
+    if any("\x00" in v for v in a):
+        raise ValueError("Group identifiers cannot contain NUL (U+0000) characters; explicitly repair the source identifiers before use.")
     if any(not v.strip() for v in a):
         raise ValueError("Group identifiers cannot be blank strings.")
     return a.astype(str).astype(object)

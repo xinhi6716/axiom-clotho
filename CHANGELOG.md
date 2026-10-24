@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Reject NUL (U+0000) anywhere in DataFrame group identifiers before planning, splitting, fitting, or training-data fingerprinting. This explicit input-validation tightening prevents distinct string groups from silently merging through NumPy/pandas string operations; it does not preserve previously accepted NUL-group input. Ordinary Unicode/numeric group identity, non-group DataFrame feature handling, CSV NUL rejection, model protocols, and artifact schemas are unchanged.
+
 - Add explicit opt-in `categorical_encoding="distinct-v2"` / `--categorical-encoding distinct-v2` across regression/binary estimators, execution, and no-fit plans. Escape every real marker-prefixed string before one-hot encoding to remove the literal-versus-missing key collision while retaining ordinary category ordering and cap ties. Preserve the `legacy-v1` default, existing artifact formats/run keys, and known legacy limitation; emit explicit v2 protocols/configuration and compatible schema minors only when selected. Unknown/infrequent compression, grouping, candidate grids, metrics, fit budgets, and CSV payloads remain unchanged. No model persistence or real-data performance claim is added. See docs/CATEGORICAL_ENCODING.md.
 
 - Reject NUL characters anywhere in CSV input before pandas can silently truncate headers, group identifiers, feature values or targets. Use content-free physical-line diagnostics across regression/binary execution and no-fit planning; preserve valid-input parsing, single-read byte hashes, model protocols and artifact schemas.
