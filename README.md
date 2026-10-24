@@ -12,6 +12,16 @@ Read a CSV → hold out entire groups → compare local baselines → inspect an
 
 **Status:** v0.1.0 alpha plus an unreleased, explicitly selected binary-classification workflow. An original sklearn-based selection/evaluation toolkit, not a pretrained foundation model, full AutoML system, or TabPFN equivalent. Synthetic examples demonstrate the workflow, not real-world accuracy.
 
+## Distinguish missing values from literal marker strings
+
+The compatibility default `legacy-v1` still merges a real categorical string
+`__GROUPBENCH_MISSING__` with missing values. Select
+`--categorical-encoding distinct-v2` (Python: `categorical_encoding="distinct-v2"`)
+in regression/binary run, prediction, or no-fit planning to use collision-free
+internal keys. Existing unknown/infrequent-category compression still applies.
+The opt-in has explicit protocol/schema identities; default results and run keys
+are unchanged. See [the exact mapping and migration contract](docs/CATEGORICAL_ENCODING.md).
+
 ## Try it in one minute
 
 Python 3.10+ is declared; the verified development environment is Python 3.12.14, NumPy 2.3.5, pandas 2.2.3, and scikit-learn 1.8.0. Other supported versions have not yet been tested in a CI matrix.

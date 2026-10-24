@@ -13,6 +13,7 @@ import pandas as pd
 import sklearn
 
 from . import __version__
+from .categorical import LEGACY, DISTINCT, encoding_options, preprocessing_description
 from .data import (data_fingerprint, duplicate_diagnostics, prepare_data,
                    validate_features, validate_prediction_features)
 from .model import GroupBenchRegressor, selection_plan
@@ -46,7 +47,7 @@ def ensure_prediction_output(output_dir):
 
 
 def _prepare_prediction(frame, new_rows, *, target, group, features, inner_splits,
-                        random_state, baselines, objective):
+                        random_state, baselines, objective, categorical_encoding=LEGACY):
     """Shared preflight of training, new-row schema and full-data fit schedule."""
     X, y, groups = prepare_data(frame, target, group, features)
     incoming = validate_features(new_rows)
@@ -56,14 +57,15 @@ def _prepare_prediction(frame, new_rows, *, target, group, features, inner_split
     # rules, including its all-missing-column accommodation, before training.
     validate_prediction_features(incoming, X.columns, [str(X[c].dtype) for c in X])
     plan = selection_plan(X, groups, baselines=baselines, inner_splits=inner_splits,
-                          random_state=random_state, objective=objective)
+                          random_state=random_state, objective=objective, categorical_encoding=categorical_encoding)
     return X, y, groups, incoming, plan
 
 
 def fit_predict(frame: pd.DataFrame, new_rows: pd.DataFrame, *, target: str, group: str,
                 features=None, inner_splits: int = 3, random_state: int = 0,
                 baselines=("dummy", "ridge", "extra_trees"), objective="group_mae",
-                source_sha256: str | None = None, prediction_source_sha256: str | None = None) -> PredictionResult:
+                source_sha256: str | None = None, prediction_source_sha256: str | None = None,
+                categorical_encoding: str = LEGACY) -> PredictionResult:
     """Fit using all labeled rows and return local predictions for new rows.
 
     This is inference, not an independent performance estimate. ``new_rows``
@@ -73,10 +75,10 @@ def fit_predict(frame: pd.DataFrame, new_rows: pd.DataFrame, *, target: str, gro
     """
     X, y, groups, incoming, plan = _prepare_prediction(
         frame, new_rows, target=target, group=group, features=features,
-        inner_splits=inner_splits, random_state=random_state, baselines=baselines, objective=objective)
+        inner_splits=inner_splits, random_state=random_state, baselines=baselines, objective=objective, categorical_encoding=categorical_encoding)
     random_state = plan.seed
     estimator = GroupBenchRegressor(baselines=baselines, inner_splits=inner_splits,
-                                    random_state=random_state, objective=objective)
+                                    random_state=random_state, objective=objective, categorical_encoding=categorical_encoding)
     estimator._fit_prepared(X, y, groups, plan)
     inner_splits = len(plan.splits)
     predictions = estimator.predict(incoming)
@@ -104,4 +106,8 @@ def fit_predict(frame: pd.DataFrame, new_rows: pd.DataFrame, *, target: str, gro
             "Manifest contains training group identifiers; review before sharing.",
         ],
     }
+    if categorical_encoding == DISTINCT:
+        manifest.update(schema_version="1.2", protocol="group-fit-predict-distinct-v2",
+                        preprocessing=preprocessing_description())
+        manifest["config"].update(encoding_options(categorical_encoding))
     return PredictionResult(pd.DataFrame({"row_position": np.arange(len(predictions)), "prediction": predictions}), manifest, estimator)

@@ -13,6 +13,7 @@ import sys
 import pandas as pd
 
 from . import __version__
+from .categorical import ENCODINGS, LEGACY
 from .data import MAX_ROWS, make_materials_fixture
 from .evaluation import benchmark
 from .feature_manifest import read_feature_manifest
@@ -31,6 +32,8 @@ def _add_protocol(parser, *, outer=True, output=True):
     parser.add_argument("--inner-splits", type=int, default=3)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--baselines", default="dummy,ridge,extra_trees", help="Comma-separated families: dummy,ridge,extra_trees")
+    parser.add_argument("--categorical-encoding", choices=ENCODINGS, default=LEGACY,
+                        help="Use distinct-v2 to distinguish literal missing-marker strings; default preserves legacy-v1")
     parser.add_argument("--objective", choices=("group_mae", "mae"), default="group_mae")
     if output:
         parser.add_argument("--overwrite", action="store_true", help="Replace known output files in --out")
@@ -230,7 +233,7 @@ def main(argv=None) -> int:
         options = dict(target=target, group=group, features=features,
                        inner_splits=args.inner_splits, random_state=args.seed,
                        baselines=tuple(x.strip() for x in args.baselines.split(",")),
-                       objective=args.objective, source_sha256=source_hash)
+                       objective=args.objective, source_sha256=source_hash, categorical_encoding=args.categorical_encoding)
         if args.command == "plan":
             if args.plan_mode == "predict":
                 incoming, prediction_source_hash = _read_csv_with_hash(args.new_csv_path)

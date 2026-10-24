@@ -17,6 +17,7 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.utils.validation import check_is_fitted
 from threadpoolctl import threadpool_limits
 
+from ..categorical import LEGACY, categorical_imputer, encoding_options, validate_categorical_encoding
 from ..data import validate_features, validate_groups, validate_prediction_features, validate_seed
 from ..splitting import GroupKFold, audit_split
 from .data import class_counts, require_classes, validate_binary_target, validate_splits
@@ -60,6 +61,7 @@ class BinarySelectionPlan:
     splits: tuple
     refit_families: tuple[str, ...]
     seed: int
+    categorical_encoding: str = LEGACY
 
     @property
     def fit_counts(self):
@@ -68,7 +70,8 @@ class BinarySelectionPlan:
                 "total_fits": inner + len(self.refit_families)}
 
 
-def binary_selection_plan(X, y, groups, *, baselines, inner_splits, random_state, context="Full training"):
+def binary_selection_plan(X, y, groups, *, baselines, inner_splits, random_state, context="Full training", categorical_encoding=LEGACY):
+    validate_categorical_encoding(categorical_encoding)
     seed = validate_seed(random_state)
     count = validate_splits(inner_splits, "inner_splits")
     candidates = binary_candidates(baselines)
@@ -76,10 +79,11 @@ def binary_selection_plan(X, y, groups, *, baselines, inner_splits, random_state
     splits = tuple(GroupKFold(count, seed).split(X, groups=groups))
     for fold, (train, _) in enumerate(splits):
         require_classes(y[train], f"{context}, inner fold {fold} training")
-    return BinarySelectionPlan(candidates, splits, tuple(baselines), seed)
+    return BinarySelectionPlan(candidates, splits, tuple(baselines), seed, categorical_encoding)
 
 
-def binary_pipeline(X, candidate, seed):
+def binary_pipeline(X, candidate, seed, categorical_encoding=LEGACY):
+    validate_categorical_encoding(categorical_encoding)
     numeric = list(X.select_dtypes(include="number").columns)
     categorical = [c for c in X if c not in numeric]
     transforms = []
@@ -89,7 +93,7 @@ def binary_pipeline(X, candidate, seed):
             ("scale", StandardScaler())]), numeric))
     if categorical:
         transforms.append(("categorical", Pipeline([
-            ("impute", SimpleImputer(strategy="constant", fill_value="__GROUPBENCH_MISSING__", keep_empty_features=True)),
+            ("impute", categorical_imputer(categorical_encoding)),
             ("encode", OneHotEncoder(handle_unknown="ignore", max_categories=64, sparse_output=True))]), categorical))
     preprocessing = ColumnTransformer(transforms, remainder="drop", sparse_threshold=1.0)
     if candidate.family == "dummy":
@@ -103,8 +107,8 @@ def binary_pipeline(X, candidate, seed):
     return Pipeline([("preprocess", preprocessing), ("model", model)])
 
 
-def _fit_pipeline(X, y, candidate, seed, context):
-    pipeline = binary_pipeline(X, candidate, seed)
+def _fit_pipeline(X, y, candidate, seed, context, categorical_encoding=LEGACY):
+    pipeline = binary_pipeline(X, candidate, seed, **encoding_options(categorical_encoding))
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("error", ConvergenceWarning)
@@ -127,10 +131,11 @@ class GroupBenchClassifier(ClassifierMixin, BaseEstimator):
     not the selection objective. No model persistence or calibration is added.
     A failed fit preserves the previous complete fitted state, if one exists.
     """
-    def __init__(self, baselines=("dummy", "logistic", "extra_trees"), inner_splits=3, random_state=0):
+    def __init__(self, baselines=("dummy", "logistic", "extra_trees"), inner_splits=3, random_state=0, categorical_encoding=LEGACY):
         self.baselines = baselines
         self.inner_splits = inner_splits
         self.random_state = random_state
+        self.categorical_encoding = categorical_encoding
 
     def fit(self, X, y, groups=None):
         if groups is None:
@@ -139,7 +144,8 @@ class GroupBenchClassifier(ClassifierMixin, BaseEstimator):
         y = validate_binary_target(y, len(X))
         groups = validate_groups(groups, len(X))
         plan = binary_selection_plan(X, y, groups, baselines=self.baselines,
-                                     inner_splits=self.inner_splits, random_state=self.random_state)
+                                     inner_splits=self.inner_splits, random_state=self.random_state,
+                                     categorical_encoding=self.categorical_encoding)
         return self._fit_prepared(X, y, groups, plan)
 
     def _fit_prepared(self, X, y, groups, plan):
@@ -153,7 +159,7 @@ class GroupBenchClassifier(ClassifierMixin, BaseEstimator):
                 oof = np.full((len(X), 2), np.nan)
                 fold_scores, fold_metrics = [], []
                 for fold, (train, test) in enumerate(plan.splits):
-                    pipeline = _fit_pipeline(X.iloc[train], y[train], candidate, plan.seed, f"inner fold {fold}")
+                    pipeline = _fit_pipeline(X.iloc[train], y[train], candidate, plan.seed, f"inner fold {fold}", **encoding_options(plan.categorical_encoding))
                     probabilities = _probabilities(pipeline, X.iloc[test])
                     oof[test] = probabilities
                     scores, _ = grouped_binary_metrics(y[test], probabilities[:, 1], groups[test])
@@ -169,7 +175,7 @@ class GroupBenchClassifier(ClassifierMixin, BaseEstimator):
                 best = min((i for i, c in enumerate(plan.candidates) if c.family == family),
                            key=lambda i: records[i]["selection_score"])
                 chosen = plan.candidates[best]
-                family_models[family] = _fit_pipeline(X, y, chosen, plan.seed, "family refit")
+                family_models[family] = _fit_pipeline(X, y, chosen, plan.seed, "family refit", **encoding_options(plan.categorical_encoding))
                 family_candidates[family] = chosen.name
         # Publish all state only after every fit succeeds.
         best_candidate = plan.candidates[winner]
@@ -180,7 +186,7 @@ class GroupBenchClassifier(ClassifierMixin, BaseEstimator):
             inner_audit_=audit, classes_=np.array([0, 1], dtype=np.int64),
             feature_names_in_=np.array(X.columns, dtype=object), n_features_in_=X.shape[1],
             feature_types_=[str(X[c].dtype) for c in X], n_groups_seen_=len(pd.unique(groups)),
-            fit_counts_=plan.fit_counts)
+            fit_counts_=plan.fit_counts, categorical_encoding_=plan.categorical_encoding)
         return self
 
     def _validated_predict_frame(self, X):

@@ -103,3 +103,13 @@ do not prove a prediction is wrong. No row is removed, prediction rejected or
 model adjusted merely for these conditions; existing validation and non-finite
 prediction failures remain in force. Independent evaluation and domain judgment
 are still required, particularly before consequential use.
+
+## Source diagnostics versus categorical encoding
+
+These diagnostics remain source-based under both `legacy-v1` and explicit
+`distinct-v2`, with no change to their schema or counts. In legacy-v1, a real
+`__GROUPBENCH_MISSING__` source category can collide with missing after imputation,
+even when the source diagnostic calls that literal unseen. Diagnostics do not
+repair a fitted encoding. Use the [explicit v2 option](CATEGORICAL_ENCODING.md)
+to separate their internal keys; existing unknown/infrequent buckets can still
+merge encoded representations intentionally.

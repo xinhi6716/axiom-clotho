@@ -14,6 +14,7 @@ import pandas as pd
 import sklearn
 
 from . import __version__
+from .categorical import LEGACY, DISTINCT, encoding_options, preprocessing_description
 from .data import data_fingerprint, duplicate_diagnostics, prepare_data, validate_seed
 from .metrics import grouped_metrics
 from .model import GroupBenchRegressor, candidates_for, selection_plan
@@ -39,7 +40,7 @@ class BenchmarkResult:
 
 
 def _prepare_benchmark(frame, *, target, group, features, outer_splits,
-                       inner_splits, random_state, baselines, objective):
+                       inner_splits, random_state, baselines, objective, categorical_encoding=LEGACY):
     """Shared no-fit validation and exact seeded nested schedule."""
     seed = validate_seed(random_state)
     X, y, groups = prepare_data(frame, target, group, features)
@@ -51,7 +52,7 @@ def _prepare_benchmark(frame, *, target, group, features, outer_splits,
     for fold, (train, test) in enumerate(splits):
         selection = selection_plan(X.iloc[train], groups[train], baselines=baselines,
                                    inner_splits=inner_splits, random_state=seed + fold + 1,
-                                   objective=objective)
+                                   objective=objective, categorical_encoding=categorical_encoding)
         schedule.append((train, test, selection))
     return X, y, groups, seed, schedule
 
@@ -59,7 +60,8 @@ def _prepare_benchmark(frame, *, target, group, features, outer_splits,
 def benchmark(frame: pd.DataFrame, *, target: str, group: str, features=None,
               outer_splits: int = 5, inner_splits: int = 3,
               random_state: int = 0, baselines=("dummy", "ridge", "extra_trees"),
-              objective: str = "group_mae", source_sha256: str | None = None) -> BenchmarkResult:
+              objective: str = "group_mae", source_sha256: str | None = None,
+              categorical_encoding: str = LEGACY) -> BenchmarkResult:
     """Estimate performance on unseen groups using genuinely nested selection.
 
     The ``selected`` entry is selected only on inner validation in each outer
@@ -70,7 +72,7 @@ def benchmark(frame: pd.DataFrame, *, target: str, group: str, features=None,
     started = time.perf_counter()
     X, y, groups, seed, schedule = _prepare_benchmark(
         frame, target=target, group=group, features=features, outer_splits=outer_splits,
-        inner_splits=inner_splits, random_state=random_state, baselines=baselines, objective=objective)
+        inner_splits=inner_splits, random_state=random_state, baselines=baselines, objective=objective, categorical_encoding=categorical_encoding)
     splits = [(train, test) for train, test, _ in schedule]
     candidates = schedule[0][2].candidates
     outer_splits = len(schedule)
@@ -81,7 +83,7 @@ def benchmark(frame: pd.DataFrame, *, target: str, group: str, features=None,
     outer_audit = []
     for fold, (train, test, plan) in enumerate(schedule):
         estimator = GroupBenchRegressor(baselines=baselines, inner_splits=inner_splits,
-                                        random_state=seed + fold + 1, objective=objective)
+                                        random_state=seed + fold + 1, objective=objective, categorical_encoding=categorical_encoding)
         estimator._fit_prepared(X.iloc[train].reset_index(drop=True), y[train], groups[train], plan)
         predictions = estimator.predict_baselines(X.iloc[test])
         for name in names:
@@ -114,6 +116,7 @@ def benchmark(frame: pd.DataFrame, *, target: str, group: str, features=None,
         "candidates": [{"name": c.name, "family": c.family, "params": c.params} for c in candidates],
         "threads": 1,
     }
+    config.update(encoding_options(categorical_encoding))
     fingerprint = data_fingerprint(X, y, groups)
     run_key = hashlib.sha256((fingerprint + json.dumps(config, sort_keys=True)).encode()).hexdigest()
     diagnostics = duplicate_diagnostics(X, y, groups)
@@ -145,4 +148,8 @@ def benchmark(frame: pd.DataFrame, *, target: str, group: str, features=None,
     }
     summary = {"schema_version": "1.0", "models": model_metrics,
                "selection_objective": objective, "primary_entry": "selected", "limitations": warnings}
+    if categorical_encoding == DISTINCT:
+        manifest.update(schema_version="1.1", protocol="nested-group-kfold-distinct-v2",
+                        preprocessing=preprocessing_description())
+        summary.update(schema_version="1.1", protocol=manifest["protocol"])
     return BenchmarkResult(summary=summary, manifest=manifest, predictions=prediction_frame)

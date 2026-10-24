@@ -61,3 +61,14 @@ A correct implementation cannot rescue an incorrect scientific protocol. Precomp
 ## Separate explicit binary protocol
 
 The original regression contracts above are unchanged. Numeric 0/1 classification is a separately selected additive workflow with its own schemas and fixed group-Brier objective; see [BINARY_PROTOCOL.md](BINARY_PROTOCOL.md). Regression targets containing 0/1 do not trigger automatic classification.
+
+## Opt-in categorical encoding v2
+
+The compatibility default remains the v1 procedure above, including its known
+collision between a real `__GROUPBENCH_MISSING__` category and a missing value.
+Explicit `categorical_encoding="distinct-v2"` / `--categorical-encoding distinct-v2`
+uses injective marker-prefix escaping, with separate protocol identities and
+compatible schema minor versions. It does not change grouping, numeric transforms,
+model grids, objectives, fit counts, or intentional unknown/infrequent compression.
+See [CATEGORICAL_ENCODING.md](CATEGORICAL_ENCODING.md) for exact semantics,
+legacy compatibility, migration, and limitations.

@@ -5,6 +5,7 @@ from __future__ import annotations
 import pandas as pd
 
 from . import __version__
+from .categorical import LEGACY, DISTINCT, encoding_options
 from .evaluation import _prepare_benchmark
 from .prediction import _prepare_prediction
 from .input_support import prediction_input_support
@@ -57,11 +58,11 @@ def _base_report(X, groups, plan, *, mode, target, group, source_sha256):
 def plan_benchmark(frame: pd.DataFrame, *, target: str, group: str, features=None,
                    outer_splits: int = 5, inner_splits: int = 3, random_state: int = 0,
                    baselines=("dummy", "ridge", "extra_trees"), objective="group_mae",
-                   source_sha256: str | None = None) -> dict:
+source_sha256: str | None = None, categorical_encoding: str = LEGACY) -> dict:
     """Validate a nested evaluation and return its exact no-fit work schedule."""
     X, _, groups, seed, schedule = _prepare_benchmark(
         frame, target=target, group=group, features=features, outer_splits=outer_splits,
-        inner_splits=inner_splits, random_state=random_state, baselines=baselines, objective=objective)
+        inner_splits=inner_splits, random_state=random_state, baselines=baselines, objective=objective, categorical_encoding=categorical_encoding)
     result = _base_report(X, groups, schedule[0][2], mode="run", target=target,
                           group=group, source_sha256=source_sha256)
     result["config"].update(outer_splits=len(schedule), random_state=seed)
@@ -77,6 +78,9 @@ def plan_benchmark(frame: pd.DataFrame, *, target: str, group: str, features=Non
         "full_data_family_refits": 0, "selected_extra_refits": 0,
         "total_fits": sum(plan.fit_counts["total_fits"] for _, _, plan in schedule),
     }
+    if categorical_encoding == DISTINCT:
+        result.update(schema_version="1.1", protocol="nested-group-kfold-distinct-v2")
+        result["config"].update(encoding_options(categorical_encoding))
     return result
 
 
@@ -84,11 +88,11 @@ def plan_prediction(frame: pd.DataFrame, new_rows: pd.DataFrame, *, target: str,
                     group: str, features=None, inner_splits: int = 3, random_state: int = 0,
                     baselines=("dummy", "ridge", "extra_trees"), objective="group_mae",
                     source_sha256: str | None = None,
-                    prediction_source_sha256: str | None = None) -> dict:
+                    prediction_source_sha256: str | None = None, categorical_encoding: str = LEGACY) -> dict:
     """Validate a full-data selection/refit and new-row schema without fitting."""
     X, _, groups, incoming, plan = _prepare_prediction(
         frame, new_rows, target=target, group=group, features=features,
-        inner_splits=inner_splits, random_state=random_state, baselines=baselines, objective=objective)
+        inner_splits=inner_splits, random_state=random_state, baselines=baselines, objective=objective, categorical_encoding=categorical_encoding)
     result = _base_report(X, groups, plan, mode="predict", target=target,
                           group=group, source_sha256=source_sha256)
     result["schema_version"] = "1.1"
@@ -106,4 +110,7 @@ def plan_prediction(frame: pd.DataFrame, new_rows: pd.DataFrame, *, target: str,
         "full_data_family_refits": plan.fit_counts["family_refits"],
         "selected_extra_refits": 0, "total_fits": plan.fit_counts["total_fits"],
     }
+    if categorical_encoding == DISTINCT:
+        result.update(schema_version="1.2", protocol="group-fit-predict-distinct-v2")
+        result["config"].update(encoding_options(categorical_encoding))
     return result

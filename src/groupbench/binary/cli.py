@@ -1,6 +1,7 @@
 """Additive binary CLI namespace; regression commands retain their defaults."""
 from pathlib import Path
 import json
+from ..categorical import ENCODINGS, LEGACY
 from .report import ensure_fresh_binary_output
 from .workflow import benchmark_binary, fit_predict_binary, plan_binary_benchmark, plan_binary_prediction
 
@@ -14,6 +15,8 @@ def _options(parser, *, outer, output):
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--baselines", default="dummy,logistic,extra_trees",
                         help="Distinct ordered families: dummy,logistic,extra_trees")
+    parser.add_argument("--categorical-encoding", choices=ENCODINGS, default=LEGACY,
+                        help="Use distinct-v2 to distinguish literal missing-marker strings; default preserves legacy-v1")
     if output:
         parser.add_argument("--out", type=Path, required=True, help="Fresh local directory; no overwrite")
 
@@ -51,7 +54,8 @@ def run_binary(args):
     frame, features, source_hash = _read_training(args)
     options = dict(target=args.target, group=args.group, features=features,
                    inner_splits=args.inner_splits, random_state=args.seed,
-                   baselines=tuple(v.strip() for v in args.baselines.split(",")), source_sha256=source_hash)
+                   baselines=tuple(v.strip() for v in args.baselines.split(",")), source_sha256=source_hash,
+                   categorical_encoding=args.categorical_encoding)
     if mode == "predict":
         incoming, source_hash = _read_csv_with_hash(args.new_csv_path)
         action = plan_binary_prediction if planning else fit_predict_binary

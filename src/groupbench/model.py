@@ -17,6 +17,7 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.utils.validation import check_is_fitted
 from threadpoolctl import threadpool_limits
 
+from .categorical import LEGACY, categorical_imputer, encoding_options, validate_categorical_encoding
 from .data import (validate_features, validate_groups, validate_prediction_features,
                    validate_seed, validate_target)
 from .metrics import grouped_metrics
@@ -56,6 +57,7 @@ class SelectionPlan:
     refit_families: tuple[str, ...]
     seed: int
     objective: str
+    categorical_encoding: str = LEGACY
 
     @property
     def fit_counts(self) -> dict:
@@ -67,17 +69,19 @@ class SelectionPlan:
                 "total_fits": inner + refits}
 
 
-def selection_plan(X, groups, *, baselines, inner_splits, random_state, objective):
+def selection_plan(X, groups, *, baselines, inner_splits, random_state, objective, categorical_encoding=LEGACY):
     """Validate and materialize a selection schedule without fitting anything."""
+    validate_categorical_encoding(categorical_encoding)
     if objective not in ("group_mae", "mae"):
         raise ValueError("objective must be 'group_mae' or 'mae'.")
     seed = validate_seed(random_state)
     candidates = tuple(candidates_for(baselines))
     splits = tuple(GroupKFold(inner_splits, seed).split(X, groups=groups))
-    return SelectionPlan(candidates, splits, tuple(baselines), seed, objective)
+    return SelectionPlan(candidates, splits, tuple(baselines), seed, objective, categorical_encoding)
 
 
-def make_pipeline(X: pd.DataFrame, candidate: Candidate, random_state: int) -> Pipeline:
+def make_pipeline(X: pd.DataFrame, candidate: Candidate, random_state: int, categorical_encoding=LEGACY) -> Pipeline:
+    validate_categorical_encoding(categorical_encoding)
     numeric = list(X.select_dtypes(include="number").columns)
     categorical = [c for c in X if c not in numeric]
     transforms = []
@@ -88,7 +92,7 @@ def make_pipeline(X: pd.DataFrame, candidate: Candidate, random_state: int) -> P
         ]), numeric))
     if categorical:
         transforms.append(("categorical", Pipeline([
-            ("impute", SimpleImputer(strategy="constant", fill_value="__GROUPBENCH_MISSING__", keep_empty_features=True)),
+            ("impute", categorical_imputer(categorical_encoding)),
             ("encode", OneHotEncoder(handle_unknown="ignore", max_categories=64, sparse_output=True)),
         ]), categorical))
     preprocessing = ColumnTransformer(transforms, remainder="drop", sparse_threshold=1.0)
@@ -112,11 +116,12 @@ class GroupBenchRegressor(RegressorMixin, BaseEstimator):
     """
 
     def __init__(self, baselines=("dummy", "ridge", "extra_trees"), inner_splits=3,
-                 random_state=0, objective="group_mae"):
+                 random_state=0, objective="group_mae", categorical_encoding=LEGACY):
         self.baselines = baselines
         self.inner_splits = inner_splits
         self.random_state = random_state
         self.objective = objective
+        self.categorical_encoding = categorical_encoding
 
     def fit(self, X, y, groups=None):
         if groups is None:
@@ -125,7 +130,8 @@ class GroupBenchRegressor(RegressorMixin, BaseEstimator):
         y = validate_target(y, len(X))
         groups = validate_groups(groups, len(X))
         plan = selection_plan(X, groups, baselines=self.baselines, inner_splits=self.inner_splits,
-                              random_state=self.random_state, objective=self.objective)
+                              random_state=self.random_state, objective=self.objective,
+                              categorical_encoding=self.categorical_encoding)
         return self._fit_prepared(X, y, groups, plan)
 
     def _fit_prepared(self, X, y, groups, plan: SelectionPlan):
@@ -139,7 +145,7 @@ class GroupBenchRegressor(RegressorMixin, BaseEstimator):
                 oof = np.full(len(X), np.nan)
                 fold_scores = []
                 for train, test in splits:
-                    pipeline = make_pipeline(X.iloc[train], candidate, seed)
+                    pipeline = make_pipeline(X.iloc[train], candidate, seed, **encoding_options(plan.categorical_encoding))
                     pipeline.fit(X.iloc[train], y[train])
                     prediction = pipeline.predict(X.iloc[test])
                     oof[test] = prediction
@@ -157,7 +163,7 @@ class GroupBenchRegressor(RegressorMixin, BaseEstimator):
             for family in plan.refit_families:
                 best = min((i for i, c in enumerate(candidates) if c.family == family), key=lambda i: records[i]["selection_score"])
                 chosen = candidates[best]
-                pipeline = make_pipeline(X, chosen, seed)
+                pipeline = make_pipeline(X, chosen, seed, **encoding_options(plan.categorical_encoding))
                 pipeline.fit(X, y)
                 family_models[family] = pipeline
                 family_candidates[family] = chosen.name
@@ -171,7 +177,7 @@ class GroupBenchRegressor(RegressorMixin, BaseEstimator):
             best_family_=best.family, best_estimator_=family_models[best.family],
             selection_results_=records, feature_names_in_=np.array(X.columns, dtype=object),
             n_features_in_=X.shape[1], feature_types_=[str(X[c].dtype) for c in X],
-            n_groups_seen_=len(pd.unique(groups)))
+            n_groups_seen_=len(pd.unique(groups)), categorical_encoding_=plan.categorical_encoding)
         return self
 
     def _validated_predict_frame(self, X):

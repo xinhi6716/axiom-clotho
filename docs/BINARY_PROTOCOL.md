@@ -82,3 +82,14 @@ The included fixture is original invented data with group effects and missing fe
 Probabilities are not guaranteed calibrated failure risk, causal effect, OOD safety or permission for automatic wafer/process disposition. A fixed 0.5 threshold is not cost-sensitive decision analysis. Grouping does not solve crossed/time dependence, proxy features, duplicates or selection bias. Absence of source-feature warning flags is not proof of support or safety. Operational use requires independent domain validation and human decisions.
 
 Primary references: [Brier](https://scikit-learn.org/1.8/modules/generated/sklearn.metrics.brier_score_loss.html), [log loss](https://scikit-learn.org/1.8/modules/generated/sklearn.metrics.log_loss.html), [Logistic 1.4](https://scikit-learn.org/1.4/modules/generated/sklearn.linear_model.LogisticRegression.html), [Logistic 1.8](https://scikit-learn.org/1.8/modules/generated/sklearn.linear_model.LogisticRegression.html), [Dummy](https://scikit-learn.org/stable/modules/generated/sklearn.dummy.DummyClassifier.html), [Extra Trees](https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.ExtraTreesClassifier.html).
+
+## Opt-in categorical encoding v2
+
+The compatibility default remains the v1 procedure above, including its known
+collision between a real `__GROUPBENCH_MISSING__` category and a missing value.
+Explicit `categorical_encoding="distinct-v2"` / `--categorical-encoding distinct-v2`
+uses injective marker-prefix escaping, with separate protocol identities and
+compatible schema minor versions. It does not change grouping, numeric transforms,
+model grids, objectives, fit counts, or intentional unknown/infrequent compression.
+See [CATEGORICAL_ENCODING.md](CATEGORICAL_ENCODING.md) for exact semantics,
+legacy compatibility, migration, and limitations.

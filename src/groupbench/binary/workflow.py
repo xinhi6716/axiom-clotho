@@ -11,6 +11,7 @@ import pandas as pd
 import sklearn
 
 from .. import __version__
+from ..categorical import LEGACY, DISTINCT, encoding_options, preprocessing_description
 from ..data import data_fingerprint, duplicate_diagnostics, validate_prediction_features, validate_seed
 from ..input_support import prediction_input_support
 from ..splitting import GroupKFold, audit_split
@@ -42,8 +43,9 @@ PLAN_LIMITATIONS = [
 ]
 
 
-def _identity(kind):
-    return {"schema_id": f"mlcalc.binary.{kind}", "schema_version": "1.0",
+def _identity(kind, categorical_encoding=LEGACY):
+    return {"schema_id": f"mlcalc.binary.{kind}",
+            "schema_version": "1.1" if categorical_encoding == DISTINCT else "1.0",
             "task": "binary_classification", "label_contract": label_contract()}
 
 
@@ -68,12 +70,13 @@ def _config(X, plan, target, group, *, outer_splits=None, seed=None):
               "training_weighting": "equal_rows_no_class_or_sample_weights",
               "logistic_regularization": "l2_default_finite_C_lbfgs",
               "model_random_state": "selection_seed", "threads": 1, "resource_limits": _resources()}
+    result.update(encoding_options(plan.categorical_encoding))
     if outer_splits is not None:
         result["outer_splits"] = outer_splits
     return result
 
 
-def _prepare_evaluation(frame, *, target, group, features, outer_splits, inner_splits, random_state, baselines):
+def _prepare_evaluation(frame, *, target, group, features, outer_splits, inner_splits, random_state, baselines, categorical_encoding=LEGACY):
     seed = validate_seed(random_state)
     outer = validate_splits(outer_splits, "outer_splits")
     validate_splits(inner_splits, "inner_splits")
@@ -82,16 +85,16 @@ def _prepare_evaluation(frame, *, target, group, features, outer_splits, inner_s
     for fold, (train, test) in enumerate(GroupKFold(outer, seed).split(X, groups=groups)):
         plan = binary_selection_plan(X.iloc[train], y[train], groups[train], baselines=baselines,
                                      inner_splits=inner_splits, random_state=seed + fold + 1,
-                                     context=f"Outer fold {fold} training")
+                                     context=f"Outer fold {fold} training", categorical_encoding=categorical_encoding)
         schedule.append((train, test, plan))
     return X, y, groups, seed, tuple(schedule)
 
 
-def _prepare_prediction(frame, new_rows, *, target, group, features, inner_splits, random_state, baselines):
+def _prepare_prediction(frame, new_rows, *, target, group, features, inner_splits, random_state, baselines, categorical_encoding=LEGACY):
     X, y, groups = prepare_binary_data(frame, target, group, features)
     incoming = validate_prediction_features(new_rows, X.columns, [str(X[c].dtype) for c in X])
     plan = binary_selection_plan(X, y, groups, baselines=baselines,
-                                 inner_splits=inner_splits, random_state=random_state)
+                                 inner_splits=inner_splits, random_state=random_state, categorical_encoding=categorical_encoding)
     return X, y, groups, incoming, plan
 
 
@@ -119,7 +122,7 @@ def _fit_budget(plans, *, evaluation):
 
 
 def _plan_base(X, y, groups, plan, target, group, source_sha256, mode):
-    return {**_identity("execution_plan"), "mode": mode, "groupbench_version": __version__,
+    return {**_identity("execution_plan", plan.categorical_encoding), "mode": mode, "groupbench_version": __version__,
             "fits_performed": 0, "source_file_sha256": source_sha256,
             "n_training_rows": len(X), "n_training_groups": len(pd.unique(groups)),
             "training_class_counts": class_counts(y),
@@ -129,30 +132,34 @@ def _plan_base(X, y, groups, plan, target, group, source_sha256, mode):
 
 
 def plan_binary_benchmark(frame, *, target, group, features=None, outer_splits=5, inner_splits=3,
-                          random_state=0, baselines=DEFAULT_BASELINES, source_sha256=None):
+                          random_state=0, baselines=DEFAULT_BASELINES, source_sha256=None, categorical_encoding=LEGACY):
     X, y, groups, seed, schedule = _prepare_evaluation(
         frame, target=target, group=group, features=features, outer_splits=outer_splits,
-        inner_splits=inner_splits, random_state=random_state, baselines=baselines)
+        inner_splits=inner_splits, random_state=random_state, baselines=baselines, categorical_encoding=categorical_encoding)
     result = _plan_base(X, y, groups, schedule[0][2], target, group, source_sha256, "run")
     result["config"] = _config(X, schedule[0][2], target, group, outer_splits=len(schedule), seed=seed)
     result["outer_folds"] = [{"fold": i, **_split_summary(train, test, y, groups),
                                **_selection_summary(plan, y[train], groups[train])}
                               for i, (train, test, plan) in enumerate(schedule)]
     result["fit_budget"] = _fit_budget([plan for _, _, plan in schedule], evaluation=True)
+    if categorical_encoding == DISTINCT:
+        result["protocol"] = "nested-group-binary-brier-distinct-v2"
     return result
 
 
 def plan_binary_prediction(frame, new_rows, *, target, group, features=None, inner_splits=3,
                            random_state=0, baselines=DEFAULT_BASELINES, source_sha256=None,
-                           prediction_source_sha256=None):
+                           prediction_source_sha256=None, categorical_encoding=LEGACY):
     X, y, groups, incoming, plan = _prepare_prediction(
         frame, new_rows, target=target, group=group, features=features,
-        inner_splits=inner_splits, random_state=random_state, baselines=baselines)
+        inner_splits=inner_splits, random_state=random_state, baselines=baselines, categorical_encoding=categorical_encoding)
     result = _plan_base(X, y, groups, plan, target, group, source_sha256, "predict")
     result.update(n_prediction_rows=len(incoming), prediction_source_file_sha256=prediction_source_sha256,
                   input_support=prediction_input_support(X, incoming), selection=_selection_summary(plan, y, groups),
                   fit_budget=_fit_budget([plan], evaluation=False))
     result["limitations"].append(INPUT_LIMITATION)
+    if categorical_encoding == DISTINCT:
+        result["protocol"] = "group-binary-brier-fit-predict-distinct-v2"
     return result
 
 
@@ -198,17 +205,17 @@ def _adverse(models):
 
 
 def benchmark_binary(frame, *, target, group, features=None, outer_splits=5, inner_splits=3,
-                     random_state=0, baselines=DEFAULT_BASELINES, source_sha256=None):
+                     random_state=0, baselines=DEFAULT_BASELINES, source_sha256=None, categorical_encoding=LEGACY):
     started = time.perf_counter()
     X, y, groups, seed, schedule = _prepare_evaluation(
         frame, target=target, group=group, features=features, outer_splits=outer_splits,
-        inner_splits=inner_splits, random_state=random_state, baselines=baselines)
+        inner_splits=inner_splits, random_state=random_state, baselines=baselines, categorical_encoding=categorical_encoding)
     names = list(baselines) + ["selected"]
     oof = {name: np.full((len(X), 2), np.nan) for name in names}
     fold_ids = np.full(len(X), -1, dtype=int)
     audits = []
     for fold, (train, test, plan) in enumerate(schedule):
-        estimator = GroupBenchClassifier(baselines=baselines, inner_splits=inner_splits, random_state=plan.seed)
+        estimator = GroupBenchClassifier(baselines=baselines, inner_splits=inner_splits, random_state=plan.seed, categorical_encoding=categorical_encoding)
         estimator._fit_prepared(X.iloc[train].reset_index(drop=True), y[train], groups[train], plan)
         probabilities = estimator.predict_proba_baselines(X.iloc[test])
         for name in names:
@@ -234,9 +241,10 @@ def benchmark_binary(frame, *, target, group, features=None, outer_splits=5, inn
         predictions[f"predicted_label_{name}"] = (oof[name][:, 1] >= 0.5).astype(np.int64)
     config = _config(X, schedule[0][2], target, group, outer_splits=len(schedule), seed=seed)
     fingerprint = data_fingerprint(X, y, groups)
-    protocol = "nested-group-binary-brier-v1"
+    protocol = ("nested-group-binary-brier-distinct-v2" if categorical_encoding == DISTINCT
+                else "nested-group-binary-brier-v1")
     schema = [{"name": c, "dtype": str(X[c].dtype), "missing_count": int(X[c].isna().sum())} for c in X]
-    run_input = {**_identity("evaluation.manifest"), "protocol": protocol, "data_sha256": fingerprint,
+    run_input = {**_identity("evaluation.manifest", categorical_encoding), "protocol": protocol, "data_sha256": fingerprint,
                  "config": config, "metric_contract": metric_contract(), "feature_schema": schema}
     run_key = hashlib.sha256(json.dumps(run_input, sort_keys=True, allow_nan=False).encode()).hexdigest()
     diagnostics = duplicate_diagnostics(X, y, groups)
@@ -250,22 +258,25 @@ def benchmark_binary(frame, *, target, group, features=None, outer_splits=5, inn
                 "preprocessing": "Each fit: numeric median imputation/scaling; categorical constant imputation and train-only sparse one-hot (max 64 categories).",
                 "outer_folds": audits, "fit_budget": _fit_budget([plan for _, _, plan in schedule], evaluation=True),
                 "elapsed_seconds": time.perf_counter() - started, "limitations": limitations}
-    summary = {**_identity("evaluation.summary"), "models": models, "selection_objective": "group_brier",
+    summary = {**_identity("evaluation.summary", categorical_encoding), "models": models, "selection_objective": "group_brier",
                "primary_entry": "selected", "metric_contract": metric_contract(),
                "adverse_comparison_to_dummy": _adverse(models), "limitations": limitations}
+    if categorical_encoding == DISTINCT:
+        manifest["preprocessing"] = preprocessing_description()
+        summary["protocol"] = protocol
     return BinaryBenchmarkResult(summary, manifest, predictions)
 
 
 def fit_predict_binary(frame, new_rows, *, target, group, features=None, inner_splits=3,
                        random_state=0, baselines=DEFAULT_BASELINES, source_sha256=None,
-                       prediction_source_sha256=None):
+                       prediction_source_sha256=None, categorical_encoding=LEGACY):
     X, y, groups, incoming, plan = _prepare_prediction(
         frame, new_rows, target=target, group=group, features=features,
-        inner_splits=inner_splits, random_state=random_state, baselines=baselines)
-    estimator = GroupBenchClassifier(baselines=baselines, inner_splits=inner_splits, random_state=plan.seed)
+        inner_splits=inner_splits, random_state=random_state, baselines=baselines, categorical_encoding=categorical_encoding)
+    estimator = GroupBenchClassifier(baselines=baselines, inner_splits=inner_splits, random_state=plan.seed, categorical_encoding=categorical_encoding)
     estimator._fit_prepared(X, y, groups, plan)
     p = estimator.predict_proba(incoming)
-    manifest = {**_identity("prediction.manifest"), "groupbench_version": __version__, "mode": "fit_predict",
+    manifest = {**_identity("prediction.manifest", categorical_encoding), "groupbench_version": __version__, "mode": "fit_predict",
                 "protocol": "group-binary-brier-fit-predict-v1", "created_at_utc": datetime.now(timezone.utc).isoformat(),
                 "training_data_sha256": data_fingerprint(X, y, groups),
                 "new_features_sha256": hashlib.sha256(pd.util.hash_pandas_object(incoming, index=False).values.tobytes()).hexdigest(),
@@ -284,4 +295,7 @@ def fit_predict_binary(frame, new_rows, *, target, group, features=None, inner_s
                     INPUT_LIMITATION, "No executable model is saved; retain the in-memory estimator or repeat fit_predict_binary."]}
     predictions = pd.DataFrame({"row_position": np.arange(len(p)), "probability_0": p[:, 0],
                                 "probability_1": p[:, 1], "predicted_label": (p[:, 1] >= 0.5).astype(np.int64)})
+    if categorical_encoding == DISTINCT:
+        manifest.update(protocol="group-binary-brier-fit-predict-distinct-v2",
+                        preprocessing=preprocessing_description())
     return BinaryPredictionResult(predictions, manifest, estimator)
