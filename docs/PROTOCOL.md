@@ -17,6 +17,15 @@ The default experiment estimates the performance of a fixed, inner-selected regr
 
 Numeric/categorical column typing is a schema decision and not target-derived. All learned values, including medians, scaling statistics, vocabularies, category-frequency grouping, and model parameters, stay inside each fit. The duplicate diagnostic is post-evaluation and does not modify selection or data.
 
+`GroupBenchRegressor.fit` publishes learned state only after all inner selection
+and family refits succeed. If a fit fails or is interrupted before completion,
+an already-fitted estimator retains its previous models, feature schema,
+selection results and split audit; a fresh estimator remains unfitted. A later
+successful fit replaces that state. Exceptions still propagate without silent
+candidate skipping or retry. This does not roll back constructor parameters
+changed by the caller, provide concurrent-fit/predict safety, or make artifact
+writes transactional.
+
 ## Group identifiers
 
 The Python API identifies numeric groups by their exact stored values, not rounded display text or NumPy scalar comparison promotion. Equal values across integer/float types share one group; distinct values remain distinct. Ordinary float64 IDs retain decimal labels. Fractional values beyond float64 precision use exact hexadecimal-ratio labels; integers beyond Python's decimal-conversion limit use hexadecimal labels.

@@ -108,6 +108,7 @@ class GroupBenchRegressor(RegressorMixin, BaseEstimator):
     ``fit`` selects by inner out-of-fold error, then refits on all supplied rows.
     Evaluate generalization with ``benchmark``, not the returned training fit.
     No remote service, model weights, or accelerator is used.
+    A failed fit preserves the previous complete fitted state, if one exists.
     """
 
     def __init__(self, baselines=("dummy", "ridge", "extra_trees"), inner_splits=3,
@@ -130,7 +131,7 @@ class GroupBenchRegressor(RegressorMixin, BaseEstimator):
     def _fit_prepared(self, X, y, groups, plan: SelectionPlan):
         """Execute a validated schedule; used by both nested and full-data fits."""
         candidates, splits, seed = plan.candidates, plan.splits, plan.seed
-        self.inner_audit_ = [{"fold": i, **audit_split(train, test, groups)} for i, (train, test) in enumerate(splits)]
+        audit = [{"fold": i, **audit_split(train, test, groups)} for i, (train, test) in enumerate(splits)]
         records = []
         # Limit BLAS/OpenMP as well as the tree estimator to one thread.
         with threadpool_limits(limits=1):
@@ -152,23 +153,25 @@ class GroupBenchRegressor(RegressorMixin, BaseEstimator):
                 })
             # A fixed candidate order gives deterministic tie-breaking.
             winner = min(range(len(records)), key=lambda i: records[i]["selection_score"])
-            self.family_models_ = {}
-            self.family_candidates_ = {}
+            family_models, family_candidates = {}, {}
             for family in plan.refit_families:
                 best = min((i for i, c in enumerate(candidates) if c.family == family), key=lambda i: records[i]["selection_score"])
                 chosen = candidates[best]
                 pipeline = make_pipeline(X, chosen, seed)
                 pipeline.fit(X, y)
-                self.family_models_[family] = pipeline
-                self.family_candidates_[family] = chosen.name
-        self.best_candidate_ = candidates[winner].name
-        self.best_family_ = candidates[winner].family
-        self.best_estimator_ = self.family_models_[self.best_family_]
-        self.selection_results_ = records
-        self.feature_names_in_ = np.array(X.columns, dtype=object)
-        self.n_features_in_ = X.shape[1]
-        self.feature_types_ = [str(X[c].dtype) for c in X]
-        self.n_groups_seen_ = len(pd.unique(groups))
+                family_models[family] = pipeline
+                family_candidates[family] = chosen.name
+        # Publish state only after selection and every family refit succeeds.
+        # Otherwise a failed refit could leave old selected predictions paired
+        # with a new audit or incomplete baseline models.
+        best = candidates[winner]
+        self.__dict__.update(
+            inner_audit_=audit, family_models_=family_models,
+            family_candidates_=family_candidates, best_candidate_=best.name,
+            best_family_=best.family, best_estimator_=family_models[best.family],
+            selection_results_=records, feature_names_in_=np.array(X.columns, dtype=object),
+            n_features_in_=X.shape[1], feature_types_=[str(X[c].dtype) for c in X],
+            n_groups_seen_=len(pd.unique(groups)))
         return self
 
     def _validated_predict_frame(self, X):
