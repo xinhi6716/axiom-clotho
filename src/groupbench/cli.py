@@ -97,7 +97,14 @@ def _read_csv_with_hash(path: Path, *, group=None):
         record_lines = []
 
         def source_lines():
-            for line in handle:
+            for physical_line, line in enumerate(handle, start=1):
+                # The downstream pandas C parser can silently truncate fields
+                # at NUL, merging group IDs or changing features/targets.
+                if "\x00" in line:
+                    raise ValueError(
+                        f"CSV contains an unsupported NUL character at physical line {physical_line}. "
+                        "Re-export the file as a clean UTF-8 CSV."
+                    )
                 record_lines.append(line)
                 yield line
 

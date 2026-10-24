@@ -76,6 +76,8 @@ Group labels are preserved as text when reading CSV, including leading zeros. Bl
 
 CSV files must use UTF-8 (an optional UTF-8 BOM is supported), with unique, non-blank column names. Each non-blank record must have exactly as many fields as the header: malformed short/long records are rejected **before fitting**, rather than silently padded or shifted into the wrong columns. Represent missing values with explicit empty fields, such as `001,,2`, and quote values containing commas or newlines. Empty lines and lines containing only ASCII spaces/tabs outside quoted values are ignored. Structure errors report physical line numbers and field counts, not cell contents.
 
+NUL characters (U+0000) are rejected anywhere in a CSV, including headers and quoted fields, before pandas can truncate them and change group identifiers, features or targets. Diagnostics identify only the physical source line, not its contents. Physical lines include newlines inside quoted fields; they are not CSV record numbers. This input check is shared by regression and binary `run`, `predict` and `plan` commands.
+
 The CLI checks a bounded input snapshot before pandas type inference, preserving the original quoted text and group identifiers. Python's CSV parser field-size limit applies to both headers and data cells (131,072 characters per field under its default setting); a parser-limit or quoting failure returns an actionable error. This per-field guard is specific to CSV input, not the DataFrame API, and is not a hard memory limit for the whole file.
 
 ### Preview the work before fitting

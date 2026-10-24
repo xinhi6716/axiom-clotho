@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Reject NUL characters anywhere in CSV input before pandas can silently truncate headers, group identifiers, feature values or targets. Use content-free physical-line diagnostics across regression/binary execution and no-fit planning; preserve valid-input parsing, single-read byte hashes, model protocols and artifact schemas.
+
 - Add a separate, explicit numeric-0/1 binary workflow: grouped nested Brier selection, prior Dummy/L2 Logistic/bounded Extra Trees, raw-probability outputs, clipped log-loss diagnostics, class supports/confusion counts, adverse group comparisons, and fixed 0.5 labels. Add no-fit plans with exact fit budgets, train-class preflight guards, source-only preprocessing, finite/range/precision checks, nonconvergence failure and fresh-only local bundles. New binary schema identities start at 1.0; existing regression schemas/commands and fixed byte verifier remain unchanged. No dependency, real dataset, calibration, executable model loading, hosted API or autonomous physical decision is added. See docs/BINARY_PROTOCOL.md for migration boundaries and limitations.
 
 - Add aggregate train-derived `input_support` diagnostics to new-row prediction and no-fit prediction plans: numeric range flags, unseen source categories, missing values and explicit unavailable support for all-missing training features. Preserve all models, transforms, selections, fit counts, predictions and CSV columns. Prediction manifests/plans advance to schema 1.1 with an additive field and migration documentation; evaluation schemas and fixed checksum bundle file sets stay unchanged. Counts are descriptive, not calibrated uncertainty, a multivariate support test or a reliability guarantee.
