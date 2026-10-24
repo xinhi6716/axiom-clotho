@@ -73,6 +73,26 @@ def validate_target(y, n_rows: int) -> np.ndarray:
     return a
 
 
+def _numeric_group_identifier(value) -> str:
+    """Canonicalize exact stored values, never rounded display strings."""
+    numerator, denominator = ((int(value), 1) if isinstance(value, Integral)
+                              else value.as_integer_ratio())
+    if denominator == 1:
+        try:
+            return str(numerator)
+        except ValueError:
+            # Python can limit decimal conversion of very large integers.
+            return hex(numerator)
+    # Preserve ordinary float64 labels while widening float16/32 exactly.
+    narrowed = float(value)
+    if narrowed.as_integer_ratio() == (numerator, denominator):
+        return str(narrowed)
+    # Wider floating types can differ below float64 resolution. An exact
+    # hexadecimal ratio avoids collisions and decimal integer-string limits
+    # for longdouble subnormals, without changing the underlying identity.
+    return f"{numerator:#x}/{denominator:#x}"
+
+
 def validate_groups(groups, n_rows: int) -> np.ndarray:
     a = np.asarray(groups, dtype=object)
     if a.ndim != 1 or len(a) != n_rows or pd.isna(a).any():
@@ -86,7 +106,7 @@ def validate_groups(groups, n_rows: int) -> np.ndarray:
     if len(kinds) > 1:
         raise ValueError("Group identifiers must not mix strings and numbers.")
     if kinds == {"number"}:
-        return np.asarray([str(int(v)) if float(v).is_integer() else str(v) for v in a], dtype=object)
+        return np.asarray([_numeric_group_identifier(v) for v in a], dtype=object)
     if any(not v.strip() for v in a):
         raise ValueError("Group identifiers cannot be blank strings.")
     return a.astype(str).astype(object)

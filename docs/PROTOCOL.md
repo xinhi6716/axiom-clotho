@@ -17,6 +17,12 @@ The default experiment estimates the performance of a fixed, inner-selected regr
 
 Numeric/categorical column typing is a schema decision and not target-derived. All learned values, including medians, scaling statistics, vocabularies, category-frequency grouping, and model parameters, stay inside each fit. The duplicate diagnostic is post-evaluation and does not modify selection or data.
 
+## Group identifiers
+
+The Python API identifies numeric groups by their exact stored values, not rounded display text or NumPy scalar comparison promotion. Equal values across integer/float types share one group; distinct values remain distinct. Ordinary float64 IDs retain decimal labels. Fractional values beyond float64 precision use exact hexadecimal-ratio labels; integers beyond Python's decimal-conversion limit use hexadecimal labels.
+
+String IDs remain literal: `"1"`, `"01"` and `"1.0"` are different groups. Mixed string/numeric IDs are rejected. CSV CLI group columns are read as literal strings, so these numeric Python API normalization rules do not reinterpret CSV group labels.
+
 ## Metrics
 
 - **MAE:** mean absolute prediction error over rows.
