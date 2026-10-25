@@ -421,3 +421,11 @@ python examples/python_api.py
 The suite uses Python's standard `unittest`; no test-runner download is needed. For an uninstalled checkout, prefix either command with `PYTHONPATH=src`.
 
 MIT for original project code and the synthetic fixture generator. Dependencies retain their own licenses. The roadmap is a long-term maintenance direction, not a promise that its future features already exist.
+
+### Compare saved validation budgets locally
+
+For a strictly descriptive two-method × two-budget comparison, with matched
+repeats aggregated within declared units, equal-unit weighting, strict
+wins/ties/harms and a complete adverse-case ledger, see
+[Saved budget comparison](docs/SAVED_BUDGET_COMPARISON.md).
+This optional utility does not retrain models or verify provenance/independence.

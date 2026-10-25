@@ -1,0 +1,220 @@
+{
+  "schema_version": 1,
+  "methods": [
+    "baseline",
+    "selector"
+  ],
+  "budgets": [
+    "small",
+    "large"
+  ],
+  "metadata": {
+    "metric_definition": "mean absolute error",
+    "value_unit": "invented_units",
+    "independent_unit_definition": "invented independent experiment",
+    "normalization": "none; same scale in every cell",
+    "direction": "minimize"
+  },
+  "rows": [
+    {
+      "unit_id": "A",
+      "repeat_id": "0",
+      "budget": "small",
+      "method": "baseline",
+      "value": 10,
+      "status": "ok",
+      "metric_definition": "mean absolute error",
+      "value_unit": "invented_units"
+    },
+    {
+      "unit_id": "A",
+      "repeat_id": "0",
+      "budget": "small",
+      "method": "selector",
+      "value": 8,
+      "status": "ok",
+      "metric_definition": "mean absolute error",
+      "value_unit": "invented_units"
+    },
+    {
+      "unit_id": "A",
+      "repeat_id": "0",
+      "budget": "large",
+      "method": "baseline",
+      "value": 10,
+      "status": "ok",
+      "metric_definition": "mean absolute error",
+      "value_unit": "invented_units"
+    },
+    {
+      "unit_id": "A",
+      "repeat_id": "0",
+      "budget": "large",
+      "method": "selector",
+      "value": 12,
+      "status": "ok",
+      "metric_definition": "mean absolute error",
+      "value_unit": "invented_units"
+    },
+    {
+      "unit_id": "A",
+      "repeat_id": "1",
+      "budget": "small",
+      "method": "baseline",
+      "value": 10,
+      "status": "ok",
+      "metric_definition": "mean absolute error",
+      "value_unit": "invented_units"
+    },
+    {
+      "unit_id": "A",
+      "repeat_id": "1",
+      "budget": "small",
+      "method": "selector",
+      "value": 8,
+      "status": "ok",
+      "metric_definition": "mean absolute error",
+      "value_unit": "invented_units"
+    },
+    {
+      "unit_id": "A",
+      "repeat_id": "1",
+      "budget": "large",
+      "method": "baseline",
+      "value": 10,
+      "status": "ok",
+      "metric_definition": "mean absolute error",
+      "value_unit": "invented_units"
+    },
+    {
+      "unit_id": "A",
+      "repeat_id": "1",
+      "budget": "large",
+      "method": "selector",
+      "value": 12,
+      "status": "ok",
+      "metric_definition": "mean absolute error",
+      "value_unit": "invented_units"
+    },
+    {
+      "unit_id": "A",
+      "repeat_id": "2",
+      "budget": "small",
+      "method": "baseline",
+      "value": 10,
+      "status": "ok",
+      "metric_definition": "mean absolute error",
+      "value_unit": "invented_units"
+    },
+    {
+      "unit_id": "A",
+      "repeat_id": "2",
+      "budget": "small",
+      "method": "selector",
+      "value": 8,
+      "status": "ok",
+      "metric_definition": "mean absolute error",
+      "value_unit": "invented_units"
+    },
+    {
+      "unit_id": "A",
+      "repeat_id": "2",
+      "budget": "large",
+      "method": "baseline",
+      "value": 10,
+      "status": "ok",
+      "metric_definition": "mean absolute error",
+      "value_unit": "invented_units"
+    },
+    {
+      "unit_id": "A",
+      "repeat_id": "2",
+      "budget": "large",
+      "method": "selector",
+      "value": 12,
+      "status": "ok",
+      "metric_definition": "mean absolute error",
+      "value_unit": "invented_units"
+    },
+    {
+      "unit_id": "B",
+      "repeat_id": "0",
+      "budget": "small",
+      "method": "baseline",
+      "value": 10,
+      "status": "ok",
+      "metric_definition": "mean absolute error",
+      "value_unit": "invented_units"
+    },
+    {
+      "unit_id": "B",
+      "repeat_id": "0",
+      "budget": "small",
+      "method": "selector",
+      "value": 12,
+      "status": "ok",
+      "metric_definition": "mean absolute error",
+      "value_unit": "invented_units"
+    },
+    {
+      "unit_id": "B",
+      "repeat_id": "0",
+      "budget": "large",
+      "method": "baseline",
+      "value": 10,
+      "status": "ok",
+      "metric_definition": "mean absolute error",
+      "value_unit": "invented_units"
+    },
+    {
+      "unit_id": "B",
+      "repeat_id": "0",
+      "budget": "large",
+      "method": "selector",
+      "value": 6,
+      "status": "ok",
+      "metric_definition": "mean absolute error",
+      "value_unit": "invented_units"
+    },
+    {
+      "unit_id": "C",
+      "repeat_id": "0",
+      "budget": "small",
+      "method": "baseline",
+      "value": 10,
+      "status": "ok",
+      "metric_definition": "mean absolute error",
+      "value_unit": "invented_units"
+    },
+    {
+      "unit_id": "C",
+      "repeat_id": "0",
+      "budget": "small",
+      "method": "selector",
+      "value": 10,
+      "status": "ok",
+      "metric_definition": "mean absolute error",
+      "value_unit": "invented_units"
+    },
+    {
+      "unit_id": "C",
+      "repeat_id": "0",
+      "budget": "large",
+      "method": "baseline",
+      "value": 10,
+      "status": "ok",
+      "metric_definition": "mean absolute error",
+      "value_unit": "invented_units"
+    },
+    {
+      "unit_id": "C",
+      "repeat_id": "0",
+      "budget": "large",
+      "method": "selector",
+      "value": 10,
+      "status": "ok",
+      "metric_definition": "mean absolute error",
+      "value_unit": "invented_units"
+    }
+  ]
+}
