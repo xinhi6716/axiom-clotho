@@ -7,6 +7,8 @@ from contextlib import contextmanager
 import numpy as np
 import pandas as pd
 
+from .data import validate_groups
+
 
 @contextmanager
 def _checked_arithmetic():
@@ -43,11 +45,11 @@ def regression_metrics(y_true, y_pred) -> dict:
 
 
 def grouped_metrics(y_true, y_pred, groups) -> tuple[dict, list[dict]]:
+    """Score rows using the same exact group-identity contract as evaluation."""
     y = np.asarray(y_true, dtype=float)
     pred = np.asarray(y_pred, dtype=float)
-    g = np.asarray(groups)
-    if len(g) != len(y):
-        raise ValueError("groups and targets must have equal lengths.")
+    # Validate before NumPy can promote mixed numeric IDs to a lossy dtype.
+    g = validate_groups(groups, len(y))
     per_group = []
     for group in pd.unique(g):
         mask = g == group

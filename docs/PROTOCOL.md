@@ -57,6 +57,29 @@ String IDs remain literal: `"1"`, `"01"` and `"1.0"` are different groups. NUL (
 
 Fold metrics are descriptive. No bootstrap interval, standard error, confidence interval, or independence claim is derived from their variance.
 
+### Direct scoring of saved arrays
+
+`groupbench.metrics.grouped_metrics` and
+`groupbench.binary.metrics.grouped_binary_metrics` enforce the same group-ID
+validation as the high-level workflows, before NumPy dtype promotion or pandas
+grouping. They preserve distinct exact numeric IDs and reject mixed text/numeric,
+missing, blank, boolean, nonfinite, NUL-containing, or non-vector group inputs.
+This closes earlier accidental acceptance at the direct scoring boundary; it
+does not change metric formulas, equal-group weighting, or already validated
+benchmark inputs.
+
+For example, raw IDs `[2**60, 2**60 + 1, 0.5]` define three groups, not two.
+With all-zero targets and predictions `[0, 10, 0]`, group MAE is `10/3` and
+worst-group MAE is `10`, rather than `2.5` and `5`. Preserve IDs in a raw Python
+list, object array/Series, or literal strings as appropriate. If a caller has
+already converted those integers to a float array, the first two stored IDs
+are equal: scoring cannot discover or recover the lost original identities.
+
+Inputs are positional, including pandas Series; index labels are not joined or
+used to align targets, predictions, and groups. Callers must supply matching row
+order and the intended complete cohort. Direct scoring neither validates
+held-out fold provenance nor establishes independence of the declared groups.
+
 ## Prediction mode
 
 `fit_predict` uses only the training data for grouped inner selection and preprocessing. It refits selected family representatives on all labeled rows, then predicts the separate feature-only frame. No target is required or accepted as an extra prediction column. Its inner scores are not an unbiased test estimate. Use the nested `benchmark` result separately.

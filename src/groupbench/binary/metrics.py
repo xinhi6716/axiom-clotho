@@ -2,6 +2,7 @@
 from __future__ import annotations
 import numpy as np
 import pandas as pd
+from ..data import validate_groups
 from .data import validate_binary_target
 
 EPSILON = float(np.finfo(np.float64).eps)
@@ -95,11 +96,11 @@ def binary_metrics(y_true, probability_1):
 
 
 def grouped_binary_metrics(y_true, probability_1, groups):
+    """Score rows using the same exact group-identity contract as evaluation."""
     p = _probability_array(probability_1)
     y = validate_binary_target(y_true, len(p) if p.ndim else 0, require_both=False)
-    g = np.asarray(groups)
-    if g.ndim != 1 or len(g) != len(y) or pd.isna(g).any():
-        raise ValueError("groups must contain one non-missing value per scored row.")
+    # Validate before NumPy can promote mixed numeric IDs to a lossy dtype.
+    g = validate_groups(groups, len(y))
     overall = binary_metrics(y, p)
     per_group = []
     # Group positions once instead of scanning all rows for each group.

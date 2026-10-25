@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Enforce the existing exact group-identity validation in direct regression and binary grouped scoring, preventing NumPy dtype promotion from silently merging distinct large numeric IDs and reversing equal-group model comparisons. Reject previously accepted ambiguous/invalid group vectors; preserve metric formulas and already validated high-level evaluation behavior. Caller-side lossy conversion cannot be repaired. Add no-fit hand-calculated identity, weighting, permutation, and malformed-input regressions.
+
 - Preserve paired B-minus-A absolute-error contrasts in the saved environment-heldout scoring companion when subtracting rounded errors would falsely report a tie. Compute row contrasts and their equal-device mean exactly from the already converted binary64 values, rounding only for output and rejecting nonzero-to-zero underflow. Displayed contrasts may differ from subtracting rounded MAEs. Preserve prediction/fit behavior, MAE/RMSE, exact-cohort checks and artifact schemas; no new dependency or real-data evaluation is added.
 
 - Require string `target` and `group` column selectors in regression/binary DataFrame workflows before planning or fitting. Non-string labels, including NumPy integer labels that previously failed JSON serialization only after fitting, must be explicitly renamed by the caller; no label coercion is performed. Preserve ordinary string names, numeric group values, selected-feature behavior, fingerprints, artifact schemas, and model protocols.
