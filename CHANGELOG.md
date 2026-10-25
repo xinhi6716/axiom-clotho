@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Preserve paired B-minus-A absolute-error contrasts in the saved environment-heldout scoring companion when subtracting rounded errors would falsely report a tie. Compute row contrasts and their equal-device mean exactly from the already converted binary64 values, rounding only for output and rejecting nonzero-to-zero underflow. Displayed contrasts may differ from subtracting rounded MAEs. Preserve prediction/fit behavior, MAE/RMSE, exact-cohort checks and artifact schemas; no new dependency or real-data evaluation is added.
+
 - Require string `target` and `group` column selectors in regression/binary DataFrame workflows before planning or fitting. Non-string labels, including NumPy integer labels that previously failed JSON serialization only after fitting, must be explicitly renamed by the caller; no label coercion is performed. Preserve ordinary string names, numeric group values, selected-feature behavior, fingerprints, artifact schemas, and model protocols.
 
 - Reject observed NUL-containing categorical feature values in the DataFrame API before planning, fitting, source-support diagnostics, or training/prediction fingerprints. This explicit input-validation tightening prevents false unseen-category flags and ambiguous pandas-based fingerprints, even when model encoders distinguish the values. Preserve clean observed values with unused NUL category metadata, ordinary input behavior, numeric/group contracts, both encoding protocols, artifact schemas, and existing CSV rejection. No automatic stripping, escaping, or new NUL-safe encoding is claimed.

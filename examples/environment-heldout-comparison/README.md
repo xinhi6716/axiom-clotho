@@ -186,9 +186,19 @@ Scores are MAE and scaled-arithmetic RMSE in declared target units. A nonzero
 aggregate that would underflow to a false zero is rejected, not called a perfect
 prediction or tie. Scores have equal weight per supplied
 device row. Every row retains its five predictions, target, absolute errors and
-B−A absolute-error contrast. The aggregate contrast is the mean of the paired
-row contrasts. Negative means B had lower absolute error on this exact supplied
-held-out cohort only. No automatic winner, significance, confidence interval,
+B−A absolute-error contrast. The aggregate contrast is the equal-device mean
+of the paired row contrasts, not a subtraction of rounded MAEs. Paired contrasts
+are computed exactly from the already converted binary64 prediction and outcome
+values, then rounded once per displayed row and once for the aggregate. The
+aggregate uses the unrounded row contrasts. This does not recover decimal digits
+lost during input conversion or change how MAE/RMSE are computed. For example,
+with target `1e20`, A prediction `1`, and B prediction `2`, the B−A contrast is
+`-1`, even though both displayed absolute errors round to `1e20`. Consequently,
+the paired contrast can differ from subtracting the two displayed MAEs (or
+averaging the rounded displayed row contrasts). A nonzero paired contrast that
+cannot be represented as a nonzero finite float rejects the whole score; it is
+not reported as a tie. Negative means B had lower absolute error on this exact
+supplied held-out cohort only. No automatic winner, significance, confidence interval,
 causal effect or expected future performance is inferred. Multiple devices in a
 block are still equally weighted devices, not independent blocks or effective n.
 

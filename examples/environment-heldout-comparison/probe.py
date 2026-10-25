@@ -7,6 +7,7 @@ negative control, randomization test or proof that any feature is causal.
 from __future__ import annotations
 import argparse
 import csv
+from fractions import Fraction
 import hashlib
 import io
 import json
@@ -436,6 +437,30 @@ def stable_rmse(errors):
     return maximum * math.sqrt(math.fsum((error / maximum) ** 2 for error in errors) / len(errors))
 
 
+
+def paired_absolute_error_difference(prediction_a, prediction_b, target):
+    """Exact B-minus-A loss contrast of the scoring inputs' binary64 values.
+
+    Subtracting two already rounded absolute errors can erase a representable
+    paired difference. Keep this contrast rational until its final output;
+    this does not recover decimal precision lost when inputs became floats.
+    """
+    a, b, y = (Fraction.from_float(float(value))
+               for value in (prediction_a, prediction_b, target))
+    return abs(b - y) - abs(a - y)
+
+
+def contrast_float(value):
+    """Round once for JSON, refusing a nonzero contrast rounded to zero."""
+    try:
+        result = float(value)
+    except OverflowError:
+        raise InputError("paired contrast outside supported representable range") from None
+    if not math.isfinite(result) or (value != 0 and result == 0):
+        raise InputError("paired contrast outside supported representable range")
+    return result
+
+
 def score(prediction_blob, outcome_blob):
     body = prediction_body(prediction_blob)
     outcomes = csv_rows(outcome_blob, ("device_id", "target"))
@@ -448,6 +473,7 @@ def score(prediction_blob, outcome_blob):
     if set(by_id) != {r["device_id"] for r in body["predictions"]}:
         raise InputError("outcomes must match the exact complete prediction device cohort")
     records, losses = [], {arm: [] for arm in ARMS}
+    contrasts = []
     for row in body["predictions"]:
         target = by_id[row["device_id"]]
         absolute = {arm: abs(row["predictions"][arm] - target) for arm in ARMS}
@@ -455,15 +481,14 @@ def score(prediction_blob, outcome_blob):
             raise InputError("prediction residual exceeds supported range")
         for arm, error in absolute.items():
             losses[arm].append(error)
+        paired = paired_absolute_error_difference(row["predictions"]["a"], row["predictions"]["b"], target)
+        contrasts.append(paired)
         records.append({**{k: row[k] for k in META}, "target": target, "predictions": row["predictions"],
-                        "absolute_errors": absolute, "absolute_error_b_minus_a": absolute["b"] - absolute["a"]})
+                        "absolute_errors": absolute, "absolute_error_b_minus_a": contrast_float(paired)})
     metrics = {arm: {"mae": math.fsum(losses[arm]) / len(records), "rmse": stable_rmse(losses[arm])} for arm in ARMS}
     if any(any(error > 0 for error in losses[arm]) and (metrics[arm]["mae"] == 0 or metrics[arm]["rmse"] == 0) for arm in ARMS):
         raise InputError("aggregate error below supported representable range")
-    contrast_sum = math.fsum(r["absolute_error_b_minus_a"] for r in records)
-    contrast = contrast_sum / len(records)
-    if contrast_sum != 0 and contrast == 0:
-        raise InputError("aggregate contrast below supported representable range")
+    contrast = contrast_float(sum(contrasts, Fraction()) / len(records))
     report = {"kind": "score", "protocol": "fixed-environment-feature-probe-score-v1", "status": "COMPLETE_DESCRIPTIVE_SCORES", "exit_code": 0,
               "prediction_artifact_sha256": digest(prediction_blob), "outcomes_csv_sha256": digest(outcome_blob),
               "target_unit": body["spec"]["target_unit"], "heldout_environment": body["spec"]["heldout_environment"],
