@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "metadata": {
+    "target_definition": "Entirely invented device voltage, not measured semiconductor performance",
+    "value_unit": "V",
+    "group_definition": "Invented batch IDs; independence is not established",
+    "cohort_definition": "All four invented observations, including interval misses"
+  },
+  "expected_row_ids": ["a1", "a2", "a3", "b1"],
+  "alpha": 0.2,
+  "rows": [
+    {"row_id": "a1", "group": "A", "observed": 0, "lower": 0, "upper": 2, "status": "ok"},
+    {"row_id": "a2", "group": "A", "observed": 1, "lower": 0, "upper": 2, "status": "ok"},
+    {"row_id": "a3", "group": "A", "observed": 3, "lower": 0, "upper": 2, "status": "ok"},
+    {"row_id": "b1", "group": "B", "observed": 10, "lower": 0, "upper": 0, "status": "ok"}
+  ]
+}

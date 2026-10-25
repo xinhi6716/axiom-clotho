@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add a separate no-fit saved-interval evaluation API/module CLI: complete declared-cohort checks, closed-boundary empirical coverage, interval width and optional fixed-alpha standard interval score, with row-weighted and equal-group summaries. Preserve exact integer/decimal inputs and stored Python-float ratios through arithmetic, reuse exact group validation, and retain exact source ratios alongside explicitly approximate numeric reports. Reject missing/failed rows, invalid bounds and unreportable numeric values rather than dropping them. Include an invented voltage example and hand-checkable tests; no training, existing artifact schema, calibration, future-coverage guarantee or dependency changes.
+
 - Enforce the existing exact group-identity validation in direct regression and binary grouped scoring, preventing NumPy dtype promotion from silently merging distinct large numeric IDs and reversing equal-group model comparisons. Reject previously accepted ambiguous/invalid group vectors; preserve metric formulas and already validated high-level evaluation behavior. Caller-side lossy conversion cannot be repaired. Add no-fit hand-calculated identity, weighting, permutation, and malformed-input regressions.
 
 - Preserve paired B-minus-A absolute-error contrasts in the saved environment-heldout scoring companion when subtracting rounded errors would falsely report a tie. Compute row contrasts and their equal-device mean exactly from the already converted binary64 values, rounding only for output and rejecting nonzero-to-zero underflow. Displayed contrasts may differ from subtracting rounded MAEs. Preserve prediction/fit behavior, MAE/RMSE, exact-cohort checks and artifact schemas; no new dependency or real-data evaluation is added.

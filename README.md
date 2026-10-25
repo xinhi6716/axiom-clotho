@@ -429,3 +429,12 @@ repeats aggregated within declared units, equal-unit weighting, strict
 wins/ties/harms and a complete adverse-case ledger, see
 [Saved budget comparison](docs/SAVED_BUDGET_COMPARISON.md).
 This optional utility does not retrain models or verify provenance/independence.
+
+For already saved observations and prediction-interval bounds, see
+[Saved interval evaluation](docs/SAVED_INTERVAL_EVALUATION.md). Its separate
+stdout-only Python/module CLI reports empirical coverage, width and (with a
+fixed declared alpha) standard interval score, both row-weighted and equal-group,
+on one explicit complete cohort. It rejects failed/missing rows, preserves exact
+numeric inputs and group identities, and marks rounded output explicitly.
+It does not generate intervals, calibrate models or guarantee future coverage;
+existing training and saved bundles are unchanged.
