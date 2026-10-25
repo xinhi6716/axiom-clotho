@@ -1,0 +1,17 @@
+device_id,dependency_block,environment,target,preprocess_setting,proxy_readout
+invented_process_A_D0,invented_process_A_block0,invented_process_A,3.2,1,3.19
+invented_process_A_D1,invented_process_A_block0,invented_process_A,3.4,2,3.41
+invented_process_A_D2,invented_process_A_block1,invented_process_A,3.6,3,3.59
+invented_process_A_D3,invented_process_A_block1,invented_process_A,3.8,4,3.81
+invented_process_A_D4,invented_process_A_block2,invented_process_A,4,5,3.99
+invented_process_A_D5,invented_process_A_block2,invented_process_A,4.2,6,4.21
+invented_process_A_D6,invented_process_A_block3,invented_process_A,4.4,7,4.39
+invented_process_A_D7,invented_process_A_block3,invented_process_A,4.6,8,4.61
+invented_process_B_D0,invented_process_B_block0,invented_process_B,3.2,1,3.19
+invented_process_B_D1,invented_process_B_block0,invented_process_B,3.4,2,3.41
+invented_process_B_D2,invented_process_B_block1,invented_process_B,3.6,3,3.59
+invented_process_B_D3,invented_process_B_block1,invented_process_B,3.8,4,3.81
+invented_process_B_D4,invented_process_B_block2,invented_process_B,4,5,3.99
+invented_process_B_D5,invented_process_B_block2,invented_process_B,4.2,6,4.21
+invented_process_B_D6,invented_process_B_block3,invented_process_B,4.4,7,4.39
+invented_process_B_D7,invented_process_B_block3,invented_process_B,4.6,8,4.61

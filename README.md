@@ -22,6 +22,34 @@ internal keys. Existing unknown/infrequent-category compression still applies.
 The opt-in has explicit protocol/schema identities; default results and run keys
 are unchanged. See [the exact mapping and migration contract](docs/CATEGORICAL_ENCODING.md).
 
+## Source companion: fixed environment feature comparison
+
+The [environment-heldout comparison](examples/environment-heldout-comparison/README.md)
+fits five fixed local pipelines for two prespecified numeric feature sets and a
+shared training-label-shuffle diagnostic. It requires one row per device and no
+declared dependency block crossing the boundary. Target-free prediction and
+exact-cohort scoring are separate commands. This is a predictive stress workflow,
+not causal inference or a causal negative-control test; default Calculator
+commands and nested evaluation are unchanged.
+
+## Runnable semiconductor integration
+
+The [invented measurement-to-heldout walkthrough](examples/semiconductor-heldout-walkthrough/README.md)
+connects a trusted local Semiconductor Toolbox checkout to Calculator: I–V
+measurements → device features → actual lot holdout audit → five target-free
+fits → separate exact-device scores and a readable interpretation. All fabrication,
+batch, wafer and device identities are explicitly invented. The repeated numeric
+templates are a software example, not independent experimental or causal evidence.
+
+## Simulation-only causal-design rehearsal
+
+The [causal-design rehearsal](examples/causal-design-rehearsal/README.md)
+separates illustrative pre-setting context, device-level setting, intermediary
+and readout under explicit invented equations. It checks total-versus-direct
+adjustment roles, compares fixed observational regressions with separate paired
+intervention oracles, and refuses rank-deficient adjustment. This is a local
+design smoke test, not a calibrated device model or real-data causal estimator.
+
 ## Try it in one minute
 
 Python 3.10+ is declared; the verified development environment is Python 3.12.14, NumPy 2.3.5, pandas 2.2.3, and scikit-learn 1.8.0. Other supported versions have not yet been tested in a CI matrix.

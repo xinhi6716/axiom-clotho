@@ -1,0 +1,15 @@
+{
+  "schema_version": "environment-feature-probe-v1",
+  "heldout_environment": "invented_process_C",
+  "features_a": [
+    "preprocess_setting",
+    "proxy_readout"
+  ],
+  "features_b": [
+    "preprocess_setting"
+  ],
+  "ridge_alpha": 1.0,
+  "shuffle_seed": 7,
+  "shuffle_scope": "within_training_environment",
+  "target_unit": "V"
+}

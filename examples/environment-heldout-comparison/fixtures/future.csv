@@ -1,0 +1,5 @@
+device_id,dependency_block,environment,preprocess_setting,proxy_readout
+invented_process_C_D0,invented_process_C_block0,invented_process_C,1.5,4.5
+invented_process_C_D1,invented_process_C_block0,invented_process_C,3.5,4.1
+invented_process_C_D2,invented_process_C_block1,invented_process_C,5.5,3.7
+invented_process_C_D3,invented_process_C_block1,invented_process_C,7.5,3.3
