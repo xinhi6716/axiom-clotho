@@ -6,7 +6,9 @@ from decimal import Decimal, InvalidOperation
 from fractions import Fraction
 import json
 import math
+import os
 from pathlib import Path
+import stat
 import sys
 
 
@@ -163,8 +165,23 @@ def load_document(text):
 
 
 def _read_input(path):
-    with path.open("r", encoding="utf-8") as source:
-        return source.read(8_000_001)
+    """Read only a regular local file, following explicitly supplied symlinks.
+
+    Check before opening and again on the descriptor. Nonblocking open prevents
+    waiting on a FIFO swapped in between checks where O_NONBLOCK is supported.
+    These checks are not a filesystem-atomic snapshot or a wall-clock deadline.
+    """
+    if not stat.S_ISREG(path.stat().st_mode):
+        raise ValueError("Saved comparison input must be a regular local file")
+    fd = os.open(path, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0)
+                 | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_BINARY", 0))
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise ValueError("Saved comparison input must be a regular local file")
+        with os.fdopen(fd, "r", encoding="utf-8", closefd=False) as source:
+            return source.read(8_000_001)
+    finally:
+        os.close(fd)
 
 
 def main(argv=None):

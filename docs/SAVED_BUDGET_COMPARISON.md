@@ -22,6 +22,15 @@ that is not the input: the shell itself can overwrite files before Python runs.
 The Python API is `groupbench.budget_comparison.compare_saved_budgets(document)`;
 `load_document(text)` rejects duplicate JSON keys and nonfinite constants.
 
+The CLI accepts only a regular local input file. Explicit symlinks to regular
+files remain supported; directories, named pipes (FIFOs), devices and other
+non-regular inputs are rejected without reading their contents. The file type
+is checked before opening and on the opened descriptor. Where supported,
+nonblocking open also avoids waiting on a FIFO substituted between those checks.
+Use trusted, idle local files: these checks do not provide a filesystem-atomic
+snapshot, a hostile-filesystem sandbox, or a wall-clock deadline for storage
+access. The existing UTF-8 decoding and 8-million-character limit are unchanged.
+
 ## Input contract
 
 See the complete invented fixture. Version 1 requires exactly these fields:
