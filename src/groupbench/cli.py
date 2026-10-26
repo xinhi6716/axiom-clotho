@@ -205,7 +205,26 @@ def _read_training(args):
 
 
 def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(prog="groupbench", description="ML Super Calculator: local grouped regression, powered by GroupBench.")
+    parser = argparse.ArgumentParser(
+        prog="groupbench",
+        description=("ML Super Calculator: grouped regression for local tables.\n"
+                     "For numeric 0/1 classification, use the explicit binary namespace."),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""Start with a synthetic example:
+  mlcalc demo --out runs/first-demo
+  This fits models and writes files. Choose a new output directory.
+  Open runs/first-demo/report.html in your browser to read the offline report.
+  Synthetic results do not establish performance on real materials.
+
+Working with your own data:
+  mlcalc plan run --help     See how to preview fit counts without fitting.
+  mlcalc run --help          Evaluate a local regression CSV.
+  mlcalc predict --help      Fit on training data and predict new rows.
+  mlcalc binary --help       Use the separate numeric 0/1 workflow.
+
+Use mlcalc <command> --help for required inputs and options.
+The groupbench command is an alias for the same CLI.""",
+    )
     parser.add_argument("--version", action="version", version=__version__)
     sub = parser.add_subparsers(dest="command", required=True)
     demo = sub.add_parser("demo", help="Evaluate the wholly synthetic materials-process fixture")
