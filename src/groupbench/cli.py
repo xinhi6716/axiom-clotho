@@ -23,6 +23,7 @@ from .feature_manifest import read_feature_manifest
 from .prediction import ensure_prediction_output, fit_predict
 from .planning import plan_benchmark, plan_prediction
 from .verification import verify_bundle
+from .prediction_schema import validate_prediction_bundle_schema
 
 MAX_CSV_BYTES = 64 * 1024 * 1024
 CSV_READ_CHUNK_BYTES = 64 * 1024
@@ -234,6 +235,11 @@ def main(argv=None) -> int:
                             description="Check SHA-256 byte integrity only, not scientific/model correctness. No fitting, writes, or model loading.",
                             epilog="Requires POSIX no-follow file access. Limits: 16 KiB checksums.json; 64 MiB per payload. Exit status: 0 verified, 2 failed.")
     verify.add_argument("run_dir", type=Path, help="Existing evaluation or prediction directory (no symlink components)")
+    schema = sub.add_parser("validate-prediction-bundle", allow_abbrev=False,
+                            help="Check supported regression prediction metadata and CSV consistency",
+                            description="Read-only checksum and bounded structural consistency, not scientific/model validation.",
+                            epilog="POSIX only. Limits: 16 KiB checksums, 1 MiB manifest, 4 MiB CSV. Exit 0 checked, 2 failed.")
+    schema.add_argument("run_dir", type=Path)
     fixture = sub.add_parser("fixture", help="Write a wholly synthetic materials-process CSV")
     fixture.add_argument("--out", type=Path, required=True)
     fixture.add_argument("--groups", type=int, default=24)
@@ -250,6 +256,13 @@ def main(argv=None) -> int:
             print(f"Verified {result.bundle_type} bundle: {len(result.files)} files, {result.total_bytes} payload bytes match checksums.json.")
             print("Byte integrity only, not scientific/model correctness, authenticity, or proof of execution.")
             print("Unlisted files are not checked. This is not an atomic directory snapshot; verify an idle directory.")
+            return 0
+        if args.command == "validate-prediction-bundle":
+            result = validate_prediction_bundle_schema(args.run_dir)
+            print(f"Prediction contract {result.contract_version} checked: schema {result.schema_version}, {result.n_predictions} rows, {result.n_features} features.")
+            print(f"Input support: {result.input_support}.")
+            print("Checked metadata subset and exact CSV bytes only; not scientific correctness, authenticity, model execution, or an atomic snapshot.")
+            print("Additional manifest fields and unlisted files are not validated.")
             return 0
         if args.command == "fixture":
             frame = make_materials_fixture(args.groups, args.rows_per_group, args.seed)

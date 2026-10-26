@@ -18,3 +18,7 @@ from .binary import (GroupBenchClassifier, BinaryBenchmarkResult, BinaryPredicti
 __all__ += ["GroupBenchClassifier", "BinaryBenchmarkResult", "BinaryPredictionResult",
             "benchmark_binary", "fit_predict_binary", "plan_binary_benchmark",
             "plan_binary_prediction", "make_binary_fixture"]
+
+# Explicit optional saved-prediction metadata consistency, separate from byte verification.
+from .prediction_schema import PredictionSchemaResult, validate_prediction_bundle_schema
+__all__ += ["PredictionSchemaResult", "validate_prediction_bundle_schema"]

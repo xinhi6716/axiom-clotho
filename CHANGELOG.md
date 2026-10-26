@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased optional prediction bundle consistency
+
+- Add an explicit, read-only regression prediction metadata/CSV consistency API
+  and `validate-prediction-bundle` command with a versioned subset contract.
+- Preserve existing writers, schemas, numerical algorithms and byte-only
+  `verify`; reject unsupported modes/versions rather than guessing their meaning.
+- Bound parsing and reuse pinned-directory no-follow regular-file checks; state
+  unchecked metadata, unavailable old diagnostics, and scientific limitations.
+
+
 ## Unreleased
 
 - Stage output bundles as exact UTF-8 bytes so platform-default newline translation cannot invalidate their SHA-256 manifests. Preserve caller-provided LF/CRLF text, per-file atomic no-clobber and overwrite behavior; no artifact schema or model changes. Regression tests emulate CRLF text defaults on Linux; this is not native Windows validation.

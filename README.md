@@ -457,3 +457,13 @@ on one explicit complete cohort. It rejects failed/missing rows, preserves exact
 numeric inputs and group identities, and marks rounded output explicitly.
 It does not generate intervals, calibrate models or guarantee future coverage;
 existing training and saved bundles are unchanged.
+
+### Optional saved prediction consistency
+
+For an existing regression prediction bundle, `mlcalc validate-prediction-bundle
+RUN_DIR` checks supported manifest/CSV count, position and input-support count
+relationships in the exact checksummed bytes. It does not fit or load a model.
+This is separate from the unchanged byte-only `mlcalc verify`. Supported schema
+combinations, smaller parser bounds and explicitly unchecked metadata are in
+[the prediction bundle contract](docs/PREDICTION_BUNDLE_SCHEMA.md). A pass is not
+scientific validation, authenticity, or an atomic filesystem snapshot.
