@@ -13,20 +13,20 @@ Small materials, semiconductor and process datasets rarely arrive as independent
 
 Training, reports and predictions stay on your computer. No account, hosted compute API, model-weight download or telemetry.
 
-[Download prerelease](https://github.com/xinhi6716/ml-super-calculator/releases/tag/v0.2.0a1) · [Try the demo](#try-the-demo) · [Bring your data](#bring-your-data) · [Read the results](#read-the-results) · [Examples](#examples) · [Detailed reference (English)](docs/USAGE_REFERENCE.md)
+[Download prerelease](https://github.com/xinhi6716/ml-super-calculator/releases/tag/v0.2.0a2) · [Try the demo](#try-the-demo) · [Bring your data](#bring-your-data) · [Read the results](#read-the-results) · [Examples](#examples) · [Detailed reference (English)](docs/USAGE_REFERENCE.md)
 
-> **Prerelease:** v0.2.0a1, including an explicitly selected binary-classification workflow. This is an original sklearn-based selection and evaluation toolkit, not a pretrained foundation model, full AutoML system or TabPFN equivalent. Synthetic examples show how to use it, not real-world accuracy.
+> **Prerelease:** v0.2.0a2, including an explicitly selected binary-classification workflow. This is an original sklearn-based selection and evaluation toolkit, not a pretrained foundation model, full AutoML system or TabPFN equivalent. Synthetic examples show how to use it, not real-world accuracy.
 
 ## Try the demo
 
-**Install the published wheel:** download the [0.2.0a1 wheel](https://github.com/xinhi6716/ml-super-calculator/releases/download/v0.2.0a1/ml_super_calculator-0.2.0a1-py3-none-any.whl) and compare it with [SHA256SUMS.txt](https://github.com/xinhi6716/ml-super-calculator/releases/download/v0.2.0a1/SHA256SUMS.txt). In your Python virtual environment, from the download directory:
+**Install the published wheel:** download the [0.2.0a2 wheel](https://github.com/xinhi6716/ml-super-calculator/releases/download/v0.2.0a2/ml_super_calculator-0.2.0a2-py3-none-any.whl) and compare it with [SHA256SUMS.txt](https://github.com/xinhi6716/ml-super-calculator/releases/download/v0.2.0a2/SHA256SUMS.txt). In your Python virtual environment, from the download directory:
 
 ```bash
-python -m pip install ./ml_super_calculator-0.2.0a1-py3-none-any.whl
+python -m pip install ./ml_super_calculator-0.2.0a2-py3-none-any.whl
 mlcalc demo --out runs/demo
 ```
 
-Installation may download dependencies from your configured package index; the wheel does not bundle them. Runtime modeling stays local. These are GitHub Release downloads, not a PyPI or GitHub Packages publication. For the file-based examples below, use the [source archive](https://github.com/xinhi6716/ml-super-calculator/releases/download/v0.2.0a1/ml_super_calculator-0.2.0a1.tar.gz) or a checkout.
+Installation may download dependencies from your configured package index; the wheel does not bundle them. Runtime modeling stays local. These are GitHub Release downloads, not a PyPI or GitHub Packages publication. For the file-based examples below, use the [source archive](https://github.com/xinhi6716/ml-super-calculator/releases/download/v0.2.0a2/ml_super_calculator-0.2.0a2.tar.gz) or a checkout.
 
 **Or install from a checkout:**
 
