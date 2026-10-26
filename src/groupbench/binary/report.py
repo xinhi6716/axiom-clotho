@@ -10,8 +10,12 @@ MAX_BINARY_PAYLOAD_BYTES = 64 * 1024 * 1024
 
 def ensure_fresh_binary_output(output_dir):
     out = Path(output_dir)
-    if out.exists() and not out.is_dir():
-        raise ValueError("Binary output must be a fresh local directory.")
+    # Reject known impossible destinations before reading data or fitting.
+    # This is not a reservation: write-time checks still handle races and permissions.
+    for component in (out, *out.parents):
+        if (component.exists() or component.is_symlink()) and not component.is_dir():
+            raise ValueError("Binary output must be a local directory with directory parents, "
+                             "not a file or broken link; choose a fresh destination.")
     if any((out / name).exists() or (out / name).is_symlink() for name in KNOWN_OUTPUTS):
         raise FileExistsError("Binary output already contains a known bundle name; choose a fresh directory. Binary overwrite is not supported.")
 
