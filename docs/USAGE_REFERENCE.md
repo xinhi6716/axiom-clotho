@@ -387,6 +387,14 @@ Defaults: 5 outer folds × (6 candidates × 3 inner folds + 3 family refits) = *
 
 All model fits run with tree `n_jobs=1` and threadpool limits of one. The MVP admits at most 20,000 rows and 100 input features; one-hot encoding uses at most 64 categories per feature. CSV reads stop at 20,001 rows before rejecting oversize files. These are size guards, not a hard time/memory quota or a promise that the upper bound is fast on every machine. Begin with a small dataset. You can use `--baselines dummy,ridge`, fewer folds, or an OS-level time limit for tighter budgets.
 
+### Why numeric units still matter
+
+The [A versus nA example](../examples/numeric-unit-equivalence/README.md) compares
+the same invented current feature in two units, with and without the existing
+train-only preprocessing. Its twelve fixed fits, raw predictions, and unit-gap
+checks are a teaching example—not a real-device benchmark or a new product fix.
+It does not change the default fit budgets above.
+
 ## Outputs
 
 An evaluation run writes five local files:

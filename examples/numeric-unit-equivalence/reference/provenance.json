@@ -1,0 +1,33 @@
+{
+  "scope": "Selected outputs of one already-exposed synthetic software companion validation; not a fresh heldout or scientific replication",
+  "source_reference": "26b6eb8f6a149d760aec0aff1fbd680f0f32dbb6",
+  "seed": 20261026,
+  "fit_count": 12,
+  "versions": {
+    "python": "3.12.14",
+    "numpy": "2.3.5",
+    "pandas": "2.2.3",
+    "sklearn": "1.8.0",
+    "scipy": "1.17.0",
+    "threadpoolctl": "3.6.0",
+    "platform": "Linux"
+  },
+  "public_example_source_sha256": {
+    "generate_synthetic.py": "f8768ebf35924f1b88526697b2e1cec56f8ac33a7db6261cbe7f7779027f8fa7",
+    "run.py": "15362ec6109beddcb611d3d154a3c2750b83746a5e7b2f386e3c304b3fa08a8a"
+  },
+  "output_sha256": {
+    "summary.json": "e969804c4290c5a0fbf07b34f7c53092967ab2f96e818723ad9dacb1c07b56b6",
+    "synthetic_fixture.csv": "e9a979be85498036d2c5d019a8cfdc17e47899b842f040d5650f9e053f45b09c",
+    "predictions.csv": "f4132e683517b82276b771e71c9c9103c9c8039b7bd3da5374e16562a8983583"
+  },
+  "cost": {
+    "wall_seconds": 0.20866297500106157,
+    "cpu_seconds": 0.20600133599999992,
+    "cpu_limit_seconds": 600,
+    "timing_scope": "generation through prediction/summary writes; excludes imports, preflight and manifest",
+    "thread_limit": 1,
+    "dataset_download_bytes": 0
+  },
+  "limitation": "scikit-learn version and model source were enforced before fitting; other dependency versions were recorded before and compared after the run, and matched. No installation occurred between records."
+}

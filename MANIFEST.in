@@ -3,3 +3,7 @@ include CHANGELOG.md CONTRIBUTING.md ROADMAP.md SECURITY.md
 recursive-include docs *.md *.svg
 recursive-include examples *.py *.csv *.json *.md
 recursive-include tests *.py
+
+# Keep the unit-equivalence illustration and its reference checksums in source archives.
+include examples/numeric-unit-equivalence/assets/unit-equivalence.svg
+include examples/numeric-unit-equivalence/reference/SHA256SUMS

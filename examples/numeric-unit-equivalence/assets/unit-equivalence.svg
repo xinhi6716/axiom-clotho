@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="1140" viewBox="0 0 640 1140" role="img" aria-labelledby="title desc">
+<title id="title">Synthetic A versus nA unit-equivalence check</title>
+<desc id="desc">Paired group mean absolute errors for Dummy, Ridge and ExtraTrees, without scaling and with the existing Calculator train-only scaling. Prediction gaps are compared with a training-derived tolerance below the plots. Raw Ridge also changes regularization under fixed alpha. This is an artificial software fixture, not a real-device accuracy claim.</desc>
+<rect width="640" height="1140" fill="#fffdf6"/>
+<g font-family="Arial, Helvetica, sans-serif">
+<text x="32" y="37" font-size="17" font-weight="700" fill="#223d35">SYNTHETIC · SOFTWARE LEARNING ONLY</text>
+<text x="32" y="78" font-size="30" font-weight="700" fill="#223d35">Same inputs. Different units.</text>
+<text x="32" y="111" font-size="20" font-weight="400" fill="#223d35">A versus nA · no real-device benchmark</text>
+<text x="32" y="143" font-size="18" font-weight="400" fill="#223d35">Group MAE · arbitrary response units · lower is better</text>
+<text x="32" y="187" font-size="24" font-weight="700" fill="#223d35">01  Raw-model ablation</text>
+<text x="32" y="224" font-size="20" font-weight="600" fill="#223d35">Dummy mean</text>
+<text x="48" y="249" font-size="18" font-weight="400" fill="#223d35">A</text>
+<rect x="100" y="234" width="386.51977582" height="17" fill="#2f6b57" stroke="#2f6b57"/>
+<text x="494.5197758237911" y="249" font-size="18" font-weight="400" fill="#223d35">0.7730</text>
+<text x="48" y="273" font-size="18" font-weight="400" fill="#223d35">nA</text>
+<rect x="100" y="258" width="386.51977582" height="17" fill="#fffdf6" stroke="#2f6b57"/>
+<text x="494.5197758237911" y="273" font-size="18" font-weight="400" fill="#223d35">0.7730</text>
+<text x="32" y="318" font-size="20" font-weight="600" fill="#223d35">Ridge · alpha = 1</text>
+<text x="48" y="343" font-size="18" font-weight="400" fill="#223d35">A</text>
+<rect x="100" y="328" width="386.51977582" height="17" fill="#2f6b57" stroke="#2f6b57"/>
+<text x="494.5197758237906" y="343" font-size="18" font-weight="400" fill="#223d35">0.7730</text>
+<text x="48" y="367" font-size="18" font-weight="400" fill="#223d35">nA</text>
+<rect x="100" y="352" width="222.13526444" height="17" fill="#fffdf6" stroke="#2f6b57"/>
+<text x="330.13526444091406" y="367" font-size="18" font-weight="400" fill="#223d35">0.4443</text>
+<text x="32" y="412" font-size="20" font-weight="600" fill="#223d35">ExtraTrees · 64 trees, depth 6</text>
+<text x="48" y="437" font-size="18" font-weight="400" fill="#223d35">A</text>
+<rect x="100" y="422" width="386.51977582" height="17" fill="#2f6b57" stroke="#2f6b57"/>
+<text x="494.51977582379106" y="437" font-size="18" font-weight="400" fill="#223d35">0.7730</text>
+<text x="48" y="461" font-size="18" font-weight="400" fill="#223d35">nA</text>
+<rect x="100" y="446" width="85.61611685" height="17" fill="#fffdf6" stroke="#2f6b57"/>
+<text x="193.61611685088508" y="461" font-size="18" font-weight="400" fill="#223d35">0.1712</text>
+<line x1="100" y1="505" x2="500" y2="505" stroke="#789186"/>
+<line x1="100.0" y1="505" x2="100.0" y2="510" stroke="#789186"/>
+<text x="90.0" y="531" font-size="18" font-weight="400" fill="#223d35">0</text>
+<line x1="200.0" y1="505" x2="200.0" y2="510" stroke="#789186"/>
+<text x="190.0" y="531" font-size="18" font-weight="400" fill="#223d35">0.2</text>
+<line x1="300.0" y1="505" x2="300.0" y2="510" stroke="#789186"/>
+<text x="290.0" y="531" font-size="18" font-weight="400" fill="#223d35">0.4</text>
+<line x1="399.99999999999994" y1="505" x2="399.99999999999994" y2="510" stroke="#789186"/>
+<text x="389.99999999999994" y="531" font-size="18" font-weight="400" fill="#223d35">0.6</text>
+<line x1="500.0" y1="505" x2="500.0" y2="510" stroke="#789186"/>
+<text x="490.0" y="531" font-size="18" font-weight="400" fill="#223d35">0.8</text>
+<text x="32" y="557" font-size="24" font-weight="700" fill="#223d35">02  Calculator train-only scaling</text>
+<text x="32" y="594" font-size="20" font-weight="600" fill="#223d35">Dummy mean</text>
+<text x="48" y="619" font-size="18" font-weight="400" fill="#223d35">A</text>
+<rect x="100" y="604" width="386.51977582" height="17" fill="#2f6b57" stroke="#2f6b57"/>
+<text x="494.5197758237911" y="619" font-size="18" font-weight="400" fill="#223d35">0.7730</text>
+<text x="48" y="643" font-size="18" font-weight="400" fill="#223d35">nA</text>
+<rect x="100" y="628" width="386.51977582" height="17" fill="#fffdf6" stroke="#2f6b57"/>
+<text x="494.5197758237911" y="643" font-size="18" font-weight="400" fill="#223d35">0.7730</text>
+<text x="32" y="688" font-size="20" font-weight="600" fill="#223d35">Ridge · alpha = 1</text>
+<text x="48" y="713" font-size="18" font-weight="400" fill="#223d35">A</text>
+<rect x="100" y="698" width="221.83617545" height="17" fill="#2f6b57" stroke="#2f6b57"/>
+<text x="329.83617545109433" y="713" font-size="18" font-weight="400" fill="#223d35">0.4437</text>
+<text x="48" y="737" font-size="18" font-weight="400" fill="#223d35">nA</text>
+<rect x="100" y="722" width="221.83617545" height="17" fill="#fffdf6" stroke="#2f6b57"/>
+<text x="329.83617545109433" y="737" font-size="18" font-weight="400" fill="#223d35">0.4437</text>
+<text x="32" y="782" font-size="20" font-weight="600" fill="#223d35">ExtraTrees · 64 trees, depth 6</text>
+<text x="48" y="807" font-size="18" font-weight="400" fill="#223d35">A</text>
+<rect x="100" y="792" width="85.61611685" height="17" fill="#2f6b57" stroke="#2f6b57"/>
+<text x="193.61611685088508" y="807" font-size="18" font-weight="400" fill="#223d35">0.1712</text>
+<text x="48" y="831" font-size="18" font-weight="400" fill="#223d35">nA</text>
+<rect x="100" y="816" width="85.61611685" height="17" fill="#fffdf6" stroke="#2f6b57"/>
+<text x="193.61611685088508" y="831" font-size="18" font-weight="400" fill="#223d35">0.1712</text>
+<line x1="100" y1="875" x2="500" y2="875" stroke="#789186"/>
+<line x1="100.0" y1="875" x2="100.0" y2="880" stroke="#789186"/>
+<text x="90.0" y="901" font-size="18" font-weight="400" fill="#223d35">0</text>
+<line x1="200.0" y1="875" x2="200.0" y2="880" stroke="#789186"/>
+<text x="190.0" y="901" font-size="18" font-weight="400" fill="#223d35">0.2</text>
+<line x1="300.0" y1="875" x2="300.0" y2="880" stroke="#789186"/>
+<text x="290.0" y="901" font-size="18" font-weight="400" fill="#223d35">0.4</text>
+<line x1="399.99999999999994" y1="875" x2="399.99999999999994" y2="880" stroke="#789186"/>
+<text x="389.99999999999994" y="901" font-size="18" font-weight="400" fill="#223d35">0.6</text>
+<line x1="500.0" y1="875" x2="500.0" y2="880" stroke="#789186"/>
+<text x="490.0" y="901" font-size="18" font-weight="400" fill="#223d35">0.8</text>
+<text x="32" y="931" font-size="18" font-weight="400" fill="#223d35">12 fixed fits · 4 artificial test groups · seed 20261026</text>
+<text x="32" y="962" font-size="18" font-weight="400" fill="#223d35">Raw Ridge: fixed alpha also changes regularization.</text>
+<text x="32" y="989" font-size="18" font-weight="400" fill="#223d35">This is not a pure floating-point precision test.</text>
+<text x="32" y="1023" font-size="18" font-weight="600" fill="#223d35">Scaled prediction gaps meet the fixed tolerance.</text>
+<text x="32" y="1050" font-size="18" font-weight="400" fill="#223d35">Max gap 8.88e-16; tolerance 5.09e-10.</text>
+<text x="32" y="1086" font-size="16" font-weight="400" fill="#223d35">Python 3.12.14 · NumPy 2.3.5 · sklearn 1.8.0</text>
+<text x="32" y="1111" font-size="16" font-weight="400" fill="#223d35">Source 26b6eb8f6a14 · reproduce with run.py</text>
+</g>
+</svg>

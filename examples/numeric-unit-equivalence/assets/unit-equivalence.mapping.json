@@ -1,0 +1,105 @@
+{
+  "summary_sha256": "e969804c4290c5a0fbf07b34f7c53092967ab2f96e818723ad9dacb1c07b56b6",
+  "source_ref": "26b6eb8f6a149d760aec0aff1fbd680f0f32dbb6",
+  "rows": [
+    {
+      "key": "dummy__raw__A",
+      "value": 0.7730395516475823,
+      "label": "0.7730",
+      "x": 100,
+      "width": 386.5197758237911,
+      "max_axis": 0.8
+    },
+    {
+      "key": "dummy__raw__nA",
+      "value": 0.7730395516475823,
+      "label": "0.7730",
+      "x": 100,
+      "width": 386.5197758237911,
+      "max_axis": 0.8
+    },
+    {
+      "key": "ridge__raw__A",
+      "value": 0.7730395516475812,
+      "label": "0.7730",
+      "x": 100,
+      "width": 386.5197758237906,
+      "max_axis": 0.8
+    },
+    {
+      "key": "ridge__raw__nA",
+      "value": 0.44427052888182816,
+      "label": "0.4443",
+      "x": 100,
+      "width": 222.13526444091406,
+      "max_axis": 0.8
+    },
+    {
+      "key": "extra_trees__raw__A",
+      "value": 0.7730395516475822,
+      "label": "0.7730",
+      "x": 100,
+      "width": 386.51977582379106,
+      "max_axis": 0.8
+    },
+    {
+      "key": "extra_trees__raw__nA",
+      "value": 0.17123223370177015,
+      "label": "0.1712",
+      "x": 100,
+      "width": 85.61611685088508,
+      "max_axis": 0.8
+    },
+    {
+      "key": "dummy__calculator_scaled__A",
+      "value": 0.7730395516475823,
+      "label": "0.7730",
+      "x": 100,
+      "width": 386.5197758237911,
+      "max_axis": 0.8
+    },
+    {
+      "key": "dummy__calculator_scaled__nA",
+      "value": 0.7730395516475823,
+      "label": "0.7730",
+      "x": 100,
+      "width": 386.5197758237911,
+      "max_axis": 0.8
+    },
+    {
+      "key": "ridge__calculator_scaled__A",
+      "value": 0.4436723509021887,
+      "label": "0.4437",
+      "x": 100,
+      "width": 221.83617545109433,
+      "max_axis": 0.8
+    },
+    {
+      "key": "ridge__calculator_scaled__nA",
+      "value": 0.4436723509021887,
+      "label": "0.4437",
+      "x": 100,
+      "width": 221.83617545109433,
+      "max_axis": 0.8
+    },
+    {
+      "key": "extra_trees__calculator_scaled__A",
+      "value": 0.17123223370177015,
+      "label": "0.1712",
+      "x": 100,
+      "width": 85.61611685088508,
+      "max_axis": 0.8
+    },
+    {
+      "key": "extra_trees__calculator_scaled__nA",
+      "value": 0.17123223370177015,
+      "label": "0.1712",
+      "x": 100,
+      "width": 85.61611685088508,
+      "max_axis": 0.8
+    }
+  ],
+  "max_scaled_gap": 8.881784197001252e-16,
+  "threshold": 5.085524854499148e-10,
+  "svg_sha256": "08875d02823255a36a2040165a33fe8b07534a42a670f822481f4054b6a48bbb"
+}
