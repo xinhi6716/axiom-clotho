@@ -7,3 +7,6 @@ recursive-include tests *.py
 # Keep the unit-equivalence illustration and its reference checksums in source archives.
 include examples/numeric-unit-equivalence/assets/unit-equivalence.svg
 include examples/numeric-unit-equivalence/reference/SHA256SUMS
+
+# Offline maintainer version-table check, also used by its source tests.
+include tools/check_doc_versions.py tools/doc_version_contract.json

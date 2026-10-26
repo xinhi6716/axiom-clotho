@@ -14,6 +14,32 @@ mlcalc demo --out runs/contribution-check
 
 With dependencies already installed, use `PYTHONPATH=src` instead of installing. Do not add runtime network calls or install/download model weights during tests.
 
+### Keep source and download documentation separate
+
+Before changing version guidance, run this standard-library-only, read-only check:
+
+```bash
+python tools/check_doc_versions.py
+python -m unittest discover -s tests -p test_doc_versions.py -v
+```
+
+It parses the two marked tables in [the usage reference](docs/USAGE_REFERENCE.md#version-scope)
+and compares their field identities and capability ownership against
+`tools/doc_version_contract.json`. Whitespace, row order and inline-code formatting
+may change without failing. Missing, duplicate, unknown or contradictory rows fail.
+A competing old `**Status:**` paragraph before the table also fails.
+
+This is a deliberately narrow guard: it does not interpret arbitrary prose,
+other documents, later historical sections, installed wheels, Git ancestry or
+runtime behavior. A pass is not a release or scientific validation. The contract
+is reviewed maintainer input, not an automatically discovered capability database.
+For a release change, review its actual source/artifacts and regression evidence
+before updating both contract and table; never move a frozen tag just to pass.
+The current three rows are backed by the public comparison linked below the table
+and `test_cli_output_preflight.py`, `test_csv_header_identity.py`, and
+`test_api_feature_allowlist.py`. Keep release source, reviewed fixes snapshot and
+current checkout identity distinct. No network access, fitting or writes occur.
+
 ### Check the installed wheel
 
 Builds require setuptools 77.0.3 or newer for standard SPDX license metadata, following the [Python Packaging User Guide](https://packaging.python.org/en/latest/guides/writing-pyproject-toml/). This is a build-tool minimum, not a new runtime dependency or a change to the declared Python 3.10+ support. The MIT license text is included explicitly.

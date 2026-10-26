@@ -12,7 +12,36 @@ A local-first ML calculator for small materials, semiconductor, and process data
 
 Read a CSV → hold out entire groups → compare local baselines → inspect an offline report → refit and predict new rows. No account, hosted compute API, model-weight download, or telemetry.
 
-**Status:** This reference describes the source checkout, including an explicitly selected binary-classification workflow. The `v0.2.0a2` download is a frozen snapshot; newer source-only features and guards are not added to that download. [Choose the version you mean](../README.md#choose-the-version-you-mean) before following these instructions. An original sklearn-based selection/evaluation toolkit, not a pretrained foundation model, full AutoML system, or TabPFN equivalent. Synthetic examples demonstrate the workflow, not real-world accuracy.
+## Version scope
+
+This reference describes the source checkout, not everything in the frozen download.
+The following small matrix tracks three post-release fixes; it is not a complete
+feature catalogue. `present` means included in the reviewed source snapshot below,
+not certified on every platform. Package version alone does not identify a checkout.
+
+<!-- mlcalc-version-scope:start -->
+| Field | Value |
+| --- | --- |
+| documentation_scope | current-source |
+| frozen_tag | v0.2.0a2 |
+| frozen_source | `20d17c1d18dcb5b7ecc50681f9287e7b5ea7250a` |
+| fixes_snapshot | `73dc3f81885a1f8d9acca14198bce7ebe6aad755` |
+
+| Capability | Frozen download | Reviewed source |
+| --- | --- | --- |
+| regression-output-path-preflight | absent | present |
+| validated-csv-header-identity | absent | present |
+| reject-bare-string-api-features | absent | present |
+<!-- mlcalc-version-scope:end -->
+
+These rows mean early regression output-directory rejection, preservation of
+validated CSV column identity across parsers, and rejection of a bare string as a
+Python API feature list. [Review the source changes](https://github.com/xinhi6716/ml-super-calculator/compare/v0.2.0a2...73dc3f81885a1f8d9acca14198bce7ebe6aad755)
+and [choose the version you mean](../README.md#choose-the-version-you-mean).
+Later source commits can coexist with this fixed, reviewed snapshot; they do not
+retroactively modify the a2 wheel. This is an original sklearn-based toolkit,
+not a pretrained foundation model, full AutoML system or TabPFN equivalent.
+Synthetic examples demonstrate workflow, not real-world accuracy.
 
 ## Run the demo
 

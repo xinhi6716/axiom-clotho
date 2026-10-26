@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "scope": {
+    "documentation_scope": "current-source",
+    "frozen_tag": "v0.2.0a2",
+    "frozen_source": "20d17c1d18dcb5b7ecc50681f9287e7b5ea7250a",
+    "fixes_snapshot": "73dc3f81885a1f8d9acca14198bce7ebe6aad755"
+  },
+  "features": {
+    "regression-output-path-preflight": {"frozen": "absent", "source": "present"},
+    "validated-csv-header-identity": {"frozen": "absent", "source": "present"},
+    "reject-bare-string-api-features": {"frozen": "absent", "source": "present"}
+  }
+}
