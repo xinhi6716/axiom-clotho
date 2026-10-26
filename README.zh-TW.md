@@ -13,11 +13,18 @@
 
 訓練、報告和預測都留在你的電腦。不需帳號，不提供託管運算 API，也不下載模型權重或傳送遙測資料。
 
-[下載預發布版](https://github.com/xinhi6716/ml-super-calculator/releases/tag/v0.2.0a2) · [試跑範例](#試跑範例) · [使用自己的資料](#使用自己的資料) · [閱讀結果](#閱讀結果) · [範例](#範例) · [完整技術參考（英文）](docs/USAGE_REFERENCE.md)
+[下載預發布版](https://github.com/xinhi6716/ml-super-calculator/releases/tag/v0.2.0a2) · [選擇版本](#先選擇要使用的版本) · [試跑範例](#試跑範例) · [使用自己的資料](#使用自己的資料) · [閱讀結果](#閱讀結果) · [範例](#範例) · [完整技術參考（英文）](docs/USAGE_REFERENCE.md)
 
 > **預發布版：** v0.2.0a2，含須明確選用的二元分類流程。這是以 sklearn 為基礎、原創的模型選擇與評估工具，不是預訓練基礎模型、完整 AutoML 系統或 TabPFN 的同等替代品。合成範例展示用法，不代表真實資料的準確度。
 
 ## 試跑範例
+
+### 先選擇要使用的版本
+
+- **已發布下載：** `v0.2.0a2` 固定於 [20d17c1 原始碼快照](https://github.com/xinhi6716/ml-super-calculator/tree/20d17c1d18dcb5b7ecc50681f9287e7b5ea7250a)。`main` 更新時，它的 wheel 與原始碼封存檔不會跟著改變。
+- **目前原始碼修正：** [73dc3f8](https://github.com/xinhi6716/ml-super-calculator/tree/73dc3f81885a1f8d9acca14198bce7ebe6aad755) 新增迴歸輸出目錄路徑的提早檢查、保留不同 CSV 解析器間已驗證的欄名，並拒絕 Python API 以單一字串充作特徵清單。這三項修正**不在 a2 下載檔內**。[查看精確差異](https://github.com/xinhi6716/ml-super-calculator/compare/v0.2.0a2...73dc3f81885a1f8d9acca14198bce7ebe6aad755)。
+
+若需要這些修正，請按下方 checkout 指示，從該原始碼版本或之後已審核的版本安裝。除了套件版本，也記下 Git revision；版本字樣本身無法區分發布後的原始碼變更。這不是新的 wheel 發布。
 
 **安裝已發布的 wheel：** 下載 [0.2.0a2 wheel](https://github.com/xinhi6716/ml-super-calculator/releases/download/v0.2.0a2/ml_super_calculator-0.2.0a2-py3-none-any.whl)，並與 [SHA256SUMS.txt](https://github.com/xinhi6716/ml-super-calculator/releases/download/v0.2.0a2/SHA256SUMS.txt) 核對。在 Python 虛擬環境中，切換至下載目錄後執行：
 
@@ -30,7 +37,13 @@ mlcalc demo --out runs/demo
 
 **或從 checkout 安裝：**
 
+若要取得新的固定版本 checkout，請選擇尚不存在的目的目錄；下列指令不會更新既有 checkout。需要 Git 與 Python。
+
 ```bash
+git clone https://github.com/xinhi6716/ml-super-calculator.git mlcalc-source
+cd mlcalc-source
+git checkout --detach 73dc3f81885a1f8d9acca14198bce7ebe6aad755
+git rev-parse HEAD
 python -m pip install -e .
 mlcalc demo --out runs/demo
 ```

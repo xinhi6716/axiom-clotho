@@ -298,6 +298,10 @@ The separate `verify` command below has stricter POSIX **no-symlink** semantics.
 
 ## Python API
 
+Pass `features` as a collection of complete column names, not a comma-separated string. For a column literally named `xy`, use `features=["xy"]` (or `("xy",)`), **not** `features="xy"`; `features=["x", "y"]` selects two different columns. `features=None` uses all columns other than the target and group, so supply an explicit allowlist when other columns are IDs or post-outcome information. The CLI's `--features x,y` syntax is different from the Python API.
+
+Current source from [73dc3f8](https://github.com/xinhi6716/ml-super-calculator/commit/73dc3f81885a1f8d9acca14198bce7ebe6aad755) rejects bare strings and bytes before planning or model work in regression and binary workflows. The frozen `v0.2.0a2` wheel predates this guard and can interpret a string as separate characters. Use a name collection on either version; see [download versus source](../README.md#choose-the-version-you-mean).
+
 `target` and `group` must name two distinct existing columns using strings.
 Non-string column selectors (including Python/NumPy integers and tuples) are
 rejected before planning or fitting; explicitly rename those source columns

@@ -13,11 +13,18 @@ Small materials, semiconductor and process datasets rarely arrive as independent
 
 Training, reports and predictions stay on your computer. No account, hosted compute API, model-weight download or telemetry.
 
-[Download prerelease](https://github.com/xinhi6716/ml-super-calculator/releases/tag/v0.2.0a2) · [Try the demo](#try-the-demo) · [Bring your data](#bring-your-data) · [Read the results](#read-the-results) · [Examples](#examples) · [Detailed reference (English)](docs/USAGE_REFERENCE.md)
+[Download prerelease](https://github.com/xinhi6716/ml-super-calculator/releases/tag/v0.2.0a2) · [Choose a version](#choose-the-version-you-mean) · [Try the demo](#try-the-demo) · [Bring your data](#bring-your-data) · [Read the results](#read-the-results) · [Examples](#examples) · [Detailed reference (English)](docs/USAGE_REFERENCE.md)
 
 > **Prerelease:** v0.2.0a2, including an explicitly selected binary-classification workflow. This is an original sklearn-based selection and evaluation toolkit, not a pretrained foundation model, full AutoML system or TabPFN equivalent. Synthetic examples show how to use it, not real-world accuracy.
 
 ## Try the demo
+
+### Choose the version you mean
+
+- **Published download:** `v0.2.0a2` is the frozen [20d17c1 source snapshot](https://github.com/xinhi6716/ml-super-calculator/tree/20d17c1d18dcb5b7ecc50681f9287e7b5ea7250a). Its wheel and source archive do not change when `main` changes.
+- **Current-source fixes:** [73dc3f8](https://github.com/xinhi6716/ml-super-calculator/tree/73dc3f81885a1f8d9acca14198bce7ebe6aad755) adds early checks for invalid regression output-directory paths, preserves validated CSV column names across parsers, and rejects bare-string Python API feature lists. These three fixes are **not in the a2 download**. [See the exact changes](https://github.com/xinhi6716/ml-super-calculator/compare/v0.2.0a2...73dc3f81885a1f8d9acca14198bce7ebe6aad755).
+
+To use those fixes, install from that source revision (or a later reviewed checkout) using the checkout instructions below. Record the Git revision as well as the package version; a version label alone does not identify post-release source changes. This is not a new wheel release.
 
 **Install the published wheel:** download the [0.2.0a2 wheel](https://github.com/xinhi6716/ml-super-calculator/releases/download/v0.2.0a2/ml_super_calculator-0.2.0a2-py3-none-any.whl) and compare it with [SHA256SUMS.txt](https://github.com/xinhi6716/ml-super-calculator/releases/download/v0.2.0a2/SHA256SUMS.txt). In your Python virtual environment, from the download directory:
 
@@ -30,7 +37,13 @@ Installation may download dependencies from your configured package index; the w
 
 **Or install from a checkout:**
 
+For a fresh, pinned checkout, choose a new destination directory; the commands below do not update an existing checkout. Git and Python are required.
+
 ```bash
+git clone https://github.com/xinhi6716/ml-super-calculator.git mlcalc-source
+cd mlcalc-source
+git checkout --detach 73dc3f81885a1f8d9acca14198bce7ebe6aad755
+git rev-parse HEAD
 python -m pip install -e .
 mlcalc demo --out runs/demo
 ```
