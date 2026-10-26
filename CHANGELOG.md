@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.0a2
+
+- Reject explicit empty or blank-entry `--features` allowlists before planning or fitting. Previously `--features ""` silently fell back to all eligible columns. Omit the option deliberately to retain that default. Regression and binary commands share this validation; valid feature selections, models, splits and metrics are unchanged.
+- The existing 0.2.0a1 release artifacts are unchanged and remain affected.
+
 ## Unreleased optional prediction bundle consistency
 
 - Add an explicit, read-only regression prediction metadata/CSV consistency API
