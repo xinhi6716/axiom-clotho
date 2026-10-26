@@ -65,6 +65,19 @@ def protect_input_files(inputs, output_dir):
                 raise ValueError("Output would overwrite an input file; choose a separate --out directory.")
 
 
+def _check_output_directory(output_dir):
+    """Reject already impossible destinations before fitting, without writes.
+
+    This is an early usability check, not a filesystem reservation. Existing
+    write-time checks still handle races and permission failures.
+    """
+    out = Path(output_dir)
+    for component in (out, *out.parents):
+        if (component.exists() or component.is_symlink()) and not component.is_dir():
+            raise ValueError("--out must name a directory, not a file or broken link; "
+                             "check the destination and its parent directories.")
+
+
 @contextmanager
 def _open_csv_source(path):
     """Open one regular input; local symlinks remain allowed.
@@ -296,6 +309,8 @@ The groupbench command is an alias for the same CLI.""",
             print(f"Synthetic fixture written to {args.out}")
             return 0
         source_hash = None
+        if args.command in ("demo", "run", "predict"):
+            _check_output_directory(args.out)
         if args.command == "predict":
             ensure_prediction_output(args.out)
         if args.command in ("run", "predict"):
