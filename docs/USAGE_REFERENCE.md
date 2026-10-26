@@ -12,7 +12,7 @@ A local-first ML calculator for small materials, semiconductor, and process data
 
 Read a CSV → hold out entire groups → compare local baselines → inspect an offline report → refit and predict new rows. No account, hosted compute API, model-weight download, or telemetry.
 
-**Status:** v0.1.0 alpha plus an unreleased, explicitly selected binary-classification workflow. An original sklearn-based selection/evaluation toolkit, not a pretrained foundation model, full AutoML system, or TabPFN equivalent. Synthetic examples demonstrate the workflow, not real-world accuracy.
+**Status:** v0.2.0a1 prerelease candidate, including an explicitly selected binary-classification workflow. An original sklearn-based selection/evaluation toolkit, not a pretrained foundation model, full AutoML system, or TabPFN equivalent. Synthetic examples demonstrate the workflow, not real-world accuracy.
 
 ## Run the demo
 
@@ -80,7 +80,9 @@ adjustment roles, compares fixed observational regressions with separate paired
 intervention oracles, and refuses rank-deficient adjustment. This is a local
 design smoke test, not a calibrated device model or real-data causal estimator.
 
-## Explicit binary pass/fail workflow (unreleased)
+<a id="explicit-binary-passfail-workflow-unreleased"></a>
+
+## Explicit binary pass/fail workflow (prerelease)
 
 For a numeric 0/1 target, explicitly select the new binary namespace. Existing regression commands remain regression even for a 0/1 target.
 

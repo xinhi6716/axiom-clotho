@@ -15,7 +15,7 @@ Training, reports and predictions stay on your computer. No account, hosted comp
 
 [Try the demo](#try-the-demo) · [Bring your data](#bring-your-data) · [Read the results](#read-the-results) · [Examples](#examples) · [Detailed reference (English)](docs/USAGE_REFERENCE.md)
 
-> **Early release:** v0.1.0 alpha, with an unreleased opt-in binary-classification workflow in the source tree. This is an original sklearn-based selection and evaluation toolkit, not a pretrained foundation model, full AutoML system or TabPFN equivalent. Synthetic examples show how to use it, not real-world accuracy.
+> **Prerelease candidate:** v0.2.0a1, including an explicitly selected binary-classification workflow. This is an original sklearn-based selection and evaluation toolkit, not a pretrained foundation model, full AutoML system or TabPFN equivalent. Synthetic examples show how to use it, not real-world accuracy.
 
 ## Try the demo
 
@@ -125,7 +125,7 @@ mlcalc binary run examples/synthetic_binary_process.csv --target fail --group lo
 mlcalc binary predict examples/synthetic_binary_process.csv examples/new_binary_process.csv --target fail --group lot --out runs/binary-new
 ```
 
-This unreleased workflow expects numeric 0/1 labels and selects among prior Dummy, regularized Logistic and bounded Extra Trees using group-balanced Brier. Both labels must appear in every training partition; single-class held-out groups are retained. The threshold is fixed at p1 ≥ 0.5, not optimized for manufacturing decisions. Binary output directories must be fresh. Default regression commands stay regression even for 0/1 targets. [Binary protocol and limits](docs/BINARY_PROTOCOL.md)
+This prerelease workflow expects numeric 0/1 labels and selects among prior Dummy, regularized Logistic and bounded Extra Trees using group-balanced Brier. Both labels must appear in every training partition; single-class held-out groups are retained. The threshold is fixed at p1 ≥ 0.5, not optimized for manufacturing decisions. Binary output directories must be fresh. Default regression commands stay regression even for 0/1 targets. [Binary protocol and limits](docs/BINARY_PROTOCOL.md)
 
 ## Know the boundaries
 
@@ -177,7 +177,7 @@ The detailed sections now live in the usage reference. Existing section anchors 
 
 <a id="explicit-binary-passfail-workflow-unreleased"></a>
 
-- [Explicit binary pass/fail workflow (unreleased)](docs/USAGE_REFERENCE.md#explicit-binary-passfail-workflow-unreleased)
+- [Explicit binary pass/fail workflow (prerelease)](docs/USAGE_REFERENCE.md#explicit-binary-passfail-workflow-unreleased)
 
 <a id="use-your-own-regression-data"></a>
 
