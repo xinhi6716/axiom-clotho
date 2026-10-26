@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import argparse
 import csv
+from contextlib import contextmanager
 import hashlib
 import io
 import json
+import os
+import stat
 from pathlib import Path
 import sys
 
@@ -20,6 +23,9 @@ from .feature_manifest import read_feature_manifest
 from .prediction import ensure_prediction_output, fit_predict
 from .planning import plan_benchmark, plan_prediction
 from .verification import verify_bundle
+
+MAX_CSV_BYTES = 64 * 1024 * 1024
+CSV_READ_CHUNK_BYTES = 64 * 1024
 
 OUTPUT_NAMES = ("report.html", "manifest.json", "summary.json", "predictions.csv", "checksums.json")
 
@@ -58,6 +64,37 @@ def protect_input_files(inputs, output_dir):
                 raise ValueError("Output would overwrite an input file; choose a separate --out directory.")
 
 
+@contextmanager
+def _open_csv_source(path):
+    """Open one regular input; local symlinks remain allowed.
+
+    Pre-open checks reject known special/oversized inputs. Descriptor checks
+    reject special/oversized replacements at open. O_NONBLOCK prevents a swapped FIFO from
+    waiting where available; this is not a network-filesystem timeout or lock.
+    """
+    before = path.stat()
+    if not stat.S_ISREG(before.st_mode):
+        raise ValueError("CSV input must be a regular local file.")
+    if before.st_size > MAX_CSV_BYTES:
+        raise ValueError(f"CSV exceeds the {MAX_CSV_BYTES:,}-byte input limit.")
+    fd = os.open(path, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0)
+                 | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_BINARY", 0))
+    try:
+        opened = os.fstat(fd)
+        if not stat.S_ISREG(opened.st_mode):
+            raise ValueError("CSV input must be a regular local file.")
+        if opened.st_size > MAX_CSV_BYTES:
+            raise ValueError(f"CSV exceeds the {MAX_CSV_BYTES:,}-byte input limit.")
+        # Transfer descriptor ownership only after fdopen succeeds.
+        source = os.fdopen(fd, "rb", buffering=0)
+        fd = None
+        with source:
+            yield source
+    finally:
+        if fd is not None:
+            os.close(fd)
+
+
 class _HashingReader(io.RawIOBase):
     """Hash only bytes returned to the decoder, without reopening the source."""
 
@@ -65,13 +102,20 @@ class _HashingReader(io.RawIOBase):
         super().__init__()
         self.source = source
         self.digest = digest
+        self.bytes_read = 0
 
     def readable(self):
         return True
 
     def readinto(self, buffer):
-        count = self.source.readinto(buffer)
+        # Read at most one byte beyond the cap to distinguish exact-limit EOF.
+        size = min(len(buffer), CSV_READ_CHUNK_BYTES,
+                   MAX_CSV_BYTES - self.bytes_read + 1)
+        count = self.source.readinto(memoryview(buffer)[:size])
         if count:
+            self.bytes_read += count
+            if self.bytes_read > MAX_CSV_BYTES:
+                raise ValueError(f"CSV exceeds the {MAX_CSV_BYTES:,}-byte input limit.")
             self.digest.update(memoryview(buffer)[:count])
         return count
 
@@ -94,7 +138,7 @@ def _read_csv_with_hash(path: Path, *, group=None):
     # snapshot before type inference so those repairs cannot change the data.
     snapshot = io.StringIO(newline="")
     digest = hashlib.sha256()
-    with path.open("rb") as source, io.TextIOWrapper(
+    with _open_csv_source(path) as source, io.TextIOWrapper(
         _HashingReader(source, digest), encoding="utf-8-sig", newline=""
     ) as handle:
         record_lines = []

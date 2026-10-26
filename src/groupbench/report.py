@@ -83,7 +83,9 @@ def write_payloads(payloads: dict[str, str], output_dir, *, overwrite: bool = Fa
     payloads["checksums.json"] = json.dumps({"algorithm": "sha256", "files": hashes}, indent=2) + "\n"
     with tempfile.TemporaryDirectory(prefix=".groupbench-", dir=out) as staging:
         for name, content in payloads.items():
-            Path(staging, name).write_text(content, encoding="utf-8")
+            # Write the exact UTF-8 bytes used by the checksum calculation.
+            # Text-mode default newlines may translate LF to CRLF on Windows.
+            Path(staging, name).write_bytes(content.encode("utf-8"))
         for name in names:
             if overwrite:
                 os.replace(Path(staging, name), out / name)

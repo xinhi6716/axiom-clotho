@@ -22,7 +22,7 @@ class CSVNULTests(unittest.TestCase):
                     buffer = memoryview(buffer)[:chunk_size]
                 return super().readinto(buffer)
         source = Source(content)
-        with patch.object(Path, "open", return_value=source) as opening, \
+        with patch("groupbench.cli._open_csv_source", return_value=source) as opening, \
                 patch("groupbench.cli.pd.read_csv") as parsing:
             with self.assertRaises(ValueError) as error:
                 _read_csv_with_hash(Path("PRIVATE_FILENAME.csv"), group="batch")
@@ -31,7 +31,7 @@ class CSVNULTests(unittest.TestCase):
                          "Re-export the file as a clean UTF-8 CSV.")
         self.assertNotIn("PRIVATE", str(error.exception))
         self.assertTrue(source.closed)
-        opening.assert_called_once_with("rb")
+        opening.assert_called_once_with(Path("PRIVATE_FILENAME.csv"))
         parsing.assert_not_called()
 
     def test_nul_is_rejected_in_headers_and_every_field_role(self):
@@ -67,7 +67,7 @@ class CSVNULTests(unittest.TestCase):
                 self.assert_rejected(content, 3, chunk_size=chunk_size)
 
     def test_read_csv_wrapper_also_rejects_nul(self):
-        with patch.object(Path, "open", return_value=io.BytesIO(b"batch,x,y\ng,1,0\0PRIVATE\n")), \
+        with patch("groupbench.cli._open_csv_source", return_value=io.BytesIO(b"batch,x,y\ng,1,0\0PRIVATE\n")), \
                 patch("groupbench.cli.pd.read_csv") as parsing:
             with self.assertRaisesRegex(ValueError, "NUL character at physical line 2"):
                 _read_csv(Path("synthetic.csv"), group="batch")
@@ -75,7 +75,7 @@ class CSVNULTests(unittest.TestCase):
 
     def test_valid_literal_escapes_unicode_and_hash_are_unchanged(self):
         content = '\ufeffbatch,x,y\r\n001,"literal \\0",0\r\nNA,"literal \\x00",1\r\n"測試\r\n組","␀",0\r\ng,"\v\f",1\r\n\r\n \t\r\n'.encode("utf-8")
-        with patch.object(Path, "open", return_value=io.BytesIO(content)):
+        with patch("groupbench.cli._open_csv_source", return_value=io.BytesIO(content)):
             frame, digest = _read_csv_with_hash(Path("synthetic.csv"), group="batch")
         self.assertEqual(frame.batch.tolist(), ["001", "NA", "測試\r\n組", "g"])
         self.assertEqual(frame.x.tolist(), ["literal \\0", "literal \\x00", "␀", "\v\f"])

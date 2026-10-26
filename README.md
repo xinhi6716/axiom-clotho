@@ -118,6 +118,25 @@ NUL characters (U+0000) are rejected anywhere in a CSV, including headers and qu
 
 Categorical feature values containing NUL (U+0000) are also rejected by the DataFrame API, under both categorical encodings, before planning, fitting, input-support checks, or training/prediction fingerprints. This explicit validation tightening prevents pandas source-category and hashing operations from merging distinct values even when one-hot encoding keeps them separate. No characters are stripped or escaped automatically: repair the source values explicitly. Only observed values are checked; an unused NUL-containing pandas category does not invalidate otherwise clean rows. Numeric features and ordinary strings keep their existing behavior. CSV continues to reject NUL anywhere in the file.
 
+CSV input now requires a regular local file and is limited to **64 MiB
+(67,108,864 bytes) per file**, including the UTF-8 BOM, line endings, quoted
+multiline text and ignored blank lines. Training and prediction files have
+separate caps. This is an explicit compatibility tightening: an otherwise valid
+file with at most 20,000 rows can still exceed the byte cap and is rejected,
+not truncated or sampled. No optional override bypasses the cap. The DataFrame
+API is unchanged and does not inherit this file-byte limit.
+
+Both pre-open metadata and the opened descriptor are checked. Local symlinks
+and hardlinks to regular files remain accepted; directories, FIFOs and device
+files are rejected. Nonblocking open protects against a FIFO replacement on
+platforms supporting O_NONBLOCK. The same open stream is hashed and parsed,
+with bounded reads and at most one excess byte read to detect growth beyond
+the cap. No model fitting or output writing starts when either input fails.
+These are input byte/type guards, not a hard peak-memory, wall-clock or training
+budget, an atomic filesystem snapshot, or protection from all concurrent file
+changes or network-mounted storage delays. Only Linux has been verified; use
+trusted, idle local files and OS limits where needed.
+
 The CLI checks a bounded input snapshot before pandas type inference, preserving the original quoted text and group identifiers. Python's CSV parser field-size limit applies to both headers and data cells (131,072 characters per field under its default setting); a parser-limit or quoting failure returns an actionable error. This per-field guard is specific to CSV input, not the DataFrame API, and is not a hard memory limit for the whole file.
 
 ### Preview the work before fitting

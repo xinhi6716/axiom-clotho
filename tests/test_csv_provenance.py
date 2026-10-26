@@ -64,16 +64,16 @@ class CSVProvenanceTests(unittest.TestCase):
     def test_header_only_input_hash_includes_trailing_blank_lines(self):
         content = b"\xef\xbb\xbfbatch,x,y\r\n\r\n \r\n"
         source = TrackedBytes(content)
-        with patch.object(Path, "open", return_value=source) as opening:
+        with patch("groupbench.cli._open_csv_source", return_value=source) as opening:
             frame, digest = _read_csv_with_hash(Path("synthetic.csv"), group="batch")
         self.assertEqual(len(frame), 0)
         self.assertEqual(digest, hashlib.sha256(content).hexdigest())
-        opening.assert_called_once_with("rb")
+        opening.assert_called_once_with(Path("synthetic.csv"))
 
     def test_incremental_hash_handles_split_bom_and_multibyte_characters(self):
         content = '\ufeffbatch,x,y\r\n"測試,é\r\n組",1,2\r\n\r\n'.encode("utf-8")
         source = TrackedBytes(content, chunk_size=2)
-        with patch.object(Path, "open", return_value=source) as opening:
+        with patch("groupbench.cli._open_csv_source", return_value=source) as opening:
             frame, digest = _read_csv_with_hash(Path("synthetic.csv"), group="batch")
         self.assertEqual(frame.batch.tolist(), ["測試,é\r\n組"])
         self.assertEqual(digest, hashlib.sha256(content).hexdigest())
@@ -81,18 +81,18 @@ class CSVProvenanceTests(unittest.TestCase):
         self.assertGreater(len(source.requests), 2)
         self.assertTrue(all(0 < request <= 64 * 1024 for request in source.requests))
         self.assertTrue(source.closed)
-        opening.assert_called_once_with("rb")
+        opening.assert_called_once_with(Path("synthetic.csv"))
 
     def test_oversized_csv_is_not_fully_read_or_hashed(self):
         content = b"batch,x,y\n" + b"001,1,2\n" * 100_000
         source = TrackedBytes(content)
-        with patch.object(Path, "open", return_value=source) as opening, patch("groupbench.cli.MAX_ROWS", 2):
+        with patch("groupbench.cli._open_csv_source", return_value=source) as opening, patch("groupbench.cli.MAX_ROWS", 2):
             with self.assertRaisesRegex(ValueError, "exceeds the MVP limit of 2 rows"):
                 _read_csv_with_hash(Path("synthetic.csv"), group="batch")
         self.assertLess(source.bytes_read, len(content))
         self.assertTrue(all(0 < request <= 64 * 1024 for request in source.requests))
         self.assertTrue(source.closed)
-        opening.assert_called_once_with("rb")
+        opening.assert_called_once_with(Path("synthetic.csv"))
 
     def test_midstream_rewrite_hashes_observed_bytes_not_a_claimed_atomic_version(self):
         original = b"batch,x,y\n001,1,2\n002,3,4\n"
@@ -114,7 +114,7 @@ class CSVProvenanceTests(unittest.TestCase):
                 return count
 
         source = MutatingBytes(original, chunk_size=boundary)
-        with patch.object(Path, "open", return_value=source):
+        with patch("groupbench.cli._open_csv_source", return_value=source):
             frame, digest = _read_csv_with_hash(Path("synthetic.csv"), group="batch")
         self.assertEqual(bytes(delivered), original[:boundary] + replacement[boundary:])
         self.assertEqual(frame.batch.tolist(), ["001", "222"])
