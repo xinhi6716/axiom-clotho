@@ -13,29 +13,29 @@
 
 訓練、報告和預測都留在你的電腦。不需帳號，不提供託管運算 API，也不下載模型權重或傳送遙測資料。
 
-> **原始碼版本：0.2.0a3。** 請從[發布頁](https://github.com/xinhi6716/ml-super-calculator/releases)選擇實際列出的版本，並核對 SHA-256 紀錄。詳見[a3 變更與本機安裝步驟（英文）](docs/RELEASE_NOTES_0.2.0a3.md)。下方明列的 a2 連結仍是未改動的凍結 a2 版本；不能只憑這份文件推定哪些檔案已發布。
+> **已發布預覽版：0.2.0a3。** 從 [a3 發布頁](https://github.com/xinhi6716/ml-super-calculator/releases/tag/v0.2.0a3)安裝已審核的輸入／輸出防護修正，安裝前核對同版 SHA-256 紀錄。[變更與安裝細節（英文）](docs/RELEASE_NOTES_0.2.0a3.md)。先前的 a2 檔案保留不變，可供回退。
 
-[下載預發布版](https://github.com/xinhi6716/ml-super-calculator/releases/tag/v0.2.0a2) · [選擇版本](#先選擇要使用的版本) · [試跑範例](#試跑範例) · [使用自己的資料](#使用自己的資料) · [閱讀結果](#閱讀結果) · [範例](#範例) · [完整技術參考（英文）](docs/USAGE_REFERENCE.md)
+[下載預發布版](https://github.com/xinhi6716/ml-super-calculator/releases/tag/v0.2.0a3) · [選擇版本](#先選擇要使用的版本) · [試跑範例](#試跑範例) · [使用自己的資料](#使用自己的資料) · [閱讀結果](#閱讀結果) · [範例](#範例) · [完整技術參考（英文）](docs/USAGE_REFERENCE.md)
 
-> **下方示範的凍結下載：** v0.2.0a2，含須明確選用的二元分類流程。這是以 sklearn 為基礎、原創的模型選擇與評估工具，不是預訓練基礎模型、完整 AutoML 系統或 TabPFN 的同等替代品。合成範例展示用法，不代表真實資料的準確度。
+> **下方示範的下載：** v0.2.0a3，含須明確選用的二元分類流程。這是以 sklearn 為基礎、原創的模型選擇與評估工具，不是預訓練基礎模型、完整 AutoML 系統或 TabPFN 的同等替代品。合成範例展示用法，不代表真實資料的準確度。
 
 ## 試跑範例
 
 ### 先選擇要使用的版本
 
-- **已發布下載：** `v0.2.0a2` 固定於 [20d17c1 原始碼快照](https://github.com/xinhi6716/ml-super-calculator/tree/20d17c1d18dcb5b7ecc50681f9287e7b5ea7250a)。`main` 更新時，它的 wheel 與原始碼封存檔不會跟著改變。
-- **目前原始碼修正：** [73dc3f8](https://github.com/xinhi6716/ml-super-calculator/tree/73dc3f81885a1f8d9acca14198bce7ebe6aad755) 新增迴歸輸出目錄路徑的提早檢查、保留不同 CSV 解析器間已驗證的欄名，並拒絕 Python API 以單一字串充作特徵清單。這三項修正**不在 a2 下載檔內**。[查看精確差異](https://github.com/xinhi6716/ml-super-calculator/compare/v0.2.0a2...73dc3f81885a1f8d9acca14198bce7ebe6aad755)。
+- **已發布的 a3 下載：** `v0.2.0a3` 對應 [4bbfe99 原始碼](https://github.com/xinhi6716/ml-super-calculator/tree/4bbfe99ed55d2f9e6cb931d6f568af4fa4a887d3)。wheel 已包含迴歸與二元流程的輸出路徑檢查、已驗證 CSV 欄名保留，以及 Python API 特徵清單防護；模型家族與選模規則不變。
+- **先前的 a2 下載：** [v0.2.0a2](https://github.com/xinhi6716/ml-super-calculator/releases/tag/v0.2.0a2) 仍固定於 [20d17c1 快照](https://github.com/xinhi6716/ml-super-calculator/tree/20d17c1d18dcb5b7ecc50681f9287e7b5ea7250a)，不包含上述四項修正。中間的 [73dc3f8 原始碼修正](https://github.com/xinhi6716/ml-super-calculator/tree/73dc3f81885a1f8d9acca14198bce7ebe6aad755) 保留為歷史紀錄；現在不必為了這些修正改用原始碼安裝。
 
-若需要這些修正，請按下方 checkout 指示，從該原始碼版本或之後已審核的版本安裝。除了套件版本，也記下 Git revision；版本字樣本身無法區分發布後的原始碼變更。這不是新的 wheel 發布。
+回退 a2 時請使用另一個環境。從原始碼安裝時，除了套件版本，也記下 Git revision。下方固定 checkout 對應 a3 發布原始碼；之後 `main` 更新不會改動已發布檔案。
 
-**安裝已發布的 wheel：** 下載 [0.2.0a2 wheel](https://github.com/xinhi6716/ml-super-calculator/releases/download/v0.2.0a2/ml_super_calculator-0.2.0a2-py3-none-any.whl)，並與 [SHA256SUMS.txt](https://github.com/xinhi6716/ml-super-calculator/releases/download/v0.2.0a2/SHA256SUMS.txt) 核對。在 Python 虛擬環境中，切換至下載目錄後執行：
+**安裝已發布的 wheel：** 下載 [0.2.0a3 wheel](https://github.com/xinhi6716/ml-super-calculator/releases/download/v0.2.0a3/ml_super_calculator-0.2.0a3-py3-none-any.whl)，並與 [SHA256SUMS.txt](https://github.com/xinhi6716/ml-super-calculator/releases/download/v0.2.0a3/SHA256SUMS.txt) 核對。在 Python 虛擬環境中，切換至下載目錄後執行：
 
 ```bash
-python -m pip install ./ml_super_calculator-0.2.0a2-py3-none-any.whl
+python -m pip install ./ml_super_calculator-0.2.0a3-py3-none-any.whl
 mlcalc demo --out runs/demo
 ```
 
-安裝時可能從設定的套件索引下載相依套件；wheel 並未包含這些相依套件。模型運算仍在本機執行。這是 GitHub Release 下載，不是 PyPI 或 GitHub Packages 發布。下方使用範例檔案的指令，請搭配 [原始碼封存檔](https://github.com/xinhi6716/ml-super-calculator/releases/download/v0.2.0a2/ml_super_calculator-0.2.0a2.tar.gz) 或 checkout。
+安裝時可能從設定的套件索引下載相依套件；wheel 並未包含這些相依套件。模型運算仍在本機執行。這是 GitHub Release 下載，不是 PyPI 或 GitHub Packages 發布。下方使用範例檔案的指令，請搭配 [原始碼封存檔](https://github.com/xinhi6716/ml-super-calculator/releases/download/v0.2.0a3/ml_super_calculator-0.2.0a3.tar.gz) 或 checkout。
 
 **或從 checkout 安裝：**
 
@@ -44,7 +44,7 @@ mlcalc demo --out runs/demo
 ```bash
 git clone https://github.com/xinhi6716/ml-super-calculator.git mlcalc-source
 cd mlcalc-source
-git checkout --detach 73dc3f81885a1f8d9acca14198bce7ebe6aad755
+git checkout --detach 4bbfe99ed55d2f9e6cb931d6f568af4fa4a887d3
 git rev-parse HEAD
 python -m pip install -e .
 mlcalc demo --out runs/demo
