@@ -136,6 +136,9 @@ def validate_training_columns(frame: pd.DataFrame, target: str, group: str):
 
 def prepare_data(frame: pd.DataFrame, target: str, group: str, features=None):
     validate_training_columns(frame, target, group)
+    if isinstance(features, (str, bytes)):
+        raise ValueError("features must be a sequence of column names, not a bare string or bytes. "
+                         "For one feature, pass a one-item list such as ['feature_name'].")
     names = list(features) if features is not None else [c for c in frame if c not in (target, group)]
     if target in names or group in names:
         raise ValueError("The target and grouping column cannot be input features.")
