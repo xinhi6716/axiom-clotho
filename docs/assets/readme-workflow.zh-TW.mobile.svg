@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="450" viewBox="0 0 400 450" role="img" aria-labelledby="title desc">
+<title id="title">GroupBench</title><desc id="desc">群組資料，本機建模。</desc>
+<rect width="400" height="450" rx="16" fill="#101d2c"/>
+<path d="M16 0H384" stroke="#54cab0" stroke-width="5"/>
+<g font-family="DejaVu Sans, Noto Sans CJK TC, sans-serif">
+<text x="24" y="39" fill="#66d8bd" font-size="16" letter-spacing="2">GROUPBENCH</text>
+<text x="24" y="76" fill="#f4f5f7" font-size="23" font-weight="600">群組資料，本機建模。</text>
+<rect x="24" y="102" width="352" height="94" rx="10" fill="#1b2d40" stroke="#3a5068"/>
+<text x="42" y="137" fill="#66d8bd" font-size="16">01</text>
+<text x="80" y="138" fill="#fff" font-size="24" font-weight="600">準備資料</text>
+<text x="42" y="172" fill="#c7d3e0" font-size="17">CSV、目標值與群組</text>
+<rect x="24" y="212" width="352" height="94" rx="10" fill="#1b2d40" stroke="#3a5068"/>
+<text x="42" y="247" fill="#66d8bd" font-size="16">02</text>
+<text x="80" y="248" fill="#fff" font-size="24" font-weight="600">比較模型</text>
+<text x="42" y="282" fill="#c7d3e0" font-size="17">保留測試群組，不混入訓練</text>
+<rect x="24" y="322" width="352" height="94" rx="10" fill="#1b2d40" stroke="#3a5068"/>
+<text x="42" y="357" fill="#66d8bd" font-size="16">03</text>
+<text x="80" y="358" fill="#fff" font-size="24" font-weight="600">檢查結果</text>
+<text x="42" y="392" fill="#c7d3e0" font-size="17">報告與逐列預測</text>
+</g></svg>
