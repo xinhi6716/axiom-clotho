@@ -204,7 +204,16 @@ def _read_csv_with_hash(path: Path, *, group=None):
     # Group labels are identifiers: preserve leading zeros and literal 'NA'.
     converters = {group: str} if group else None
     snapshot.seek(0)
-    return pd.read_csv(snapshot, converters=converters), digest.hexdigest()
+    frame = pd.read_csv(snapshot, converters=converters)
+    # pandas can interpret a second leading BOM as another encoding marker,
+    # then silently rename newly colliding headers (for example g to g.1).
+    # Never select target/group/features against a schema different from the
+    # raw header whose uniqueness and record widths were checked above.
+    if list(frame.columns) != header:
+        raise ValueError("CSV column names changed during parsing. "
+                         "Re-export the file as UTF-8 with at most one leading BOM "
+                         "and unambiguous column names.")
+    return frame, digest.hexdigest()
 
 
 def _read_training(args):
