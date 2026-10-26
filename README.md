@@ -1,16 +1,44 @@
 # ML Super Calculator · ML 超級計算器
 
-**From a local CSV to an honest model comparison and usable predictions.**
+Compare regression models on held-out groups, then refit locally to predict new rows.
 
 A local-first ML calculator for small materials, semiconductor, and process datasets. Its first engine, **GroupBench**, asks a practical question:
 
-> Will this model still work on a batch it has never seen?
+> What is the prediction error on held-out batches?
 
 Read a CSV → hold out entire groups → compare local baselines → inspect an offline report → refit and predict new rows. No account, hosted compute API, model-weight download, or telemetry.
 
-中文：這不是另一個只會呼叫雲端模型的外殼。第一版先把小型材料／製程表格資料的「分組驗證、模型比較、在本機重新訓練與預測」做扎實。依批次、試片或實驗來源切開驗證，讓同一批資料不會同時出現在訓練與測試裡。這是長期產品的可用起點，不是已完成的基礎模型。
+中文：讀入材料、半導體或製程的 CSV，依指定的批次、試片或實驗來源分組，比較回歸模型，再用全部標記資料重新訓練並預測新資料。訓練、報告和預測都在本機執行。工具只隔離你提供的分組；未記錄的相依關係仍需另外檢查。這是早期版本，不是預訓練基礎模型。
 
 **Status:** v0.1.0 alpha plus an unreleased, explicitly selected binary-classification workflow. An original sklearn-based selection/evaluation toolkit, not a pretrained foundation model, full AutoML system, or TabPFN equivalent. Synthetic examples demonstrate the workflow, not real-world accuracy.
+
+## Run the demo
+
+Python 3.10+ is declared; the verified development environment is Python 3.12.14, NumPy 2.3.5, pandas 2.2.3, and scikit-learn 1.8.0. Other supported versions have not yet been tested in a CI matrix.
+
+From this checkout:
+
+```bash
+python -m pip install -e .
+mlcalc demo --out runs/demo
+```
+
+Open `runs/demo/report.html` in your browser. It is a self-contained local file, with no remote assets or scripts. The example contains 288 **wholly synthetic** process observations in 24 batches.
+
+For an already provisioned environment, run without installation or network access:
+
+```bash
+PYTHONPATH=src python -m groupbench demo --out runs/demo
+```
+
+Prefer a visible input file? The repository includes [synthetic training rows](examples/synthetic_materials.csv) and [new process settings](examples/new_process_settings.csv), both generated from the documented fixture:
+
+```bash
+mlcalc run examples/synthetic_materials.csv --target response --group batch --out runs/example-evaluation
+mlcalc predict examples/synthetic_materials.csv examples/new_process_settings.csv --target response --group batch --out runs/example-predictions
+```
+
+The `groupbench` command is an alias for `mlcalc`. This project is installable from the checkout; no public package-registry release is assumed.
 
 ## Distinguish missing values from literal marker strings
 
@@ -49,34 +77,6 @@ and readout under explicit invented equations. It checks total-versus-direct
 adjustment roles, compares fixed observational regressions with separate paired
 intervention oracles, and refuses rank-deficient adjustment. This is a local
 design smoke test, not a calibrated device model or real-data causal estimator.
-
-## Try it in one minute
-
-Python 3.10+ is declared; the verified development environment is Python 3.12.14, NumPy 2.3.5, pandas 2.2.3, and scikit-learn 1.8.0. Other supported versions have not yet been tested in a CI matrix.
-
-From this checkout:
-
-```bash
-python -m pip install -e .
-mlcalc demo --out runs/demo
-```
-
-Open `runs/demo/report.html` in your browser. It is a self-contained local file, with no remote assets or scripts. The example contains 288 **wholly synthetic** process observations in 24 batches.
-
-For an already provisioned environment, run without installation or network access:
-
-```bash
-PYTHONPATH=src python -m groupbench demo --out runs/demo
-```
-
-Prefer a visible input file? The repository includes [synthetic training rows](examples/synthetic_materials.csv) and [new process settings](examples/new_process_settings.csv), both generated from the documented fixture:
-
-```bash
-mlcalc run examples/synthetic_materials.csv --target response --group batch --out runs/example-evaluation
-mlcalc predict examples/synthetic_materials.csv examples/new_process_settings.csv --target response --group batch --out runs/example-predictions
-```
-
-The `groupbench` command is an alias for `mlcalc`. This project is installable from the checkout; no public package-registry release is assumed.
 
 ## Explicit binary pass/fail workflow (unreleased)
 
@@ -343,7 +343,7 @@ print(model.best_candidate_, model.selection_results_)
 
 `X` must be a named pandas DataFrame. All arrays are aligned **positionally**, not by pandas index labels. `predict` accepts reordered columns but rejects missing/extra columns and incompatible numeric/categorical types. This is a sklearn-like estimator with `get_params`, `set_params`, and `clone`; it is not claimed to pass every general-purpose sklearn estimator check or metadata-routing workflow.
 
-## What makes the evaluation trustworthy?
+## How the evaluation is split and scored
 
 1. **Outer folds hold out whole groups.** Every row receives exactly one held-out prediction per model entry. Folds balance row counts approximately, using group sizes but never target values.
 2. **Inner folds select models without seeing the outer test groups.** The `selected` entry evaluates the entire selection procedure. Each family also gets its own inner-selected configuration.
@@ -417,7 +417,7 @@ Verification requires POSIX directory-relative file access and no-follow opens. 
 
 - Group disjointness protects only the supplied grouping axis. Related compositions, overlapping specimens, time leakage, or feature engineering performed on all data can still leak information.
 - Holding out a combined `batch × specimen` label does not automatically isolate both crossed factors. Use a scientifically appropriate split strategy; multi-axis and temporal holdouts are not implemented yet.
-- No classification, foundation-model training, calibrated uncertainty, causal inference, scientific-unit validation, extrapolation guarantee, or production monitoring is included.
+- Default commands perform regression; binary classification requires the explicit `binary` namespace described above. Foundation-model training, calibrated uncertainty, causal inference, scientific-unit validation, extrapolation guarantees, and production monitoring are not included.
 - Sparse small groups can produce unstable rankings. Fold variability is not a confidence interval, and a single seed is not a robustness study.
 - The synthetic fixture is not a validated semiconductor/materials simulator. No private research data, unpublished manuscript, or review content is embedded.
 - `fit_predict` produces predictions, not a performance estimate. Validate on appropriate independent data before consequential use.
