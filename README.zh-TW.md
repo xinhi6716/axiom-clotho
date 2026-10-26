@@ -13,13 +13,22 @@
 
 訓練、報告和預測都留在你的電腦。不需帳號，不提供託管運算 API，也不下載模型權重或傳送遙測資料。
 
-[試跑範例](#試跑範例) · [使用自己的資料](#使用自己的資料) · [閱讀結果](#閱讀結果) · [範例](#範例) · [完整技術參考（英文）](docs/USAGE_REFERENCE.md)
+[下載預發布版](https://github.com/xinhi6716/ml-super-calculator/releases/tag/v0.2.0a1) · [試跑範例](#試跑範例) · [使用自己的資料](#使用自己的資料) · [閱讀結果](#閱讀結果) · [範例](#範例) · [完整技術參考（英文）](docs/USAGE_REFERENCE.md)
 
-> **預發布候選：** v0.2.0a1，含須明確選用的二元分類流程。這是以 sklearn 為基礎、原創的模型選擇與評估工具，不是預訓練基礎模型、完整 AutoML 系統或 TabPFN 的同等替代品。合成範例展示用法，不代表真實資料的準確度。
+> **預發布版：** v0.2.0a1，含須明確選用的二元分類流程。這是以 sklearn 為基礎、原創的模型選擇與評估工具，不是預訓練基礎模型、完整 AutoML 系統或 TabPFN 的同等替代品。合成範例展示用法，不代表真實資料的準確度。
 
 ## 試跑範例
 
-在本倉庫的 checkout 中執行：
+**安裝已發布的 wheel：** 下載 [0.2.0a1 wheel](https://github.com/xinhi6716/ml-super-calculator/releases/download/v0.2.0a1/ml_super_calculator-0.2.0a1-py3-none-any.whl)，並與 [SHA256SUMS.txt](https://github.com/xinhi6716/ml-super-calculator/releases/download/v0.2.0a1/SHA256SUMS.txt) 核對。在 Python 虛擬環境中，切換至下載目錄後執行：
+
+```bash
+python -m pip install ./ml_super_calculator-0.2.0a1-py3-none-any.whl
+mlcalc demo --out runs/demo
+```
+
+安裝時可能從設定的套件索引下載相依套件；wheel 並未包含這些相依套件。模型運算仍在本機執行。這是 GitHub Release 下載，不是 PyPI 或 GitHub Packages 發布。下方使用範例檔案的指令，請搭配 [原始碼封存檔](https://github.com/xinhi6716/ml-super-calculator/releases/download/v0.2.0a1/ml_super_calculator-0.2.0a1.tar.gz) 或 checkout。
+
+**或從 checkout 安裝：**
 
 ```bash
 python -m pip install -e .
@@ -28,7 +37,7 @@ mlcalc demo --out runs/demo
 
 開啟 `runs/demo/report.html`。報告是獨立的本機檔案，不含遠端資源或腳本。範例包含 **24 批、288 筆完全合成的觀測值**。
 
-宣告支援 Python 3.10+。目前開發環境已驗證 Python 3.12.14、NumPy 2.3.5、pandas 2.2.3 與 scikit-learn 1.8.0；尚未完成跨版本 CI 測試矩陣。請從本 checkout 安裝，不假定已有公開套件站版本。`groupbench` 是 `mlcalc` 的別名。
+宣告支援 Python 3.10+。目前開發環境已驗證 Python 3.12.14、NumPy 2.3.5、pandas 2.2.3 與 scikit-learn 1.8.0；尚未完成跨版本 CI 測試矩陣。`groupbench` 是 `mlcalc` 的別名。
 
 <details>
 <summary>已備妥相依套件？不安裝、不連網也能試跑。</summary>

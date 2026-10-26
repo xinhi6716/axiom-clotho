@@ -13,13 +13,22 @@ Small materials, semiconductor and process datasets rarely arrive as independent
 
 Training, reports and predictions stay on your computer. No account, hosted compute API, model-weight download or telemetry.
 
-[Try the demo](#try-the-demo) · [Bring your data](#bring-your-data) · [Read the results](#read-the-results) · [Examples](#examples) · [Detailed reference (English)](docs/USAGE_REFERENCE.md)
+[Download prerelease](https://github.com/xinhi6716/ml-super-calculator/releases/tag/v0.2.0a1) · [Try the demo](#try-the-demo) · [Bring your data](#bring-your-data) · [Read the results](#read-the-results) · [Examples](#examples) · [Detailed reference (English)](docs/USAGE_REFERENCE.md)
 
-> **Prerelease candidate:** v0.2.0a1, including an explicitly selected binary-classification workflow. This is an original sklearn-based selection and evaluation toolkit, not a pretrained foundation model, full AutoML system or TabPFN equivalent. Synthetic examples show how to use it, not real-world accuracy.
+> **Prerelease:** v0.2.0a1, including an explicitly selected binary-classification workflow. This is an original sklearn-based selection and evaluation toolkit, not a pretrained foundation model, full AutoML system or TabPFN equivalent. Synthetic examples show how to use it, not real-world accuracy.
 
 ## Try the demo
 
-From a checkout of this repository:
+**Install the published wheel:** download the [0.2.0a1 wheel](https://github.com/xinhi6716/ml-super-calculator/releases/download/v0.2.0a1/ml_super_calculator-0.2.0a1-py3-none-any.whl) and compare it with [SHA256SUMS.txt](https://github.com/xinhi6716/ml-super-calculator/releases/download/v0.2.0a1/SHA256SUMS.txt). In your Python virtual environment, from the download directory:
+
+```bash
+python -m pip install ./ml_super_calculator-0.2.0a1-py3-none-any.whl
+mlcalc demo --out runs/demo
+```
+
+Installation may download dependencies from your configured package index; the wheel does not bundle them. Runtime modeling stays local. These are GitHub Release downloads, not a PyPI or GitHub Packages publication. For the file-based examples below, use the [source archive](https://github.com/xinhi6716/ml-super-calculator/releases/download/v0.2.0a1/ml_super_calculator-0.2.0a1.tar.gz) or a checkout.
+
+**Or install from a checkout:**
 
 ```bash
 python -m pip install -e .
@@ -28,7 +37,7 @@ mlcalc demo --out runs/demo
 
 Open `runs/demo/report.html`. The report is a self-contained local file with no remote assets or scripts. The demo uses **288 wholly synthetic observations in 24 batches**.
 
-Python 3.10+ is declared. Development has been verified with Python 3.12.14, NumPy 2.3.5, pandas 2.2.3 and scikit-learn 1.8.0; there is no tested cross-version CI matrix yet. Installation is from this checkout, not an assumed public package-registry release. `groupbench` is an alias for `mlcalc`.
+Python 3.10+ is declared. Development has been verified with Python 3.12.14, NumPy 2.3.5, pandas 2.2.3 and scikit-learn 1.8.0; there is no tested cross-version CI matrix yet. `groupbench` is an alias for `mlcalc`.
 
 <details>
 <summary>Already have the dependencies? Run without installing or using the network.</summary>
