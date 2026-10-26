@@ -13,9 +13,11 @@ Small materials, semiconductor and process datasets rarely arrive as independent
 
 Training, reports and predictions stay on your computer. No account, hosted compute API, model-weight download or telemetry.
 
+> **Source version: 0.2.0a3.** For downloads, use the [releases page](https://github.com/xinhi6716/ml-super-calculator/releases), choose a version actually listed there, and verify its SHA-256 record. See [a3 changes and local installation steps](docs/RELEASE_NOTES_0.2.0a3.md). The explicit a2 links below remain the unchanged frozen a2 release; this document does not establish which artifacts have been published.
+
 [Download prerelease](https://github.com/xinhi6716/ml-super-calculator/releases/tag/v0.2.0a2) · [Choose a version](#choose-the-version-you-mean) · [Try the demo](#try-the-demo) · [Bring your data](#bring-your-data) · [Read the results](#read-the-results) · [Examples](#examples) · [Detailed reference (English)](docs/USAGE_REFERENCE.md)
 
-> **Prerelease:** v0.2.0a2, including an explicitly selected binary-classification workflow. This is an original sklearn-based selection and evaluation toolkit, not a pretrained foundation model, full AutoML system or TabPFN equivalent. Synthetic examples show how to use it, not real-world accuracy.
+> **Frozen download shown below:** v0.2.0a2, including an explicitly selected binary-classification workflow. This is an original sklearn-based selection and evaluation toolkit, not a pretrained foundation model, full AutoML system or TabPFN equivalent. Synthetic examples show how to use it, not real-world accuracy.
 
 ## Try the demo
 

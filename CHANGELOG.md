@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.2.0a3 — prerelease
+
+This prerelease packages the accepted source fixes after the immutable 0.2.0a2
+snapshot (`20d17c1`). It does not change estimator families, preprocessing,
+split schedules, scoring formulas or dependency requirements. A package version alone
+does not establish public availability; consult the repository Releases page.
+
+- Reject known impossible regression `--out` destinations and parent paths
+  before fitting, and apply the same early rejection to binary output paths.
+  Regular files and broken links cannot silently pass these preflights. The
+  checks do not reserve paths or replace existing write-time race/permission guards.
+- Preserve the validated CSV header identity across parsers. Reject inputs whose
+  names are silently transformed (including duplicate-BOM header collisions)
+  rather than selecting a target, group or feature against a changed schema.
+- Reject bare-string or bytes Python API feature lists. Use an explicit sequence,
+  for example `features=["voltage"]`, instead of accidentally selecting characters.
+- Include the source-only A/nA synthetic unit-equivalence companion, exact saved
+  predictions and figure, the examples index, and the offline version-guidance
+  maintainer check. Synthetic outputs are educational software evidence, not a
+  new held-out experiment, device validation or performance guarantee.
+- Existing 0.2.0a2 tags, wheels, source archives and checksums remain unchanged.
+
+The older `Unreleased` headings below are retained historical development notes;
+they are not an additional feature list newly introduced by this prerelease.
+
+
 ## 0.2.0a2
 
 - Reject explicit empty or blank-entry `--features` allowlists before planning or fitting. Previously `--features ""` silently fell back to all eligible columns. Omit the option deliberately to retain that default. Regression and binary commands share this validation; valid feature selections, models, splits and metrics are unchanged.
