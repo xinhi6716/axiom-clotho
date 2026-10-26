@@ -199,8 +199,13 @@ def _read_training(args):
     frame, source_hash = _read_csv_with_hash(args.csv_path, group=args.group)
     if args.features_file is not None:
         features = read_feature_manifest(args.features_file)
+    elif args.features is not None:
+        features = [c.strip() for c in args.features.split(",")]
+        if any(not name for name in features):
+            raise ValueError("--features requires non-empty comma-separated column names. "
+                             "Omit --features only when you intend to use all eligible columns.")
     else:
-        features = [c.strip() for c in args.features.split(",")] if args.features else None
+        features = None
     return frame, features, source_hash
 
 
