@@ -12,7 +12,7 @@ A local-first ML calculator for small materials, semiconductor, and process data
 
 Read a CSV → hold out entire groups → compare local baselines → inspect an offline report → refit and predict new rows. No account, hosted compute API, model-weight download, or telemetry.
 
-**Status:** v0.2.0a1 prerelease candidate, including an explicitly selected binary-classification workflow. An original sklearn-based selection/evaluation toolkit, not a pretrained foundation model, full AutoML system, or TabPFN equivalent. Synthetic examples demonstrate the workflow, not real-world accuracy.
+**Status:** This reference describes the source checkout, including an explicitly selected binary-classification workflow. The `v0.2.0a2` download is a frozen snapshot; newer source-only features and guards are not added to that download. [Choose the version you mean](../README.md#choose-the-version-you-mean) before following these instructions. An original sklearn-based selection/evaluation toolkit, not a pretrained foundation model, full AutoML system, or TabPFN equivalent. Synthetic examples demonstrate the workflow, not real-world accuracy.
 
 ## Run the demo
 
