@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.0b2 — portable measurement bundle identities
+
+- Use slash-separated receipt inventory keys on every host, fixing rejection of nested prepared/run bundles caused by Windows path separators. The regression simulates Windows path serialization; it is not native Windows validation.
+- Include the wheel-first installation guidance, feature-selection examples, binary protocol guidance and refreshed product roadmap added after frozen b1.
+- Preserve model families, learned preprocessing, group splits, metrics, receipt schemas, input safeguards and dependency requirements. Frozen b1 and earlier artifacts/tags remain unchanged.
+- See the [b2 release guide](docs/RELEASE_NOTES_0.3.0b2.md) for verification boundaries and local installation. Source versioning alone does not establish publication.
+
 ## 0.3.0b1 — Clotho beta source
 
 - Add the complete explicit measurement → target join → grouped comparison → target-free prediction → saved scoring route.

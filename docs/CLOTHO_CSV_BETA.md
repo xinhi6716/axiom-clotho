@@ -2,7 +2,7 @@
 
 **Moirai family · local regression beta · unreleased source candidate.**
 
-Candidate version: **0.3.0b1**. The distribution name remains `ml-super-calculator`
+Source version: **0.3.0b2**. The distribution name remains `ml-super-calculator`
 temporarily so existing imports and scripts have one owner. See the explicit
 [version/upgrade boundary](CLOTHO_BETA_MIGRATION.md); this is not an already
 published release or a claim that existing user environments were upgraded.

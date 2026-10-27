@@ -7,13 +7,13 @@
 | Product | **Axiom Clotho** (Moirai family) |
 | Canonical repository | [`axiom-clotho`](https://github.com/xinhi6716/axiom-clotho), renamed in place from the calculator repository |
 | Distribution name for this beta | **`ml-super-calculator`**, intentionally retained |
-| New candidate version | **`0.3.0b1`** |
+| New candidate version | **`0.3.0b2`** |
 | Primary additive CLI | `clotho` |
 | Preserved interfaces | `mlcalc`, `groupbench`, `mlcalc-workflow`, `import groupbench` |
 | Proposed release route | GitHub-only prerelease after independent acceptance; no PyPI upload |
 
 The repository rename is verified (same repository ID `1431307608`); beta
-publication is still a separate action and is not implied by the name. Frozen `v0.2.0a4` and earlier tags, source archives
+publication is still a separate action and is not implied by the name. Frozen `v0.3.0b1`, `v0.2.0a4` and earlier tags, source archives
 and binaries must remain untouched. New beta assets must use their own version,
 not replace an older download under an old filename.
 
@@ -38,7 +38,7 @@ python -m pip show ml-super-calculator
 python -m pip check
 
 # Local reviewed beta wheel; no index access or dependency downloads:
-python -m pip install --no-index --no-deps --upgrade ./ml_super_calculator-0.3.0b1-py3-none-any.whl
+python -m pip install --no-index --no-deps --upgrade ./ml_super_calculator-0.3.0b2-py3-none-any.whl
 
 python -m pip check
 clotho --version
@@ -48,7 +48,7 @@ python -c "import groupbench; from importlib.metadata import version; print(grou
 clotho components
 ```
 
-The version checks should agree on `0.3.0b1`. `--no-deps` is intentional only when
+The version checks should agree on `0.3.0b2`. `--no-deps` is intentional only when
 the already-provisioned environment satisfies the unchanged declared requirements;
 it does not install missing dependencies. If checks fail, stop and provision or
 repair a separate environment deliberately rather than allowing an unexpected
@@ -75,6 +75,10 @@ That distribution rename is **not part of this beta**. No renamed distribution,
 PyPI project, package-index credential or account permission was created here.
 
 ## What was verified, and what was not
+
+For b2, see the [release guide](RELEASE_NOTES_0.3.0b2.md). The portable inventory fix does not change the distribution name or model/split/metric contracts. Native Windows, Python 3.10 and a minimum-dependency matrix remain unverified.
+
+### Historical b1 verification
 
 An isolated `0.3.0b1` source probe passed the complete 545-test suite with the
 optional legacy integration cases enabled. Its wheel metadata retained the

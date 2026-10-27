@@ -15,7 +15,9 @@
 
 [**I / 開始**](#begin) · [**II / 絲線**](#thread) · [**III / 閱讀證據**](#evidence) · [**IV / 遠景**](#horizon)
 
-> **[下載 0.3.0b1 beta](https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.3.0b1)** · 本機運算 · 使用者明確提供目標。wheel 與原始碼封存檔固定於 `aec0c6a`；main 後續文件改動不包含在這批凍結資產中。
+> **[下載 0.3.0b2 beta](https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.3.0b2)** · 本機運算 · 使用者明確提供目標。請在此版本發布後使用下方 b2 路線；發布前，這些內容只是候選版操作說明。凍結的 b1 僅保留在舊版章節。
+
+> **目前原始碼：0.3.0b2。** 已納入量測封包清單的跨平台路徑修正；凍結的 b1 不含此修正。安裝前請到[發布頁](https://github.com/xinhi6716/axiom-clotho/releases)確認已接受的 b2 資產；原始碼版本標記不代表發布收據。[b2 變更與驗證範圍](docs/RELEASE_NOTES_0.3.0b2.md)。
 
 <picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/threshold-1-dark.svg"><img src="docs/assets/threshold-1-light.svg" width="100%" alt=""></picture>
 
@@ -36,24 +38,24 @@
 
 ### 安裝 beta
 
-從 **[0.3.0b1 發布頁](https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.3.0b1)** 下載 wheel、相符的原始碼封存檔與 `SHA256SUMS.txt`。核對校驗碼，再於獨立且相容的環境安裝：
+發布後，從 **[0.3.0b2 發布頁](https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.3.0b2)** 下載 wheel、相符的原始碼封存檔與 `SHA256SUMS.txt`。核對校驗碼，再於獨立且相容的環境安裝：
 
 ```bash
-python -m pip install --no-index --no-deps ./ml_super_calculator-0.3.0b1-py3-none-any.whl
+python -m pip install --no-index --no-deps ./ml_super_calculator-0.3.0b2-py3-none-any.whl
 clotho --version
 ```
 
-需 Python ≥3.10，以及既有的 `numpy>=1.24,<3`、`pandas>=2,<3`、`scikit-learn>=1.4,<2`、`threadpoolctl>=3,<4`。宣告範圍不代表每個版本組合都已測試。這個指令不會下載缺少的相依套件；詳見[安裝指南](docs/RELEASE_NOTES_0.3.0b1.md#install-a-verified-local-wheel)。解壓相符的原始碼封存檔，才能取得下方「絲線」範例需要的資料；CLI 不會自行下載。若偏好原始碼 checkout，可使用下方替代路線。
+需 Python ≥3.10，以及既有的 `numpy>=1.24,<3`、`pandas>=2,<3`、`scikit-learn>=1.4,<2`、`threadpoolctl>=3,<4`。宣告範圍不代表每個版本組合都已測試。這個指令不會下載缺少的相依套件；詳見[安裝指南](docs/RELEASE_NOTES_0.3.0b2.md#installation-and-reproducible-example)。解壓相符的原始碼封存檔，才能取得下方「絲線」範例需要的資料；CLI 不會自行下載。若偏好原始碼 checkout，可使用下方替代路線。
 
 <details>
 <summary><strong>從原始碼安裝已審核的 beta 核心</strong> · 全新 checkout 與虛擬環境</summary>
 
-固定 commit 包含已審核的 beta 核心與 Clotho 視覺改版。這是可重現的原始碼安裝路線；已公開的 wheel 資產請另查發布索引。
+版本發布後，不變的 `v0.3.0b2` tag 會標示已審核的原始碼，包含量測封包清單的跨平台路徑修正。使用此原始碼安裝路線前，請先核對發布收據與相符的 wheel／原始碼資產。
 
 ```bash
 git clone https://github.com/xinhi6716/axiom-clotho.git clotho-source
 cd clotho-source
-git checkout --detach aec0c6a56730df8159ecf4922c2e1215d467b3f5
+git checkout --detach v0.3.0b2
 python -m venv .venv
 # POSIX 啟用；Windows 改用 .venv\Scripts\activate。
 . .venv/bin/activate
@@ -62,7 +64,7 @@ clotho --version
 ```
 
 
-預期版本為 `0.3.0b1`。安裝可能從設定索引取得建置／執行相依套件；離線使用需事先備妥相容環境。這不是 PyPI 發布聲明。已發布且核對校驗碼的本機 beta wheel 另有[安裝指南](docs/RELEASE_NOTES_0.3.0b1.md#install-a-verified-local-wheel)。
+上方 b2 wheel 與固定 tag 的原始碼 checkout 都回報 `0.3.0b2`。詳見 [b2 發行指南](docs/RELEASE_NOTES_0.3.0b2.md)。安裝可能從設定索引取得建置／執行相依套件；離線使用需事先備妥相容環境。這不是 PyPI 發布聲明。已發布且核對校驗碼的本機 beta wheel 另有[安裝指南](docs/RELEASE_NOTES_0.3.0b2.md#installation-and-reproducible-example)。
 
 </details>
 
@@ -304,14 +306,45 @@ mlcalc binary predict examples/synthetic_binary_process.csv examples/new_binary_
 
 報告外觀不改動選模、切分或指標。跨瀏覽器與行動裝置的呈現檢查仍待完成。
 
-[輸入契約](docs/CLOTHO_CSV_BETA.md) · [評估協定](docs/PROTOCOL.md) · [Beta 發行指南](docs/RELEASE_NOTES_0.3.0b1.md) · [路線圖](ROADMAP.md) · [安全說明](SECURITY.md)
+[輸入契約](docs/CLOTHO_CSV_BETA.md) · [評估協定](docs/PROTOCOL.md) · [Beta 發行指南](docs/RELEASE_NOTES_0.3.0b2.md) · [路線圖](ROADMAP.md) · [安全說明](SECURITY.md)
 
 <details>
-<summary><strong>舊版發行與回退</strong> · 凍結的 a4、a3 與更早檔案</summary>
+<summary><strong>舊版發行與回退</strong> · 凍結的 b1、a4、a3 與更早檔案</summary>
 
 ## 舊版發行
 
 <a id="先選擇要使用的版本"></a>
+
+### 舊版 b1 — 已凍結，仍受封包清單路徑問題影響
+
+[v0.3.0b1](https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.3.0b1)
+固定於 `aec0c6a56730df8159ecf4922c2e1215d467b3f5`，**不含**量測封包清單的
+跨平台路徑修正。新安裝請使用 b2；以下獨立舊版路線僅供重現凍結的 b1。
+原有資產、tag 與校驗碼都保持不變。[歷史 b1 指南](docs/RELEASE_NOTES_0.3.0b1.md)。
+
+若已備妥相容相依套件，先核對原始 b1 wheel 自己的發布校驗碼，再於獨立環境安裝：
+
+```bash
+python -m pip install --no-index --no-deps ./ml_super_calculator-0.3.0b1-py3-none-any.whl
+clotho --version
+```
+
+若要精確的歷史原始碼，請使用全新 checkout 與環境：
+
+```bash
+git clone https://github.com/xinhi6716/axiom-clotho.git clotho-b1-source
+cd clotho-b1-source
+git checkout --detach aec0c6a56730df8159ecf4922c2e1215d467b3f5
+python -m venv .venv
+# POSIX 啟用；Windows 改用 .venv\Scripts\activate。
+. .venv/bin/activate
+python -m pip install -e .
+clotho --version
+```
+
+兩條舊版路線都回報 `0.3.0b1`，不是 b2。原始碼安裝可能取得建置或執行相依套件；
+計算器不會自行進行這類下載。
+
 
 已核驗的**舊計算器預發布版為 [v0.2.0a4](https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.2.0a4)**，對應 [`f838ab0` 原始碼](https://github.com/xinhi6716/axiom-clotho/tree/f838ab032b06d3f85a6b56dee2f940342a32aded)。它包含雙語計算器報告、所有群組檢視、原始碼位元組紀錄與保存區間評估 CLI，**不含**新的 Clotho CSV 指令。wheel、原始碼封存檔與校驗碼保持不變。
 

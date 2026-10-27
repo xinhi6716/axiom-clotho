@@ -15,7 +15,9 @@ Prepare device measurements, compare models without mixing declared batches, and
 
 [**I / Begin**](#begin) · [**II / The thread**](#thread) · [**III / Read the evidence**](#evidence) · [**IV / Horizon**](#horizon)
 
-> **[Download 0.3.0b1 beta](https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.3.0b1)** · local computation · explicit user-supplied endpoints. The wheel and source archive are pinned to `aec0c6a`; later documentation changes on main are not part of those frozen assets.
+> **[Download 0.3.0b2 beta](https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.3.0b2)** · local computation · explicit user-supplied endpoints. Use the b2 routes below after this release is published; before publication they are release-candidate instructions. Frozen b1 is retained only in the legacy section.
+
+> **Current source: 0.3.0b2.** It includes the portable measurement-bundle inventory fix; frozen b1 does not. Confirm accepted b2 artifacts on the [Releases page](https://github.com/xinhi6716/axiom-clotho/releases) before installing; this source label is not a publication receipt. [b2 changes and verification scope](docs/RELEASE_NOTES_0.3.0b2.md).
 
 <picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/threshold-1-dark.svg"><img src="docs/assets/threshold-1-light.svg" width="100%" alt=""></picture>
 
@@ -36,24 +38,24 @@ The repository is now **`axiom-clotho`**. The distribution deliberately remains 
 
 ### Install the beta
 
-Download the wheel, matching source archive and `SHA256SUMS.txt` from the **[0.3.0b1 release](https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.3.0b1)**. Verify the checksums, then install the wheel in a separate compatible environment:
+After publication, download the wheel, matching source archive and `SHA256SUMS.txt` from the **[0.3.0b2 release](https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.3.0b2)**. Verify the checksums, then install the wheel in a separate compatible environment:
 
 ```bash
-python -m pip install --no-index --no-deps ./ml_super_calculator-0.3.0b1-py3-none-any.whl
+python -m pip install --no-index --no-deps ./ml_super_calculator-0.3.0b2-py3-none-any.whl
 clotho --version
 ```
 
-Requires Python ≥3.10 and existing `numpy>=1.24,<3`, `pandas>=2,<3`, `scikit-learn>=1.4,<2`, and `threadpoolctl>=3,<4`. Declared bounds are not a fully tested version matrix. This command does not fetch missing dependencies. The [installation guide](docs/RELEASE_NOTES_0.3.0b1.md#install-a-verified-local-wheel) explains that boundary. Extract the matching source archive for the fixture files used in **The thread** below; they are not downloaded by the CLI. Prefer a source checkout? Use the alternative below.
+Requires Python ≥3.10 and existing `numpy>=1.24,<3`, `pandas>=2,<3`, `scikit-learn>=1.4,<2`, and `threadpoolctl>=3,<4`. Declared bounds are not a fully tested version matrix. This command does not fetch missing dependencies. The [installation guide](docs/RELEASE_NOTES_0.3.0b2.md#installation-and-reproducible-example) explains that boundary. Extract the matching source archive for the fixture files used in **The thread** below; they are not downloaded by the CLI. Prefer a source checkout? Use the alternative below.
 
 <details>
 <summary><strong>Install the reviewed beta core from source</strong> · new checkout and virtual environment</summary>
 
-The pinned commit includes the reviewed beta core and its Clotho visual refinement. This is a reproducible source-install path; check the release index separately for published wheel assets.
+After the release is published, its immutable `v0.3.0b2` tag identifies the reviewed source, including the portable measurement-bundle inventory fix. Check the release receipt and matching wheel/source assets before using this source-install route.
 
 ```bash
 git clone https://github.com/xinhi6716/axiom-clotho.git clotho-source
 cd clotho-source
-git checkout --detach aec0c6a56730df8159ecf4922c2e1215d467b3f5
+git checkout --detach v0.3.0b2
 python -m venv .venv
 # POSIX activation; on Windows use .venv\Scripts\activate instead.
 . .venv/bin/activate
@@ -62,7 +64,7 @@ clotho --version
 ```
 
 
-The expected version is `0.3.0b1`. Installation may fetch build/runtime dependencies from your configured index. Offline use requires an already-provisioned compatible environment. No PyPI publication is implied. The published checksum-verified beta wheel has a separate [installation guide](docs/RELEASE_NOTES_0.3.0b1.md#install-a-verified-local-wheel).
+The b2 wheel and tagged source checkout above both report `0.3.0b2`. See the [b2 release guide](docs/RELEASE_NOTES_0.3.0b2.md). Installation may fetch build/runtime dependencies from your configured index. Offline use requires an already-provisioned compatible environment. No PyPI publication is implied. The published checksum-verified beta wheel has a separate [installation guide](docs/RELEASE_NOTES_0.3.0b2.md#installation-and-reproducible-example).
 
 </details>
 
@@ -304,14 +306,47 @@ Today is deliberately narrower: fixed-condition device-level measurement regress
 
 Report styling does not change model selection, splits or metrics. Cross-browser and mobile presentation checks are still pending.
 
-[Input contract](docs/CLOTHO_CSV_BETA.md) · [Evaluation protocol](docs/PROTOCOL.md) · [Beta release guide](docs/RELEASE_NOTES_0.3.0b1.md) · [Roadmap](ROADMAP.md) · [Security](SECURITY.md)
+[Input contract](docs/CLOTHO_CSV_BETA.md) · [Evaluation protocol](docs/PROTOCOL.md) · [Beta release guide](docs/RELEASE_NOTES_0.3.0b2.md) · [Roadmap](ROADMAP.md) · [Security](SECURITY.md)
 
 <details>
-<summary><strong>Legacy releases and rollback</strong> · frozen a4, a3 and earlier assets</summary>
+<summary><strong>Legacy releases and rollback</strong> · frozen b1, a4, a3 and earlier assets</summary>
 
 ## Legacy releases
 
 <a id="choose-the-version-you-mean"></a>
+
+### Legacy b1 — frozen and affected by the inventory-path bug
+
+[v0.3.0b1](https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.3.0b1)
+is pinned to `aec0c6a56730df8159ecf4922c2e1215d467b3f5`. It does **not** include
+the portable measurement-bundle inventory fix. Use b2 for a new installation;
+these separate legacy routes are retained only to reproduce the frozen b1 version.
+Its original assets, tag and checksums remain unchanged. [Historical b1 guide](docs/RELEASE_NOTES_0.3.0b1.md).
+
+With compatible dependencies already provisioned, verify the original b1 wheel's
+own release checksum before installing it in a separate environment:
+
+```bash
+python -m pip install --no-index --no-deps ./ml_super_calculator-0.3.0b1-py3-none-any.whl
+clotho --version
+```
+
+For the exact historical source instead, use a fresh checkout and environment:
+
+```bash
+git clone https://github.com/xinhi6716/axiom-clotho.git clotho-b1-source
+cd clotho-b1-source
+git checkout --detach aec0c6a56730df8159ecf4922c2e1215d467b3f5
+python -m venv .venv
+# POSIX activation; on Windows use .venv\Scripts\activate instead.
+. .venv/bin/activate
+python -m pip install -e .
+clotho --version
+```
+
+Both legacy routes report `0.3.0b1`, not b2. Source installation may fetch build
+or runtime dependencies; no such download is performed by the calculator.
+
 
 The verified **legacy calculator prerelease is [v0.2.0a4](https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.2.0a4)**, from source [`f838ab0`](https://github.com/xinhi6716/axiom-clotho/tree/f838ab032b06d3f85a6b56dee2f940342a32aded). It includes the bilingual calculator reports, all-groups view, source-byte metadata and saved-interval CLI, **not** the new Clotho CSV commands. Its wheel, source archive and checksums remain unchanged.
 
