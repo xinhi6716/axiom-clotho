@@ -125,6 +125,10 @@ frozen a3 download and does not certify loaded code, a build or reproducibility.
 
 Current-source reports also explain [what the chosen split can answer](docs/PROTOCOL.md#read-the-split-scope): group-heldout is not automatically domain-heldout, and no separate random-row comparison is run. A note appears when every recorded group has one row. This report guidance is not included in frozen a3 and does not change scores or splitting rules.
 
+Have more than 15 groups? In current-source reports, choose **View all N groups** below the highest-error table to inspect every group's saved metrics in ID order. The compact worst-15 view stays available; no scores are recalculated. Frozen a3 reports remain unchanged.
+
+Full tables are not truncated to fit: binary output rejects a payload over 64 MiB; `verify` has the same per-file limit.
+
 Regression compares **Dummy mean, Ridge and Extra Trees** with the same folds and preprocessing. Hyperparameters are selected inside each outer training partition. The `selected` entry evaluates the selection procedure, rather than choosing a winner after inspecting the outer test scores. Families do **not** receive equal compute budgets.
 
 Group MAE gives each group equal weight; row MAE and RMSE pool observations. Constant-target or one-row R² is `null`. Do not repeatedly tune against the outer leaderboard and then present those same scores as unbiased evidence. [Full evaluation protocol](docs/PROTOCOL.md)

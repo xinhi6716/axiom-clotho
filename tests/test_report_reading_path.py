@@ -1,5 +1,7 @@
 """Renderer-only tests: hand-authored values, no estimator fitting."""
 import copy
+import html
+import re
 from html.parser import HTMLParser
 from types import SimpleNamespace
 import unittest
@@ -32,6 +34,73 @@ class ReadingPathTests(unittest.TestCase):
         self.before = copy.deepcopy(self.result)
         self.text = render_html(self.result)
         self.document = Document(self.text)
+
+    def _set_group_count(self, count):
+        template = self.result.summary['models']['selected']['per_group'][0]
+        self.result.summary['models']['selected']['per_group'] = [
+            dict(copy.deepcopy(template), group=f'g-{i:05d}', mae=float(i % 3),
+                 rmse=float(i % 3) + .5, bias=-i / 10, n_rows=i + 1)
+            for i in reversed(range(count))
+        ]
+
+    @staticmethod
+    def _body(text, caption):
+        return text.split(f'<caption id="{caption}">', 1)[1].split('<tbody>', 1)[1].split('</tbody>', 1)[0]
+
+    def test_all_group_toggle_uses_record_count_not_manifest_count(self):
+        for count in (0, 1, 15, 16, 20000):
+            with self.subTest(count=count):
+                self.result = fixture()
+                self._set_group_count(count)
+                self.result.manifest['n_groups'] = 2 if count > 15 else 999
+                text = render_html(self.result)
+                self.assertEqual('<details class="all-groups">' in text, count > 15)
+                self.assertEqual(self._body(text, 'groups-table').count('<tr>'), min(count, 15))
+                if count > 15:
+                    self.assertIn(f'<summary>View all {count} groups</summary>', text)
+                    self.assertEqual(self._body(text, 'all-groups-table').count('<tr>'), count)
+                    self.assertNotIn('<details class="all-groups" open', text)
+
+    def test_all_groups_id_order_escaped_values_and_worst_order_are_exact(self):
+        self._set_group_count(16)
+        groups = self.result.summary['models']['selected']['per_group']
+        names = ['2', '10', '群組<&"', 'é', 'e\u0301', '</th><script>alert(1)</script>']
+        for row, name in zip(groups, names):
+            row['group'] = name
+        groups[-1]['group'] = '長' * 300
+        text = render_html(self.result)
+        ids = lambda body: re.findall(r'<th scope="row">(.*?)</th>', body)
+        expected_all = sorted(groups, key=lambda row: row['group'])
+        self.assertEqual(ids(self._body(text, 'all-groups-table')),
+                         [html.escape(row['group'], quote=True) for row in expected_all])
+        self.assertEqual(ids(self._body(text, 'groups-table')),
+                         [html.escape(row['group'], quote=True) for row in sorted(groups, key=lambda r: -r['mae'])[:15]])
+        for row in groups:
+            cells = (f'<td>{row["n_rows"]}</td><td>{row["mae"]:,.4f}</td>'
+                     f'<td>{row["rmse"]:,.4f}</td><td>{row["bias"]:,.4f}</td>')
+            self.assertIn(cells, self._body(text, 'all-groups-table'))
+        self.assertNotIn('<script', text)
+
+    def test_all_groups_native_structure_and_repeat_render_do_not_mutate(self):
+        self._set_group_count(16)
+        before = copy.deepcopy(self.result)
+        text = render_html(self.result)
+        self.assertEqual(text, render_html(self.result))
+        self.assertEqual(self.result.summary, before.summary)
+        self.assertEqual(self.result.manifest, before.manifest)
+        doc = Document(text)
+        ids = [attrs['id'] for _, attrs in doc.tags if 'id' in attrs]
+        self.assertEqual(len(ids), len(set(ids)))
+        region = [attrs for _, attrs in doc.tags if attrs.get('aria-labelledby') == 'all-groups-table']
+        self.assertEqual(len(region), 1)
+        self.assertEqual(region[0]['role'], 'region')
+        self.assertEqual(region[0]['tabindex'], '0')
+        self.assertEqual(sum(tag == 'summary' for tag, _ in doc.tags), 1)
+        self.assertIn('Selected procedure: all groups (ID order)', text)
+        self.assertIn('summary:focus-visible', text)
+        self.assertFalse(any(tag in ('script', 'iframe', 'form') for tag, _ in doc.tags))
+        self.assertEqual([a['href'] for t, a in doc.tags if t == 'a'],
+                         [a['href'] for t, a in self.document.tags if t == 'a'])
 
     def test_unique_ids_and_resolved_anchors(self):
         ids = [a['id'] for _, a in self.document.tags if 'id' in a]
