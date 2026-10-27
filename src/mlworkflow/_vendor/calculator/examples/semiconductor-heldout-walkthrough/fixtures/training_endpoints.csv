@@ -1,0 +1,13 @@
+device_id,target
+invented_fab/lot_A/batch_1/wafer_1/device_1,0.8
+invented_fab/lot_A/batch_1/wafer_1/device_2,1.0
+invented_fab/lot_A/batch_1/wafer_1/device_3,1.2
+invented_fab/lot_A/batch_2/wafer_1/device_1,1.4
+invented_fab/lot_A/batch_2/wafer_1/device_2,1.6
+invented_fab/lot_A/batch_2/wafer_1/device_3,1.8
+invented_fab/lot_B/batch_1/wafer_1/device_1,1.1
+invented_fab/lot_B/batch_1/wafer_1/device_2,1.0
+invented_fab/lot_B/batch_1/wafer_1/device_3,1.3
+invented_fab/lot_B/batch_2/wafer_1/device_1,1.5
+invented_fab/lot_B/batch_2/wafer_1/device_2,1.4
+invented_fab/lot_B/batch_2/wafer_1/device_3,1.7

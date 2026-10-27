@@ -19,6 +19,14 @@ Training, reports and predictions stay on your computer. No account, hosted comp
 
 > **Download shown below:** v0.2.0a3, including an explicitly selected binary-classification workflow. This is an original sklearn-based selection and evaluation toolkit, not a pretrained foundation model, full AutoML system or TabPFN equivalent. Synthetic examples show how to use it, not real-world accuracy.
 
+## Single-distribution measurement workflow (unreleased source)
+
+The new `mlcalc-workflow` entry point extracts declared measurement CSVs and runs
+the existing invented semiconductor end-to-end example without a second toolbox
+checkout. It preserves `mlcalc` / `groupbench`; this is a bounded integration, not
+real-data validation or a replacement for the frozen releases.
+[Commands, input contract and boundaries](docs/INTEGRATED_MEASUREMENT_WORKFLOW.md).
+
 ## Try the demo
 
 ### Choose the version you mean

@@ -9,7 +9,7 @@ description = "Local-first ML Super Calculator: grouped regression and explicit 
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
-license-files = ["LICENSE"]
+license-files = ["LICENSE", "src/mlworkflow/_vendor/semiconductor/LICENSE"]
 authors = [{name = "GroupBench contributors"}]
 keywords = ["machine-learning", "materials", "regression", "binary-classification", "group-cross-validation", "reproducibility"]
 classifiers = [
@@ -23,6 +23,14 @@ dependencies = ["numpy>=1.24,<3", "pandas>=2,<3", "scikit-learn>=1.4,<2", "threa
 [project.scripts]
 mlcalc = "groupbench.cli:main"
 groupbench = "groupbench.cli:main"
+mlcalc-workflow = "mlworkflow.cli:main"
+
+[tool.setuptools]
+include-package-data = false
 
 [tool.setuptools.packages.find]
 where = ["src"]
+namespaces = false
+
+[tool.setuptools.package-data]
+mlworkflow = ["_vendor/**/*", "_vendor/manifest.json"]

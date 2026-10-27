@@ -1,0 +1,102 @@
+{
+  "schema_version": "ml-workflow-components-v1",
+  "policy": "Transitional pinned byte-identical resources; do not independently edit. Refresh from reviewed upstream source and rerun parity checks.",
+  "components": [
+    {
+      "component": "semiconductor",
+      "repository": "https://github.com/xinhi6716/semiconductor-machine-learning-toolbox",
+      "commit": "4c0ec2ae3eaa4e0b7afc9aaf8f9bada544e7c0de",
+      "license": "MIT",
+      "license_file": "semiconductor/LICENSE",
+      "files": [
+        {
+          "path": "LICENSE",
+          "sha256": "811fc9e23203f3e6cf9d5441ff60342bae71dde1cbdb90c9fad81740b7ae7e0a",
+          "git_blob_sha1": "e30de29cdc65af0bc8a3d676c05262ddd60bff9b",
+          "bytes": 1108
+        },
+        {
+          "path": "examples/measurement-to-features/README.md",
+          "sha256": "2311c83aa6d08bf8ed72ccdb4eed3f559c758e1891e5c3889f6758a61bf7970e",
+          "git_blob_sha1": "156634373c7d58055bee422500ef7d012c372555",
+          "bytes": 14105
+        },
+        {
+          "path": "examples/measurement-to-features/build_features.py",
+          "sha256": "33fa0362b17519784976401c616ee74e2544f72b35c652979c52a5583d0e7b1d",
+          "git_blob_sha1": "366d719be7a02de48d2967f5b6f69e1792eabf54",
+          "bytes": 21559
+        },
+        {
+          "path": "examples/measurement-to-features/generate_synthetic.py",
+          "sha256": "c39e8a3e603b2df69b7c86eaa1875800e843e7eb4420d0668d49f3a4b112c8a0",
+          "git_blob_sha1": "c7f02c148efd907fe69010a0eff96cfb52550e42",
+          "bytes": 2935
+        },
+        {
+          "path": "tools/iv-readpoint/iv_readpoint.py",
+          "sha256": "756adf6cc1c838042479347544c725fee07302c18e22c15ab03333632197fabd",
+          "git_blob_sha1": "ae40065aea6c8e79cbe74bf8565e92d3ffac3e0c",
+          "bytes": 12825
+        },
+        {
+          "path": "tools/physical-holdout-audit/physical_holdout_audit.py",
+          "sha256": "8cf6a4db7af386479ff1dce173a7e94870e5b4043fba5a13c8919b7e4554847f",
+          "git_blob_sha1": "b7ed7bfdb7f20beb2830e31bf28d29d30e1b71a6",
+          "bytes": 14251
+        },
+        {
+          "path": "tools/rram-window/rram_window.py",
+          "sha256": "9c800b852c540113d7a1884b3a9242be2b83a080923af753a77a9f84ca940874",
+          "git_blob_sha1": "153d9ec53af263e78a1b665814ca39c4262a3151",
+          "bytes": 16488
+        }
+      ]
+    },
+    {
+      "component": "calculator",
+      "repository": "https://github.com/xinhi6716/ml-super-calculator",
+      "commit": "1f26d265411c86b0c6b30a01bc04d3605f312997",
+      "license": "MIT",
+      "license_file": "calculator/LICENSE",
+      "files": [
+        {
+          "path": "LICENSE",
+          "sha256": "cd0b20e4cf4de53fb44212e9c8f6d3610abbfbfa27b34ef4902febb0fcd8f4e8",
+          "git_blob_sha1": "3eb8963afdea3bda56fb91342a5fce93f195893c",
+          "bytes": 1080
+        },
+        {
+          "path": "examples/semiconductor-heldout-walkthrough/run.py",
+          "sha256": "786ec5f009041f6965c582a10d302c5ff7e1c54a5942cf7127051dd58b19bea1",
+          "git_blob_sha1": "1bcd9ae36b92ee044c54454fbbff45c7ffdc6a79",
+          "bytes": 20958
+        },
+        {
+          "path": "examples/semiconductor-heldout-walkthrough/README.md",
+          "sha256": "19cda19d96f245809c243a2970080bfeef0d348ef06e84ca0c2824610c3ffd2b",
+          "git_blob_sha1": "2fd5f14823a6bfd340864d55296924f5d95762c3",
+          "bytes": 9299
+        },
+        {
+          "path": "examples/semiconductor-heldout-walkthrough/fixtures/training_endpoints.csv",
+          "sha256": "fcb70fc0e1d72dacce60ef0fa25f24546f589c627f9034181570ed74ca8fe3e9",
+          "git_blob_sha1": "4b08ef6507e82f9c5d7f284cf2cecf121b845fdb",
+          "bytes": 593
+        },
+        {
+          "path": "examples/semiconductor-heldout-walkthrough/fixtures/heldout_outcomes.csv",
+          "sha256": "488e2c22284d1c9122800fdaaf914e5d7a9888dabd35e4627b1389af6e6a8d77",
+          "git_blob_sha1": "507da46644872324bd03d005d296e75a03c29a02",
+          "bytes": 305
+        },
+        {
+          "path": "examples/environment-heldout-comparison/probe.py",
+          "sha256": "cb36832601fa540a2b2f2840ec35c78ea757a14b0541a1722f596cb2ad8bb895",
+          "git_blob_sha1": "f178e3a02931dcf563126f9b4dbf2685119f637c",
+          "bytes": 31427
+        }
+      ]
+    }
+  ]
+}
