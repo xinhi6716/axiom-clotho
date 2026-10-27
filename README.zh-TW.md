@@ -29,7 +29,7 @@
 | 你有什麼 | 從哪裡開始 |
 | --- | --- |
 | 支援的 I–V 量測、訓練目標與明確裝置群組 | 下方的**四階段量測流程**。 |
-| 用於群組迴歸或明確二元分類的數值／類別表格 | 既有**[表格計算器](#tabular-start)**：`clotho tabular`、`mlcalc` 或 `groupbench`。 |
+| 用於群組迴歸或明確二元分類的數值／類別表格 | 既有[表格計算器](#tabular-start)：`clotho tabular`、`mlcalc` 或 `groupbench`。 |
 | 已存預測與後來觀察到的結果 | 完整 Clotho 群體用 **`clotho score`**；其他保存資料分析仍由表格計算器提供。 |
 
 倉庫已更名為 **`axiom-clotho`**。發行套件刻意保留 **`ml-super-calculator`**，讓既有匯入與 CLI 名稱維持單一擁有者。不要同時安裝另一個擁有重疊檔案的套件。[相容性與遷移](docs/CLOTHO_BETA_MIGRATION.md)。
