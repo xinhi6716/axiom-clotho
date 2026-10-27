@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.2.0a4 — UNPUBLISHED local candidate r3
+
+This candidate packages accepted source improvements through `e4eea047`;
+it is not a published release. The frozen a3 download remains unchanged.
+
+- Read regression and binary reports in English or Traditional Chinese using offline native controls.
+- Access the existing no-fit saved-interval evaluator through `mlcalc evaluate-intervals`.
+- Display very small nonzero regression errors in rounded scientific notation rather than apparent zeros; saved values are unchanged.
+- Inspect the selected procedure, difficult groups and split record through report navigation.
+- View every group's saved metrics when a report has more than 15 groups, while retaining the compact worst-15 table.
+- See which supplied group axis the evaluation separates, without mistaking it for an additional domain or random-row comparison.
+- Record observed own-package source bytes (or unavailability) in results and reports. This self-reported metadata does not authenticate loaded code or a build.
+- Include the corresponding first-run documentation and regression tests.
+
+No model family, preprocessing, split algorithm, metric formula, dependency
+requirement or output-file set is changed by this packaging step. See the
+[unpublished candidate notes](docs/RELEASE_NOTES_0.2.0a4_CANDIDATE.md).
+
 ## 0.2.0a3 — prerelease
 
 This prerelease packages the accepted source fixes after the immutable 0.2.0a2

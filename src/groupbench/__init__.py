@@ -1,6 +1,6 @@
 """Local-first grouped tabular regression. No network or model downloads."""
 
-__version__ = "0.2.0a3"
+__version__ = "0.2.0a4"
 
 from .data import make_materials_fixture
 from .evaluation import BenchmarkResult, benchmark
