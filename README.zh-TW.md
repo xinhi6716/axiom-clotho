@@ -15,11 +15,9 @@
 
 [**I / 開始**](#begin) · [**II / 絲線**](#thread) · [**III / 閱讀證據**](#evidence) · [**IV / 遠景**](#horizon)
 
-> **[下載 0.3.0b2 beta](https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.3.0b2)** · 本機運算 · 使用者明確提供目標。請在此版本發布後使用下方 b2 路線；發布前，這些內容只是候選版操作說明。凍結的 b1 僅保留在舊版章節。
+> **[已發布 beta：0.3.0b2](https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.3.0b2)** · 本機運算 · 使用者明確提供目標。下方安裝步驟使用這份固定版本，已包含量測封包清單的跨平台路徑修正。[變更與驗證範圍](docs/RELEASE_NOTES_0.3.0b2.md)。凍結的 b1 保留在舊版章節。
 
-> **目前原始碼：0.3.0b2。** 已納入量測封包清單的跨平台路徑修正；凍結的 b1 不含此修正。安裝前請到[發布頁](https://github.com/xinhi6716/axiom-clotho/releases)確認已接受的 b2 資產；原始碼版本標記不代表發布收據。[b2 變更與驗證範圍](docs/RELEASE_NOTES_0.3.0b2.md)。
-
-> **尚未發布的 FET 原始碼候選路線：**[每個複合裝置身分只接受一段明確宣告的量測分支](docs/FET_DEVICE_REGRESSION.md)，另有 v2 整合說明。這條候選路線**不包含在已發布且凍結的 b2 資產中**；下方 b2 安裝步驟不會安裝它。
+> **`main` 的內容：**[FET 裝置迴歸路線](docs/FET_DEVICE_REGRESSION.md)已整合進原始碼，但不包含在 `v0.3.0b2` tag 或已發布的 b2 資產中。套件版本目前仍顯示 `0.3.0b2`；這條尚未發行的路線請依連結中的指南操作。
 
 <picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/threshold-1-dark.svg"><img src="docs/assets/threshold-1-light.svg" width="100%" alt=""></picture>
 
@@ -40,7 +38,7 @@
 
 ### 安裝 beta
 
-發布後，從 **[0.3.0b2 發布頁](https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.3.0b2)** 下載 wheel、相符的原始碼封存檔與 `SHA256SUMS.txt`。核對校驗碼，再於獨立且相容的環境安裝：
+從 **[0.3.0b2 發布頁](https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.3.0b2)** 下載 wheel、相符的原始碼封存檔與 `SHA256SUMS.txt`。核對校驗碼，再於獨立且相容的環境安裝：
 
 ```bash
 python -m pip install --no-index --no-deps ./ml_super_calculator-0.3.0b2-py3-none-any.whl
@@ -52,7 +50,7 @@ clotho --version
 <details>
 <summary><strong>從原始碼安裝已審核的 beta 核心</strong> · 全新 checkout 與虛擬環境</summary>
 
-版本發布後，不變的 `v0.3.0b2` tag 會標示已審核的原始碼，包含量測封包清單的跨平台路徑修正。使用此原始碼安裝路線前，請先核對發布收據與相符的 wheel／原始碼資產。
+固定的 `v0.3.0b2` tag 對應已發布的 beta 原始碼，包含量測封包清單的跨平台路徑修正。使用此原始碼安裝路線前，請先核對發布收據與相符的 wheel／原始碼資產。
 
 ```bash
 git clone https://github.com/xinhi6716/axiom-clotho.git clotho-source
@@ -66,7 +64,7 @@ clotho --version
 ```
 
 
-上方 b2 wheel 與固定 tag 的原始碼 checkout 都回報 `0.3.0b2`。詳見 [b2 發行指南](docs/RELEASE_NOTES_0.3.0b2.md)。安裝可能從設定索引取得建置／執行相依套件；離線使用需事先備妥相容環境。這不是 PyPI 發布聲明。已發布且核對校驗碼的本機 beta wheel 另有[安裝指南](docs/RELEASE_NOTES_0.3.0b2.md#installation-and-reproducible-example)。
+上方 b2 wheel 與固定 tag 的原始碼 checkout 都回報 `0.3.0b2`。詳見 [b2 發行指南](docs/RELEASE_NOTES_0.3.0b2.md)。安裝可能從設定索引取得建置／執行相依套件；離線使用需事先備妥相容環境。這不是 PyPI 發布聲明。wheel 安裝與校驗碼核對方式請見[安裝指南](docs/RELEASE_NOTES_0.3.0b2.md#installation-and-reproducible-example)。
 
 </details>
 
@@ -122,7 +120,7 @@ clotho score --run-dir clotho-run \
 
 </details>
 
-換用自己的量測時，請提供[原始檔、分區、訓練目標及明確設定](docs/CLOTHO_CSV_BETA.md)。目前路線限於**固定宣告條件下每裝置一列**、batch／wafer／device 分組與選定電阻特徵。科學目標意義與特徵取得時序仍由你負責。
+換用自己的量測時，請提供[原始檔、分區、訓練目標及明確設定](docs/CLOTHO_CSV_BETA.md)。這條 b2 路線限於**固定宣告條件下每裝置一列**、batch／wafer／device 分組與選定電阻特徵。科學目標意義與特徵取得時序仍由你負責。
 
 <picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/threshold-3-dark.svg"><img src="docs/assets/threshold-3-light.svg" width="100%" alt=""></picture>
 

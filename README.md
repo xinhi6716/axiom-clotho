@@ -15,11 +15,9 @@ Prepare device measurements, compare models without mixing declared batches, and
 
 [**I / Begin**](#begin) · [**II / The thread**](#thread) · [**III / Read the evidence**](#evidence) · [**IV / Horizon**](#horizon)
 
-> **[Download 0.3.0b2 beta](https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.3.0b2)** · local computation · explicit user-supplied endpoints. Use the b2 routes below after this release is published; before publication they are release-candidate instructions. Frozen b1 is retained only in the legacy section.
+> **[Published beta: 0.3.0b2](https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.3.0b2)** · local computation · explicit user-supplied endpoints. The installation steps below use this fixed release, including the portable measurement-bundle inventory fix. [Changes and verification scope](docs/RELEASE_NOTES_0.3.0b2.md). Frozen b1 remains in the legacy section.
 
-> **Current source: 0.3.0b2.** It includes the portable measurement-bundle inventory fix; frozen b1 does not. Confirm accepted b2 artifacts on the [Releases page](https://github.com/xinhi6716/axiom-clotho/releases) before installing; this source label is not a publication receipt. [b2 changes and verification scope](docs/RELEASE_NOTES_0.3.0b2.md).
-
-> **Unreleased FET source candidate:** [one declared acquisition per composite device](docs/FET_DEVICE_REGRESSION.md) now has a separate v2 integration guide. This candidate-only route is **not in the frozen published b2 assets**; the b2 installation instructions below do not install it.
+> **On `main`:** the [FET device-regression route](docs/FET_DEVICE_REGRESSION.md) is integrated in source but not included in the `v0.3.0b2` tag or published b2 assets. The package version still reads `0.3.0b2`; use the linked guide for this unreleased route.
 
 <picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/threshold-1-dark.svg"><img src="docs/assets/threshold-1-light.svg" width="100%" alt=""></picture>
 
@@ -40,7 +38,7 @@ The repository is now **`axiom-clotho`**. The distribution deliberately remains 
 
 ### Install the beta
 
-After publication, download the wheel, matching source archive and `SHA256SUMS.txt` from the **[0.3.0b2 release](https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.3.0b2)**. Verify the checksums, then install the wheel in a separate compatible environment:
+Download the wheel, matching source archive and `SHA256SUMS.txt` from the **[0.3.0b2 release](https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.3.0b2)**. Verify the checksums, then install the wheel in a separate compatible environment:
 
 ```bash
 python -m pip install --no-index --no-deps ./ml_super_calculator-0.3.0b2-py3-none-any.whl
@@ -52,7 +50,7 @@ Requires Python ≥3.10 and existing `numpy>=1.24,<3`, `pandas>=2,<3`, `scikit-l
 <details>
 <summary><strong>Install the reviewed beta core from source</strong> · new checkout and virtual environment</summary>
 
-After the release is published, its immutable `v0.3.0b2` tag identifies the reviewed source, including the portable measurement-bundle inventory fix. Check the release receipt and matching wheel/source assets before using this source-install route.
+The fixed `v0.3.0b2` tag identifies the published beta source, including the portable measurement-bundle inventory fix. Check the release receipt and matching wheel/source assets before using this source-install route.
 
 ```bash
 git clone https://github.com/xinhi6716/axiom-clotho.git clotho-source
@@ -66,7 +64,7 @@ clotho --version
 ```
 
 
-The b2 wheel and tagged source checkout above both report `0.3.0b2`. See the [b2 release guide](docs/RELEASE_NOTES_0.3.0b2.md). Installation may fetch build/runtime dependencies from your configured index. Offline use requires an already-provisioned compatible environment. No PyPI publication is implied. The published checksum-verified beta wheel has a separate [installation guide](docs/RELEASE_NOTES_0.3.0b2.md#installation-and-reproducible-example).
+The b2 wheel and tagged source checkout above both report `0.3.0b2`. See the [b2 release guide](docs/RELEASE_NOTES_0.3.0b2.md). Installation may fetch build/runtime dependencies from your configured index. Offline use requires an already-provisioned compatible environment. No PyPI publication is implied. For wheel installation and checksum verification, see the [installation guide](docs/RELEASE_NOTES_0.3.0b2.md#installation-and-reproducible-example).
 
 </details>
 
@@ -122,7 +120,7 @@ Expected structure: **18 devices → 12 training + 6 prediction**; four training
 
 </details>
 
-For your measurements, replace the invented inputs with your own [raw files, partitions, training targets and explicit configuration](docs/CLOTHO_CSV_BETA.md). The current route is **one row per device at a fixed declared condition**, batch/wafer/device grouping, and selected resistance predictors. Scientific endpoint meaning and feature timing remain your responsibility.
+For your measurements, replace the invented inputs with your own [raw files, partitions, training targets and explicit configuration](docs/CLOTHO_CSV_BETA.md). This b2 route is **one row per device at a fixed declared condition**, batch/wafer/device grouping, and selected resistance predictors. Scientific endpoint meaning and feature timing remain your responsibility.
 
 <picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/threshold-3-dark.svg"><img src="docs/assets/threshold-3-light.svg" width="100%" alt=""></picture>
 
