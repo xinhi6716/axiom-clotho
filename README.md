@@ -15,9 +15,9 @@ Prepare device measurements, compare models without mixing declared batches, and
 
 [**I / Begin**](#begin) · [**II / The thread**](#thread) · [**III / Read the evidence**](#evidence) · [**IV / Horizon**](#horizon)
 
-> **[Published beta: 0.3.0b2](https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.3.0b2)** · local computation · explicit user-supplied endpoints. The installation steps below use this fixed release, including the portable measurement-bundle inventory fix. [Changes and verification scope](docs/RELEASE_NOTES_0.3.0b2.md). Frozen b1 remains in the legacy section.
+> **[Download 0.3.0b3 beta](https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.3.0b3)** · local computation · explicit user-supplied endpoints. This release includes FET device regression alongside the existing RRAM and tabular workflows. [Changes and verification scope](docs/RELEASE_NOTES_0.3.0b3.md).
 
-> **On `main`:** the [FET device-regression route](docs/FET_DEVICE_REGRESSION.md) is integrated in source but not included in the `v0.3.0b2` tag or published b2 assets. The package version still reads `0.3.0b2`; use the linked guide for this unreleased route.
+> **FET transfer data?** Start with the [FET device-regression guide](docs/FET_DEVICE_REGRESSION.md): one declared acquisition per `(lot, wafer, device)`, two explicit measurement descriptors and the same grouped ML core. Frozen b2 and earlier releases remain available for rollback.
 
 <picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/threshold-1-dark.svg"><img src="docs/assets/threshold-1-light.svg" width="100%" alt=""></picture>
 
@@ -30,7 +30,8 @@ Choose the route that matches your data—not a different product.
 
 | You have… | Start here |
 | --- | --- |
-| Supported I–V measurements, training endpoints and declared device groups | The **four-stage measurement workflow** below. |
+| RRAM I–V measurements, training endpoints and declared device groups | The **four-stage measurement workflow** below. |
+| Canonical FET transfer curves, composite device IDs and separate endpoints | The **[FET four-stage example](examples/fet-device-regression/README.md)**. |
 | A numeric/categorical table for grouped regression or explicit binary classification | The existing **[tabular calculator](#tabular-start)**, via `clotho tabular`, `mlcalc` or `groupbench`. |
 | Saved predictions and later observed outcomes | **`clotho score`** for a complete Clotho cohort; other saved analyses remain in the tabular calculator. |
 
@@ -38,24 +39,24 @@ The repository is now **`axiom-clotho`**. The distribution deliberately remains 
 
 ### Install the beta
 
-Download the wheel, matching source archive and `SHA256SUMS.txt` from the **[0.3.0b2 release](https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.3.0b2)**. Verify the checksums, then install the wheel in a separate compatible environment:
+Download the wheel, matching source archive and `SHA256SUMS.txt` from the **[0.3.0b3 release](https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.3.0b3)**. Verify the checksums, then install the wheel in a separate compatible environment:
 
 ```bash
-python -m pip install --no-index --no-deps ./ml_super_calculator-0.3.0b2-py3-none-any.whl
+python -m pip install --no-index --no-deps ./ml_super_calculator-0.3.0b3-py3-none-any.whl
 clotho --version
 ```
 
-Requires Python ≥3.10 and existing `numpy>=1.24,<3`, `pandas>=2,<3`, `scikit-learn>=1.4,<2`, and `threadpoolctl>=3,<4`. Declared bounds are not a fully tested version matrix. This command does not fetch missing dependencies. The [installation guide](docs/RELEASE_NOTES_0.3.0b2.md#installation-and-reproducible-example) explains that boundary. Extract the matching source archive for the fixture files used in **The thread** below; they are not downloaded by the CLI. Prefer a source checkout? Use the alternative below.
+Requires Python ≥3.10 and existing `numpy>=1.24,<3`, `pandas>=2,<3`, `scikit-learn>=1.4,<2`, and `threadpoolctl>=3,<4`. Declared bounds are not a fully tested version matrix. This command does not fetch missing dependencies. The [installation guide](docs/RELEASE_NOTES_0.3.0b3.md#installation-and-reproducible-example) explains that boundary. Extract the matching source archive for the fixture files used in **The thread** below; they are not downloaded by the CLI. Prefer a source checkout? Use the alternative below.
 
 <details>
 <summary><strong>Install the reviewed beta core from source</strong> · new checkout and virtual environment</summary>
 
-The fixed `v0.3.0b2` tag identifies the published beta source, including the portable measurement-bundle inventory fix. Check the release receipt and matching wheel/source assets before using this source-install route.
+The fixed `v0.3.0b3` tag identifies the beta source with both RRAM v1 and FET v2 workflows. Check the release receipt and matching wheel/source assets before using this source-install route.
 
 ```bash
 git clone https://github.com/xinhi6716/axiom-clotho.git clotho-source
 cd clotho-source
-git checkout --detach v0.3.0b2
+git checkout --detach v0.3.0b3
 python -m venv .venv
 # POSIX activation; on Windows use .venv\Scripts\activate instead.
 . .venv/bin/activate
@@ -64,7 +65,7 @@ clotho --version
 ```
 
 
-The b2 wheel and tagged source checkout above both report `0.3.0b2`. See the [b2 release guide](docs/RELEASE_NOTES_0.3.0b2.md). Installation may fetch build/runtime dependencies from your configured index. Offline use requires an already-provisioned compatible environment. No PyPI publication is implied. For wheel installation and checksum verification, see the [installation guide](docs/RELEASE_NOTES_0.3.0b2.md#installation-and-reproducible-example).
+The b3 wheel and tagged source checkout above both report `0.3.0b3`. See the [b3 release guide](docs/RELEASE_NOTES_0.3.0b3.md). Installation may fetch build/runtime dependencies from your configured index. Offline use requires an already-provisioned compatible environment. No PyPI publication is implied. For wheel installation and checksum verification, see the [installation guide](docs/RELEASE_NOTES_0.3.0b3.md#installation-and-reproducible-example).
 
 </details>
 
@@ -120,7 +121,7 @@ Expected structure: **18 devices → 12 training + 6 prediction**; four training
 
 </details>
 
-For your measurements, replace the invented inputs with your own [raw files, partitions, training targets and explicit configuration](docs/CLOTHO_CSV_BETA.md). This b2 route is **one row per device at a fixed declared condition**, batch/wafer/device grouping, and selected resistance predictors. Scientific endpoint meaning and feature timing remain your responsibility.
+For your measurements, replace the invented inputs with your own [raw files, partitions, training targets and explicit configuration](docs/CLOTHO_CSV_BETA.md). This b3 RRAM route is **one row per device at a fixed declared condition**, batch/wafer/device grouping, and selected resistance predictors. Scientific endpoint meaning and feature timing remain your responsibility.
 
 <picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/threshold-3-dark.svg"><img src="docs/assets/threshold-3-light.svg" width="100%" alt=""></picture>
 
@@ -306,20 +307,24 @@ Today is deliberately narrower: fixed-condition device-level measurement regress
 
 Report styling does not change model selection, splits or metrics. Cross-browser and mobile presentation checks are still pending.
 
-[Input contract](docs/CLOTHO_CSV_BETA.md) · [Evaluation protocol](docs/PROTOCOL.md) · [Beta release guide](docs/RELEASE_NOTES_0.3.0b2.md) · [Roadmap](ROADMAP.md) · [Security](SECURITY.md)
+[Input contract](docs/CLOTHO_CSV_BETA.md) · [Evaluation protocol](docs/PROTOCOL.md) · [Beta release guide](docs/RELEASE_NOTES_0.3.0b3.md) · [Roadmap](ROADMAP.md) · [Security](SECURITY.md)
 
 <details>
-<summary><strong>Legacy releases and rollback</strong> · frozen b1, a4, a3 and earlier assets</summary>
+<summary><strong>Legacy releases and rollback</strong> · frozen b2, b1, a4, a3 and earlier assets</summary>
 
 ## Legacy releases
 
 <a id="choose-the-version-you-mean"></a>
 
+### Legacy b2 — RRAM and tabular beta, without FET
+
+[v0.3.0b2](https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.3.0b2) retains the portable bundle-path fix but does not contain the FET v2 adapter. Its tag, wheel, source archive and checksums are unchanged. Use its own [historical installation guide](docs/RELEASE_NOTES_0.3.0b2.md) for a separate rollback environment.
+
 ### Legacy b1 — frozen and affected by the inventory-path bug
 
 [v0.3.0b1](https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.3.0b1)
 is pinned to `aec0c6a56730df8159ecf4922c2e1215d467b3f5`. It does **not** include
-the portable measurement-bundle inventory fix. Use b2 for a new installation;
+the portable measurement-bundle inventory fix. Use b3 for a new installation;
 these separate legacy routes are retained only to reproduce the frozen b1 version.
 Its original assets, tag and checksums remain unchanged. [Historical b1 guide](docs/RELEASE_NOTES_0.3.0b1.md).
 
@@ -344,7 +349,7 @@ python -m pip install -e .
 clotho --version
 ```
 
-Both legacy routes report `0.3.0b1`, not b2. Source installation may fetch build
+Both legacy routes report `0.3.0b1`, not b3. Source installation may fetch build
 or runtime dependencies; no such download is performed by the calculator.
 
 

@@ -1,9 +1,8 @@
 # Invented FET device regression — explicit v2 interface
 
-> **Unreleased source candidate only.** This FET adapter is not in the frozen
-> published b2 assets. See the [candidate integration guide](../../docs/FET_DEVICE_REGRESSION.md).
-> The candidate still carries the baseline package version; that label alone
-> does not establish which source is installed.
+> **Included in Clotho 0.3.0b3.** Install the b3 wheel and extract its matching
+> source archive for these input files. See the [integration guide](../../docs/FET_DEVICE_REGRESSION.md)
+> and [installation instructions](../../docs/RELEASE_NOTES_0.3.0b3.md).
 
 This example connects a **declared, canonical transfer table** to the existing
 Clotho prepare → plan → run → score workflow. It is original invented arithmetic,
@@ -68,27 +67,29 @@ and use a new destination rather than repairing it silently.
 
 ## Four stages
 
-From the explicitly reviewed candidate source root, with its existing ML
-dependencies available, use these POSIX-shell source commands. They do not
-install the candidate or fetch dependencies. Choose fresh output directories
-outside the input directory:
+After installing b3, run from the matching extracted source archive or tagged
+checkout, with the existing ML dependencies available. These commands do not
+fetch dependencies. Choose fresh output directories outside the input directory:
 
 ```sh
-PYTHONPATH=src python -m mlworkflow prepare \
+clotho prepare \
   --input-dir examples/fet-device-regression/fixtures/raw \
   --partitions examples/fet-device-regression/fixtures/partitions.csv \
   --training-targets examples/fet-device-regression/fixtures/training_targets.csv \
   --config examples/fet-device-regression/fixtures/config.json \
   --output-dir fet-prepared
 
-PYTHONPATH=src python -m mlworkflow plan --prepared fet-prepared
-PYTHONPATH=src python -m mlworkflow run --prepared fet-prepared --output-dir fet-run
+clotho plan --prepared fet-prepared
+clotho run --prepared fet-prepared --output-dir fet-run
 
 # Later outcomes enter only this separate saved-prediction evaluation.
-PYTHONPATH=src python -m mlworkflow score --run-dir fet-run \
+clotho score --run-dir fet-run \
   --outcomes examples/fet-device-regression/fixtures/heldout_outcomes.csv \
   --output-dir fet-score
 ```
+
+For an uninstalled source checkout, replace `clotho` with
+`PYTHONPATH=src python -m mlworkflow`.
 
 The first stage performs measurement extraction and **zero ML model fits**;
 windowed log-slope extraction does descriptive least squares. Plan performs zero

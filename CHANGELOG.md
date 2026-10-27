@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.0b3 — FET device regression
+
+- Package the accepted FET v2 adapter: signed-current criterion VGS and descriptive windowed log-current slope, one declared acquisition per composite physical device, and exact external endpoint joins.
+- Reuse the existing grouped ML core; preserve RRAM v1, model families, preprocessing, splits, metrics and dependency bounds.
+- Include the original invented FET example in the matching source archive, with runtime adapters, pinned MIT extractors and licenses in the wheel.
+- Keep b2, b1, a4 and earlier tags/assets unchanged. See the [b3 release guide](docs/RELEASE_NOTES_0.3.0b3.md) for installation, data boundaries and verification limits.
+
 ## 0.3.0b2 — portable measurement bundle identities
 
 - Use slash-separated receipt inventory keys on every host, fixing rejection of nested prepared/run bundles caused by Windows path separators. The regression simulates Windows path serialization; it is not native Windows validation.

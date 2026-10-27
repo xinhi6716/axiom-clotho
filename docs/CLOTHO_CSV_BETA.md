@@ -1,15 +1,13 @@
 # Axiom Clotho — a complete, bounded CSV workflow
 
-**Moirai family · local regression beta · unreleased source candidate.**
+**Moirai family · local regression beta · RRAM v1 contract.**
 
-Source version: **0.3.0b2**. The distribution name remains `ml-super-calculator`
-temporarily so existing imports and scripts have one owner. See the explicit
-[version/upgrade boundary](CLOTHO_BETA_MIGRATION.md); this is not an already
-published release or a claim that existing user environments were upgraded.
+Version: **0.3.0b3**. The distribution remains `ml-super-calculator` so existing
+imports and scripts have one owner. See the [version/upgrade boundary](CLOTHO_BETA_MIGRATION.md).
 
-> **Separate unreleased FET candidate:** see [FET device regression](FET_DEVICE_REGRESSION.md)
-> for the explicit v2 composite-device contract. It is not included in the frozen
-> published b2 assets. The remainder of this page describes **RRAM v1**, not FET.
+> **FET transfer data:** b3 also includes [FET device regression](FET_DEVICE_REGRESSION.md)
+> with the explicit v2 composite-device contract. The remainder of this page
+> describes **RRAM v1**, not FET.
 
 Clotho now does more than run a bundled synthetic demonstration: it accepts your
 own declared measurement CSVs, joins your own training endpoints by exact device

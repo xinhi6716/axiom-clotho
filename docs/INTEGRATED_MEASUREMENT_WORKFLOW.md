@@ -1,6 +1,6 @@
 # One distribution: measurement features and an invented end-to-end walkthrough
 
-**Unreleased source candidate.** This additive integration does not rename the
+**Bundled legacy walkthrough.** This additive integration does not rename the
 project or change `mlcalc`, `groupbench`, their Python APIs, or frozen a4 assets.
 It removes the second-toolbox-checkout requirement for this bounded workflow.
 It is not yet a consolidation of all ML tools, a general real-data training
@@ -14,7 +14,7 @@ From this source tree, with the calculator's existing dependencies available:
 PYTHONPATH=src python -m mlworkflow demo --output-dir semiconductor-demo --run-invented-example
 ```
 
-For a distribution built from this candidate, the equivalent new entry point is:
+For the installed distribution, the equivalent entry point is:
 
 ```bash
 mlcalc-workflow demo --output-dir semiconductor-demo --run-invented-example

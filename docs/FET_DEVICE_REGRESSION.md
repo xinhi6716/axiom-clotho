@@ -1,10 +1,8 @@
-# FET device regression — unreleased source candidate
+# FET device regression — Clotho 0.3.0b3
 
-> **Source-candidate feature, not a published release capability.** This FET v2
-> adapter is not included in the frozen published `0.3.0b2` wheel, source archive,
-> or tag. The working candidate still carries the baseline package version;
-> `--version` alone is not evidence of FET availability. Use the explicitly
-> reviewed candidate source for the commands below, not the published b2 assets.
+The b3 wheel includes the FET v2 adapter and pinned extractors. Use its matching
+source archive for the invented input files below. Frozen b2 and earlier assets
+do not include this route. [Installation and release scope](RELEASE_NOTES_0.3.0b3.md).
 
 This bounded route connects a declared transfer table to the existing
 **prepare → plan → run → score** workflow. It reuses the pinned signed-current
@@ -160,28 +158,28 @@ outcomes or model results.
 bounds planned ML pipeline fits, not elapsed time or memory. Declarations are
 caller assertions: do not set them true merely to make validation pass.
 
-## 3. Same four stages, candidate source only
+## 3. Same four stages
 
-These POSIX-shell commands run directly from the **candidate source root** and
-require the existing ML dependencies for plan/run. They do not install software,
-fetch a private repository or download data. Choose fresh output directories
+After installing b3, run these commands from its matching extracted source
+archive or tagged checkout. Plan/run require the existing ML dependencies. The
+commands do not fetch a private repository or download data. Choose fresh output directories
 outside the input/prepared/run directories; never modify completed bundles.
 
 ```sh
-PYTHONPATH=src python -m mlworkflow prepare \
+clotho prepare \
   --input-dir examples/fet-device-regression/fixtures/raw \
   --partitions examples/fet-device-regression/fixtures/partitions.csv \
   --training-targets examples/fet-device-regression/fixtures/training_targets.csv \
   --config examples/fet-device-regression/fixtures/config.json \
   --output-dir fet-prepared
 
-PYTHONPATH=src python -m mlworkflow plan --prepared fet-prepared
+clotho plan --prepared fet-prepared
 
-PYTHONPATH=src python -m mlworkflow run \
+clotho run \
   --prepared fet-prepared --output-dir fet-run
 
 # Only this separate command accepts the prediction cohort's later outcomes.
-PYTHONPATH=src python -m mlworkflow score --run-dir fet-run \
+clotho score --run-dir fet-run \
   --outcomes examples/fet-device-regression/fixtures/heldout_outcomes.csv \
   --output-dir fet-score
 ```
@@ -244,4 +242,5 @@ Pinned upstream assumptions:
 and [joint FET workflow](../src/mlworkflow/_vendor/semiconductor/examples/fet-measurement-to-features/README.md).
 Their optional generators, selectors, annotations and report companions are
 upstream reference context, **not a claim that all those files ship with Clotho**.
-The candidate example above is the supported FET integration route.
+The example above is the supported FET integration route. From an uninstalled
+source checkout, replace `clotho` with `PYTHONPATH=src python -m mlworkflow`.
