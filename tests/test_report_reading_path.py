@@ -1,4 +1,4 @@
-"""Renderer-only tests: hand-authored values, no estimator fitting."""
+"""Renderer-only structure/copy tests; not browser or assistive-technology checks."""
 import copy
 import html
 import re
@@ -17,6 +17,33 @@ class Document(HTMLParser):
 
     def handle_starttag(self, tag, attrs):
         self.tags.append((tag, dict(attrs)))
+
+
+def language_html(text, language):
+    """Project the renderer's escaped flat copy spans, not execute its CSS."""
+    return re.sub(r'<span class="copy-(en|zh)" lang="(?:en|zh-Hant)">([^<]*)</span>',
+                  lambda match: match[2] if match[1] == language else '', text)
+
+
+class Cells(HTMLParser):
+    def __init__(self, text):
+        super().__init__()
+        self.cells = []
+        self.current = None
+        self.feed(text)
+
+    def handle_starttag(self, tag, attrs):
+        if tag in ('td', 'th'):
+            self.current = [tag, '']
+
+    def handle_data(self, data):
+        if self.current is not None:
+            self.current[1] += data
+
+    def handle_endtag(self, tag):
+        if self.current is not None and tag == self.current[0]:
+            self.cells.append(tuple(self.current))
+            self.current = None
 
 
 def fixture():
@@ -57,7 +84,8 @@ class ReadingPathTests(unittest.TestCase):
                 self.assertEqual('<details class="all-groups">' in text, count > 15)
                 self.assertEqual(self._body(text, 'groups-table').count('<tr>'), min(count, 15))
                 if count > 15:
-                    self.assertIn(f'<summary>View all {count} groups</summary>', text)
+                    self.assertIn(f'<summary>View all {count} groups</summary>', language_html(text, 'en'))
+                    self.assertIn(f'<summary>查看全部 {count} 個群組</summary>', language_html(text, 'zh'))
                     self.assertEqual(self._body(text, 'all-groups-table').count('<tr>'), count)
                     self.assertNotIn('<details class="all-groups" open', text)
 
@@ -177,7 +205,7 @@ class ReadingPathTests(unittest.TestCase):
                          'Random-row comparison?',
                          'Not run. The seed assigns whole groups to folds',
                          'may still share a site, time period or another dependence axis'):
-            self.assertIn(expected, self.text)
+            self.assertIn(expected, language_html(self.text, 'en'))
         self.assertNotIn('batch it has never seen', self.text)
 
     def test_singleton_note_requires_positive_integer_equal_counts(self):
@@ -195,7 +223,7 @@ class ReadingPathTests(unittest.TestCase):
     def test_domain_named_group_is_displayed_not_inferred_or_certified(self):
         self.result.manifest['config']['group'] = 'domain'
         text = render_html(self.result)
-        self.assertIn('Whole-group holdout on: <code>domain</code>', text)
+        self.assertIn('Whole-group holdout on: <code>domain</code>', language_html(text, 'en'))
         self.assertIn('the scientific meaning of the IDs is not verified', text)
         self.assertIn('If that column defines the intended domain boundary', text)
         self.assertNotIn('This is not domain-heldout', text)
@@ -212,6 +240,76 @@ class ReadingPathTests(unittest.TestCase):
         self.assertIn('not recorded', text)
         self.assertEqual(self.result.manifest, before.manifest)
         self.assertEqual(self.result.summary, before.summary)
+
+    def test_native_language_controls_and_static_css_contract(self):
+        radios = [a for tag, a in self.document.tags if tag == 'input']
+        self.assertEqual(len(radios), 2)
+        self.assertTrue(all(a['type'] == 'radio' and a['name'] == 'report-language' for a in radios))
+        self.assertEqual([a['value'] for a in radios], ['en', 'zh-Hant'])
+        self.assertEqual(['checked' in a for a in radios], [True, False])
+        labels = {a['for']: a['lang'] for tag, a in self.document.tags if tag == 'label'}
+        self.assertEqual(labels, {'report-en': 'en', 'report-zh': 'zh-Hant'})
+        self.assertTrue(all(a['aria-describedby'] == 'language-help' for a in radios))
+        # Two class selectors outrank the existing .evidence-links span rule.
+        for expected in ('.report-content .copy-zh{display:none}',
+                         '#report-zh:checked ~ .report-content .copy-en{display:none}',
+                         '#report-zh:checked ~ .report-content .copy-zh{display:inline}',
+                         'input:focus-visible', '.language-title,.language-choice,.language-label{display:none}'):
+            self.assertIn(expected, self.text)
+        self.assertLess(self.text.index('id="report-zh"'), self.text.index('<div class="report-content">'))
+
+    def test_reading_path_and_limits_have_both_language_copies(self):
+        english, chinese = [language_html(self.text, language) for language in ('en', 'zh')]
+        for copy_text in ('Baseline comparison', 'Where it struggles', 'Split audit',
+                          'Reproduce this run', 'Scope &amp; limitations', 'Keep the evidence close'):
+            self.assertIn(copy_text, english)
+        for copy_text in ('基準模型比較', '表現較差的群組', '切分稽核', '重做此執行',
+                          '範圍與限制', '保留完整證據', '群組等權 MAE',
+                          '僅在內層折中選擇', '不表示提供信賴區間', '未另稽核其他領域／場域軸',
+                          '檢查碼記錄檔案位元組，不代表科學有效性'):
+            self.assertIn(copy_text, chinese)
+        self.assertNotIn('Baseline comparison', chinese)
+        self.assertNotIn('基準模型比較', english)
+        self.assertIn('Candidate failure: keep this diagnostic visible.', chinese)
+
+    def test_both_languages_share_exact_numeric_cells_and_group_order(self):
+        self._set_group_count(16)
+        self.result.summary['models']['dummy']['overall']['r2'] = None
+        text = render_html(self.result)
+        for caption in ('comparison-table', 'groups-table', 'all-groups-table', 'audit-table'):
+            with self.subTest(caption=caption):
+                en = Cells(self._body(language_html(text, 'en'), caption)).cells
+                zh = Cells(self._body(language_html(text, 'zh'), caption)).cells
+                self.assertEqual(en, [(tag, 'undefined' if tag == 'td' and value == '未定義' else value)
+                                      for tag, value in zh])
+        self.assertIn(('td', 'undefined'), Cells(self._body(language_html(text, 'en'), 'comparison-table')).cells)
+        self.assertIn(('td', '未定義'), Cells(self._body(language_html(text, 'zh'), 'comparison-table')).cells)
+
+    def test_names_and_recorded_diagnostics_remain_verbatim_in_both_views(self):
+        name = 'Rows 群組<&"'
+        self.result.manifest['config']['target'] = name
+        self.result.manifest['config']['group'] = name
+        self.result.manifest['limitations'] = [name]
+        self.result.summary['models'][name] = self.result.summary['models'].pop('dummy')
+        self.result.summary['models']['selected']['per_group'][0]['group'] = name
+        text = render_html(self.result)
+        for language in ('en', 'zh'):
+            view = language_html(text, language)
+            self.assertIn('<strong>' + html.escape(name, quote=True) + '</strong>', view)
+            self.assertIn('<li>' + html.escape(name, quote=True) + '</li>', view)
+            self.assertIn('<th scope="row">' + html.escape(name, quote=True) + '</th>', view)
+        self.assertNotIn(name, text)
+
+    def test_old_and_unavailable_source_records_are_bilingual(self):
+        for source, english, chinese in ((None, 'not recorded', '未記錄'),
+                                          ({'status': 'unavailable'}, 'unavailable', '無法取得')):
+            with self.subTest(source=source):
+                self.result.manifest.pop('package_source', None)
+                if source is not None:
+                    self.result.manifest['package_source'] = source
+                text = render_html(self.result)
+                self.assertIn('<code>' + english + '</code>', language_html(text, 'en'))
+                self.assertIn('<code>' + chinese + '</code>', language_html(text, 'zh'))
 
 
 if __name__ == '__main__':

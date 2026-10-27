@@ -127,6 +127,8 @@ Current-source reports also explain [what the chosen split can answer](docs/PROT
 
 Have more than 15 groups? In current-source reports, choose **View all N groups** below the highest-error table to inspect every group's saved metrics in ID order. The compact worst-15 view stays available; no scores are recalculated. Frozen a3 reports remain unchanged.
 
+**Source after `4098c173`:** regression reports also offer the native **English / 繁體中文** controls used by binary reports. The switch changes report copy only; values, names, recorded diagnostics and CLI language stay unchanged. This regression language control is not in frozen a3 or package builds from `4098c173` and earlier snapshots.
+
 Full tables are not truncated to fit: binary output rejects a payload over 64 MiB; `verify` has the same per-file limit.
 
 Regression compares **Dummy mean, Ridge and Extra Trees** with the same folds and preprocessing. Hyperparameters are selected inside each outer training partition. The `selected` entry evaluates the selection procedure, rather than choosing a winner after inspecting the outer test scores. Families do **not** receive equal compute budgets.
