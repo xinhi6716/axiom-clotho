@@ -27,7 +27,7 @@ To try this source-only UI, keep your a3 environment unchanged. In a separate
 Python virtual environment, choose a new checkout directory and run:
 
 ```bash
-git clone --branch main https://github.com/xinhi6716/ml-super-calculator.git mlcalc-report-source
+git clone --branch main https://github.com/xinhi6716/axiom-clotho.git mlcalc-report-source
 cd mlcalc-report-source
 git rev-parse HEAD
 python -m pip install -e .

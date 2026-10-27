@@ -11,11 +11,11 @@
 
 **從量測走向模型。**
 
-**Moirai** 家族的機器學習工作台。目前，Clotho 把有明確邊界的半導體／材料量測流程接到本機群組學習引擎。長期方向是具備可擴充領域模組的通用 ML 建構器，**不代表這些模組已經完成**。
+整理裝置量測、不混用宣告批次地比較模型，再於本機預測新樣本。Clotho 是 **Moirai** 的機器學習工作台；目前提供固定條件的裝置迴歸與群組表格學習，更廣泛的領域模組仍是未來工作。
 
 [**I / 開始**](#begin) · [**II / 絲線**](#thread) · [**III / 閱讀證據**](#evidence) · [**IV / 遠景**](#horizon)
 
-> **0.3.0b1 原始碼 beta · 本機運算 · 使用者明確提供目標。** 請以[發布索引](https://github.com/xinhi6716/axiom-clotho/releases)與同版校驗碼確認實際公開的二進位檔案；原始碼版本不是發布證明。
+> **[下載 0.3.0b1 beta](https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.3.0b1)** · 本機運算 · 使用者明確提供目標。wheel 與原始碼封存檔固定於 `aec0c6a`；main 後續文件改動不包含在這批凍結資產中。
 
 <picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/threshold-1-dark.svg"><img src="docs/assets/threshold-1-light.svg" width="100%" alt=""></picture>
 
@@ -29,20 +29,31 @@
 | 你有什麼 | 從哪裡開始 |
 | --- | --- |
 | 支援的 I–V 量測、訓練目標與明確裝置群組 | 下方的**四階段量測流程**。 |
-| 用於群組迴歸或明確二元分類的數值／類別表格 | 既有**[表格計算器](#使用自己的資料)**：`clotho tabular`、`mlcalc` 或 `groupbench`。 |
+| 用於群組迴歸或明確二元分類的數值／類別表格 | 既有**[表格計算器](#tabular-start)**：`clotho tabular`、`mlcalc` 或 `groupbench`。 |
 | 已存預測與後來觀察到的結果 | 完整 Clotho 群體用 **`clotho score`**；其他保存資料分析仍由表格計算器提供。 |
 
 倉庫已更名為 **`axiom-clotho`**。發行套件刻意保留 **`ml-super-calculator`**，讓既有匯入與 CLI 名稱維持單一擁有者。不要同時安裝另一個擁有重疊檔案的套件。[相容性與遷移](docs/CLOTHO_BETA_MIGRATION.md)。
 
+### 安裝 beta
+
+從 **[0.3.0b1 發布頁](https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.3.0b1)** 下載 wheel、相符的原始碼封存檔與 `SHA256SUMS.txt`。核對校驗碼，再於獨立且相容的環境安裝：
+
+```bash
+python -m pip install --no-index --no-deps ./ml_super_calculator-0.3.0b1-py3-none-any.whl
+clotho --version
+```
+
+需 Python ≥3.10，以及既有的 `numpy>=1.24,<3`、`pandas>=2,<3`、`scikit-learn>=1.4,<2`、`threadpoolctl>=3,<4`。宣告範圍不代表每個版本組合都已測試。這個指令不會下載缺少的相依套件；詳見[安裝指南](docs/RELEASE_NOTES_0.3.0b1.md#install-a-verified-local-wheel)。解壓相符的原始碼封存檔，才能取得下方「絲線」範例需要的資料；CLI 不會自行下載。若偏好原始碼 checkout，可使用下方替代路線。
+
 <details>
 <summary><strong>從原始碼安裝已審核的 beta 核心</strong> · 全新 checkout 與虛擬環境</summary>
 
-固定 commit 是此視覺改版之前、已審核的 beta 執行核心。若要取得最終文件與報告外觀，請使用後續相符的發布封存檔。這是原始碼路線，不宣稱 b1 wheel 已發布。
+固定 commit 包含已審核的 beta 核心與 Clotho 視覺改版。這是可重現的原始碼安裝路線；已公開的 wheel 資產請另查發布索引。
 
 ```bash
 git clone https://github.com/xinhi6716/axiom-clotho.git clotho-source
 cd clotho-source
-git checkout --detach 79fa4331dc8f6e4362ba040762bf1d652fcc78e0
+git checkout --detach aec0c6a56730df8159ecf4922c2e1215d467b3f5
 python -m venv .venv
 # POSIX 啟用；Windows 改用 .venv\Scripts\activate。
 . .venv/bin/activate
@@ -51,7 +62,7 @@ clotho --version
 ```
 
 
-預期版本為 `0.3.0b1`。安裝可能從設定索引取得建置／執行相依套件；離線使用需事先備妥相容環境。這不是 PyPI 發布聲明。**發布後**，已核對校驗碼的本機 beta wheel 另有[安裝指南](docs/RELEASE_NOTES_0.3.0b1.md#install-a-verified-local-wheel)。
+預期版本為 `0.3.0b1`。安裝可能從設定索引取得建置／執行相依套件；離線使用需事先備妥相容環境。這不是 PyPI 發布聲明。已發布且核對校驗碼的本機 beta wheel 另有[安裝指南](docs/RELEASE_NOTES_0.3.0b1.md#install-a-verified-local-wheel)。
 
 </details>
 
@@ -126,8 +137,12 @@ clotho score --run-dir clotho-run \
 
 報告是獨立本機檔案。**分享前先檢查私有 ID、目標與預測。** 計算器雙語控制只改文字，不改數字；新的量測摘要頁在此 beta 仍為英文。
 
+<a id="tabular-start"></a>
+
+**表格計算器：** 展開第一區試跑或放入自己的 CSV；結果、範例與限制各自分區，按需要閱讀。
+
 <details>
-<summary><strong>展開表格計算器參考</strong> · 原教學圖、指令、輸出與科學界線</summary>
+<summary><strong>1 / 從表格開始</strong> · 範例、輸入欄位、計畫與預測</summary>
 
 ## 試跑範例
 
@@ -194,6 +209,11 @@ mlcalc predict measurements.csv new_process_settings.csv \
 
 預測會以全部已標記資料進行群組內層選模，並在本機重新擬合。輸出使用目標原單位，不是新的測試集表現估計。不載入或儲存可執行模型，CLI 每次呼叫都會重新擬合。簡單的輸入支持範圍標記能提示未見過的值，但**不是不確定性區間，也不是分布外檢定**。[預測與輸入支持範圍細節（英文）](docs/USAGE_REFERENCE.md#predict-new-rows)
 
+</details>
+
+<details>
+<summary><strong>2 / 閱讀與核對結果</strong></summary>
+
 ## 閱讀結果
 
 | 檔案 | 用途 |
@@ -222,6 +242,11 @@ mlcalc verify runs/demo
 
 **分享前先檢查：** 報告含群組識別碼、目標值、預測值與特徵名稱。不要把私人資料與執行目錄提交至公開倉庫。CSV 未針對試算表公式做清理；使用試算表軟體開啟或上傳前，請先確認內容。
 
+</details>
+
+<details>
+<summary><strong>3 / 範例與二元分類</strong></summary>
+
 ## 範例
 
 以下詳細範例文件目前以英文撰寫。
@@ -247,6 +272,11 @@ mlcalc binary predict examples/synthetic_binary_process.csv examples/new_binary_
 
 **二元計算器報告介面：** 支援 English / 繁體中文切換、章節導覽與可用鍵盤橫向捲動的表格。切換不會改變分數或已儲存資料。[閱讀指南與版本範圍（英文）](docs/BINARY_PROTOCOL.md#read-the-offline-evaluation-report)
 
+</details>
+
+<details>
+<summary><strong>4 / 科學與資源限制</strong></summary>
+
 ## 使用界線
 
 - **謹慎選擇群組。** 批次標籤互斥，不代表未記錄的相依性已隔離；`batch × specimen` 組合標籤也不會自動隔離兩個交叉因素。目前沒有多軸或時間保留評估。
@@ -257,7 +287,7 @@ mlcalc binary predict examples/synthetic_binary_process.csv examples/new_binary_
 
 [完整技術參考（英文）](docs/USAGE_REFERENCE.md) 保留輸入、schema、算術、資源、輸出與相容性的詳細規格。文件範例不構成真實元件的準確度證據；有效的特徵 schema 也不代表沒有資料洩漏。
 
-新的量測路線另有 [8 MiB／檔、10,000 列及嚴格目標／宣告契約](docs/CLOTHO_CSV_BETA.md)，只支援迴歸，並非已整合全部工具箱格式或分析。新摘要頁的瀏覽器啟動遭作業系統拒絕，視覺呈現尚未驗證；未使用繞過方式。
+新的量測路線另有 [8 MiB／檔、10,000 列及嚴格目標／宣告契約](docs/CLOTHO_CSV_BETA.md)，只支援迴歸，並非已整合全部工具箱格式或分析。新摘要頁的跨瀏覽器、行動裝置及輔助技術呈現尚未驗證。
 
 
 </details>
