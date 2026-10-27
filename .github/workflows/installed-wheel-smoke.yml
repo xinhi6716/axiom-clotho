@@ -1,0 +1,89 @@
+name: Installed-wheel portability smoke
+
+# Deliberately manual-only. Review and authorize a run after publishing this file.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One run at a time; a newer manual run cancels the previous one.
+concurrency:
+  group: clotho-installed-wheel-smoke
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    # Standard hosted runners are free only while this repository stays public.
+    if: github.repository == 'xinhi6716/axiom-clotho' && toJSON(github.event.repository.private) == 'false'
+    name: ${{ matrix.os }} / Python ${{ matrix.python }} / synthetic smoke
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+        python: ['3.10', '3.12']
+    env:
+      PYTHONNOUSERSITE: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHONUTF8: '1'
+      OMP_NUM_THREADS: '1'
+      OPENBLAS_NUM_THREADS: '1'
+      MKL_NUM_THREADS: '1'
+      NUMEXPR_NUM_THREADS: '1'
+    steps:
+      - name: Preserve pinned resource bytes on checkout
+        shell: python
+        run: |
+          import subprocess
+          subprocess.run(['git', 'config', '--global', 'core.autocrlf', 'false'],
+                         check=True, timeout=30)
+      - name: Check out the dispatched revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Set up CPython without dependency caching
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ matrix.python }}
+          architecture: x64
+          check-latest: false
+      - name: Build, install and smoke-test outside the checkout
+        shell: python
+        run: |
+          import os
+          from pathlib import Path
+          import subprocess
+          import sys
+          import tempfile
+          import venv
+
+          source = Path(os.environ['GITHUB_WORKSPACE']).resolve()
+          work = Path(tempfile.mkdtemp(prefix='clotho-smoke-', dir=os.environ['RUNNER_TEMP']))
+          env = dict(os.environ)
+          for key in ('PYTHONPATH', 'PYTHONHOME'):
+              env.pop(key, None)
+          def run(args, timeout=300):
+              subprocess.run(list(map(str, args)), cwd=work, env=env,
+                             check=True, timeout=timeout)
+
+          # Only normal package/build dependencies from public PyPI, no ML API.
+          # No pip/setup-python cache or artifact uploads are used.
+          run([sys.executable, '-m', 'pip', '--isolated', 'wheel', '--no-deps',
+               '--no-cache-dir', '--disable-pip-version-check', '--only-binary=:all:',
+               '--index-url', 'https://pypi.org/simple', '--wheel-dir', work / 'dist', source])
+          wheels = list((work / 'dist').glob('ml_super_calculator-*.whl'))
+          if len(wheels) != 1:
+              raise RuntimeError('Expected exactly one newly built project wheel')
+          venv.EnvBuilder(with_pip=True).create(work / 'venv')
+          python = work / 'venv' / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
+          run([python, '-m', 'pip', '--isolated', 'install', '--no-cache-dir',
+               '--disable-pip-version-check', '--only-binary=:all:',
+               '--index-url', 'https://pypi.org/simple', wheels[0]])
+          run([python, '-m', 'pip', '--isolated', 'check'])
+          run([python, '-I', source / 'tools/check_installed_smoke.py',
+               '--source', source, '--work-dir', work / 'smoke',
+               '--expected-version', '0.3.0b2'], timeout=300)
