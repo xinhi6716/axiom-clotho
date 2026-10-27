@@ -151,6 +151,8 @@ mlcalc binary predict examples/synthetic_binary_process.csv examples/new_binary_
 
 This prerelease workflow expects numeric 0/1 labels and selects among prior Dummy, regularized Logistic and bounded Extra Trees using group-balanced Brier. Both labels must appear in every training partition; single-class held-out groups are retained. The threshold is fixed at p1 ≥ 0.5, not optimized for manufacturing decisions. Binary output directories must be fresh. Default regression commands stay regression even for 0/1 targets. [Binary protocol and limits](docs/BINARY_PROTOCOL.md)
 
+**Current-source binary report UI (not the frozen a3 download):** English / 繁體中文 switching, section navigation and keyboard-scrollable tables. Scores and saved data are unchanged by the switch. [Reading guide and version scope](docs/BINARY_PROTOCOL.md#read-the-offline-evaluation-report)
+
 ## Know the boundaries
 
 - **Choose groups with care.** Disjoint batch labels do not isolate unrecorded dependencies or both factors in a crossed `batch × specimen` label. Multi-axis and temporal holdouts are not implemented.

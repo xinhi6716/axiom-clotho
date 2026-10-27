@@ -153,6 +153,8 @@ mlcalc binary predict examples/synthetic_binary_process.csv examples/new_binary_
 
 這條預發布流程使用數值 0/1 標籤，以群組平衡 Brier 分數，在先驗 Dummy、正則化 Logistic 與有界 Extra Trees 中選擇。每個訓練分割都須包含兩種標籤；只有單一類別的保留群組仍會保留。門檻固定為 p1 ≥ 0.5，未針對製造決策最佳化。二元流程的輸出目錄必須是新的。預設回歸指令即使收到 0/1 目標也仍做回歸。[二元流程協定與限制（英文）](docs/BINARY_PROTOCOL.md)
 
+**目前原始碼的二元報告介面（不含於封存 a3 下載）：** 支援 English / 繁體中文切換、章節導覽與可用鍵盤橫向捲動的表格。切換不會改變分數或已儲存資料。[閱讀指南與版本範圍（英文）](docs/BINARY_PROTOCOL.md#read-the-offline-evaluation-report)
+
 ## 使用界線
 
 - **謹慎選擇群組。** 批次標籤互斥，不代表未記錄的相依性已隔離；`batch × specimen` 組合標籤也不會自動隔離兩個交叉因素。目前沒有多軸或時間保留評估。

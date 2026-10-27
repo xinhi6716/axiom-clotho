@@ -16,6 +16,44 @@ Use `PYTHONPATH=src python -m groupbench` instead of `mlcalc` in an already prov
 
 Python exports: `GroupBenchClassifier`, `BinaryBenchmarkResult`, `BinaryPredictionResult`, `benchmark_binary`, `fit_predict_binary`, `plan_binary_benchmark`, `plan_binary_prediction`, and `make_binary_fixture`. See [the example](../examples/binary_python_api.py). The estimator's inherited `score` is ordinary pooled label accuracy, not its selection objective.
 
+## Read the offline evaluation report
+
+**Current source only:** the binary report opens in English and offers a native
+English / 繁體中文 radio-button switch. This report UI is not part of the frozen
+`v0.2.0a3` download. Record the Git revision when using post-release source;
+the package version alone does not identify it. No new release is implied.
+
+To try this source-only UI, keep your a3 environment unchanged. In a separate
+Python virtual environment, choose a new checkout directory and run:
+
+```bash
+git clone --branch main https://github.com/xinhi6716/ml-super-calculator.git mlcalc-report-source
+cd mlcalc-report-source
+git rev-parse HEAD
+python -m pip install -e .
+mlcalc binary run examples/synthetic_binary_process.csv --target fail --group lot --out runs/binary-report
+```
+
+Open `runs/binary-report/report.html` and retain the printed Git revision with
+your results. `main` can advance; it is not a frozen release. Installation may
+download dependencies; with them already installed, replace `mlcalc` with
+`PYTHONPATH=src python -m groupbench` and omit the installation command.
+
+Use the section links to move from the selected procedure to difficult groups and
+the split audit. Wide tables have named keyboard-focusable scroll regions; focus a
+table and use the arrow keys, or scroll sideways on a small screen. The four local
+links open the saved metrics, run record, row probabilities and checksums. Keep all
+five evaluation files together.
+
+The language switch uses native radio controls and CSS only, with no JavaScript,
+remote assets or stored preference. Reloading a report may retain a browser's form
+state; choose English explicitly to reset the view. It changes report labels and
+guidance, not numbers, source names, recorded diagnostics, CLI text or JSON/CSV.
+A group with no observed label 1 has undefined recall; a group with no observed
+label 0 has undefined specificity. The report identifies the missing denominator
+rather than showing zero or suggesting a missing prediction. Evaluation of
+probabilities is not probability calibration.
+
 ## Labels and missing classes
 
 Targets must be one-dimensional finite real numeric values exactly 0 or 1. Validate original values before narrowing or casting: reject booleans (including `[0, True]`), complex values, in-memory string/object encodings, missing values, fractional probabilities, -1/1 and multiclass labels. `[0, 1.0]` is valid. No row is dropped, thresholded, or automatically remapped. Already-cast numeric arrays are interpreted as supplied; earlier caller conversions cannot be recovered.
