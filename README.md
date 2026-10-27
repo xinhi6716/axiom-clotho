@@ -83,6 +83,8 @@ mlcalc run measurements.csv \
 
 The target and group are excluded from predictors. Use `--features` or `--features-file` to keep IDs, post-outcome measurements and notes out too. Without an allowlist, **every other column becomes a feature**; the calculator cannot decide which inputs are scientifically valid.
 
+Export UTF-8 CSV with commas between fields and a dot for decimal numbers (such as `1.5`). If your export uses semicolon delimiters or decimal commas, change those export settings first. A feature value such as `"1,5"` is categorical text, not automatically converted to `1.5`. Before fitting, use the `plan` commands below and check the `dtype` entries in `feature_schema` for features you intend to be numeric.
+
 Prefer a ready-made input? Use the [synthetic training CSV](examples/synthetic_materials.csv) and [new process settings](examples/new_process_settings.csv). Their values are invented.
 
 ### Plan first, then fit

@@ -83,6 +83,8 @@ mlcalc run measurements.csv \
 
 目標與群組欄位會自動排除於預測特徵之外。請用 `--features` 或 `--features-file` 也排除識別碼、結果發生後的量測與備註。若未指定允許清單，**其他所有欄位都會成為特徵**；計算器無法判斷哪些輸入在科學上合理。
 
+請匯出 UTF-8 CSV：欄位用逗號分隔，小數使用小數點（如 `1.5`）。若原匯出設定是分號分欄或小數逗號，請先調整設定。特徵中的 `"1,5"` 會當作類別文字，不會自動轉成 `1.5`。擬合前，使用下方 `plan` 指令，檢查 `feature_schema` 的 `dtype` 是否符合預期的數值欄位。
+
 想先用現成輸入？可試 [合成訓練 CSV](examples/synthetic_materials.csv) 與 [新製程設定](examples/new_process_settings.csv)。這些數值都是虛構的。
 
 ### 先查看計畫，再開始訓練
