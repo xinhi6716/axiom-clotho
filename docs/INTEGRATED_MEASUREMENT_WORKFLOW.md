@@ -103,10 +103,13 @@ is a runtime import boundary, **not** a new dependency-free distribution.
 
 `mlcalc-workflow components` prints verified upstream commits, paths, SHA-256
 digests, Git blob identities and MIT license locations. The manifest lives at
-`src/mlworkflow/_vendor/manifest.json`. It pins 13 files from:
+`src/mlworkflow/_vendor/manifest.json`. The legacy bridge pins 13 files from:
 
 - Toolbox `4c0ec2ae3eaa4e0b7afc9aaf8f9bada544e7c0de`.
 - Calculator examples `1f26d265411c86b0c6b30a01bc04d3605f312997`.
+
+The current inventory additionally pins the existing research-workflow-utilities
+scorecard and its MIT notice for the newer [real-CSV beta](CLOTHO_CSV_BETA.md).
 
 This is **transitional pinned vendoring**, not a second algorithm implementation.
 Do not edit these copied components independently. Refresh only from reviewed
@@ -121,9 +124,9 @@ Manifest/hash agreement is integrity evidence, not authenticity or scientific
 validation. Python source files must be present; zip-import/bytecode-only
 distributions are not supported by this bridge.
 
-The old two-checkout example and frozen downloads remain unchanged. The new
-command intentionally does not yet integrate other toolbox tools or the
-research-workflow-utilities repository. It does not depend on agent controllers
+The old two-checkout example and frozen downloads remain unchanged. This legacy demo
+does not integrate other toolbox tools. The newer real-CSV beta integrates only
+the existing research-workflow-utilities scorecard, not that repository in full. It does not depend on agent controllers
 or skill bundles. Generalized endpoint joins, installed native adapters and
 cross-repository release coordination remain separate future design work.
 

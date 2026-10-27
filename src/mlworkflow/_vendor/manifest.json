@@ -97,6 +97,27 @@
           "bytes": 31427
         }
       ]
+    },
+    {
+      "component": "scorecard",
+      "repository": "https://github.com/xinhi6716/research-workflow-utilities",
+      "commit": "f5704c42e2cfcf8006fb8da1f88b5308df7e92d6",
+      "license": "MIT",
+      "license_file": "scorecard/tools/prediction-scorecard/LICENSE",
+      "files": [
+        {
+          "path": "tools/prediction-scorecard/LICENSE",
+          "bytes": 1080,
+          "sha256": "d3971a11a169fa197e2c3c629a3f40ce31994ebfef95cc964246570b528c29d9",
+          "git_blob_sha1": "250d1b84008bbdab6ad073b3330caee57c5fa352"
+        },
+        {
+          "path": "tools/prediction-scorecard/prediction_scorecard.py",
+          "bytes": 8075,
+          "sha256": "4dc5be191915a4abed55ef53bdadcf6e31a569a166aec59ddb760580681ff5e1",
+          "git_blob_sha1": "bffc854a6e682835b4b306cbfea47b57fd778c26"
+        }
+      ]
     }
   ]
 }

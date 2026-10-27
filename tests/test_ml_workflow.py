@@ -58,7 +58,7 @@ class WorkflowTests(unittest.TestCase):
     def test_manifest_identity_and_git_blob_parity(self):
         manifest = verify_components()
         self.assertEqual([c["commit"] for c in manifest["components"]],
-                         ["4c0ec2ae3eaa4e0b7afc9aaf8f9bada544e7c0de", "1f26d265411c86b0c6b30a01bc04d3605f312997"])
+                         ["4c0ec2ae3eaa4e0b7afc9aaf8f9bada544e7c0de", "1f26d265411c86b0c6b30a01bc04d3605f312997", "f5704c42e2cfcf8006fb8da1f88b5308df7e92d6"])
         for component in manifest["components"]:
             self.assertEqual(component["license"], "MIT")
             self.assertIn("Permission is hereby granted", (RESOURCE_ROOT / component["license_file"]).read_text())

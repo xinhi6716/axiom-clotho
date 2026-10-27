@@ -5,10 +5,14 @@ from pathlib import Path
 import re
 
 RESOURCE_ROOT = Path(__file__).resolve().parent / "_vendor"
+LICENSE_PATHS = {"semiconductor": "LICENSE", "calculator": "LICENSE",
+                 "scorecard": "tools/prediction-scorecard/LICENSE"}
 
 # The versioned inventory is independent of the manifest it validates. An empty
 # or shortened manifest must never turn integrity checking into a vacuous pass.
 EXPECTED_COMPONENTS = {
+    "scorecard": ("research-workflow-utilities", "f5704c42e2cfcf8006fb8da1f88b5308df7e92d6", {
+        "tools/prediction-scorecard/LICENSE", "tools/prediction-scorecard/prediction_scorecard.py"}),
     "semiconductor": ("semiconductor-machine-learning-toolbox", "4c0ec2ae3eaa4e0b7afc9aaf8f9bada544e7c0de", {
         "LICENSE", "examples/measurement-to-features/README.md",
         "examples/measurement-to-features/build_features.py",
@@ -51,7 +55,7 @@ def verify_components(root=None):
             repository, commit, expected_files = EXPECTED_COMPONENTS[label]
             if (component["repository"] != "https://github.com/xinhi6716/" + repository
                     or component["commit"] != commit or component["license"] != "MIT"
-                    or component["license_file"] != label + "/LICENSE"
+                    or component["license_file"] != label + "/" + LICENSE_PATHS[label]
                     or not isinstance(component["files"], list)
                     or len(component["files"]) != len(expected_files)):
                 raise ValueError

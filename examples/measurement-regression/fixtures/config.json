@@ -1,0 +1,27 @@
+{
+  "schema_version": "measurement-regression-v1",
+  "endpoint_name": "Invented independent endpoint (software fixture only)",
+  "target_unit": "arbitrary_test_units",
+  "group_by": "batch",
+  "features": [
+    "hrs_resistance_median_ohm",
+    "lrs_resistance_median_ohm",
+    "resistance_ratio_median"
+  ],
+  "max_bracket_span_V": "0.11",
+  "outer_splits": 3,
+  "inner_splits": 2,
+  "baselines": [
+    "dummy",
+    "ridge"
+  ],
+  "seed": 7,
+  "objective": "group_mae",
+  "max_fits": 200,
+  "declarations": {
+    "global_physical_ids": true,
+    "pre_outcome_features": true,
+    "endpoint_not_derived_from_features": true,
+    "measurement_assumptions_accepted": true
+  }
+}

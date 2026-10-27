@@ -19,6 +19,12 @@ Training, reports and predictions stay on your computer. No account, hosted comp
 
 > **Download shown below:** v0.2.0a3, including an explicitly selected binary-classification workflow. This is an original sklearn-based selection and evaluation toolkit, not a pretrained foundation model, full AutoML system or TabPFN equivalent. Synthetic examples show how to use it, not real-world accuracy.
 
+## Axiom Clotho CSV beta
+
+A complete, bounded local route now accepts **your own measurement CSVs and training endpoints**: `clotho prepare` → `clotho plan` → `clotho run` → separate `clotho score`. It performs exact device joins, explicit group validation, nested model comparison, target-free prediction and saved evaluation. The existing calculator remains available through `clotho tabular` or unchanged `mlcalc` / `groupbench` commands.
+
+[Start the real-CSV workflow](docs/CLOTHO_CSV_BETA.md) · [Run the invented reproduction](examples/measurement-regression/README.md). This unreleased source beta does not claim every toolbox format is integrated, and does not change frozen a4 assets.
+
 ## Single-distribution measurement workflow (unreleased source)
 
 The new `mlcalc-workflow` entry point extracts declared measurement CSVs and runs

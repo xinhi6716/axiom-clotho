@@ -1,4 +1,4 @@
-"""Single-distribution entry point for the bounded measurement workflow.
+"""Axiom Clotho: local measurement-to-regression workflows and calculator core.
 
 No ML import on help, component inspection, or measurement extraction. Extraction
 and prediction algorithms remain the pinned upstream components, not rewrites.
@@ -13,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 
+from . import __version__
 from .components import ComponentError, RESOURCE_ROOT, verify_components
 
 
@@ -73,6 +74,11 @@ def run_demo(arguments):
 def main(argv=None):
     arguments = list(sys.argv[1:] if argv is None else argv)
     try:
+        if arguments and arguments[0] == "tabular":
+            from groupbench.cli import main as calculator_main
+            return calculator_main(arguments[1:])
+        if arguments and arguments[0] in ("prepare", "plan", "run", "score"):
+            return regression_main(arguments)
         # Delegate feature parsing to its existing contract, rather than maintaining
         # a divergent option list. Unknown options still use its safe error parser.
         if arguments and arguments[0] == "features":
@@ -80,6 +86,7 @@ def main(argv=None):
         if arguments and arguments[0] == "demo":
             return run_demo(arguments[1:])
         parser = Parser(description=__doc__)
+        parser.add_argument("--version", action="version", version=f"Axiom Clotho {__version__}; measurement-regression-v1")
         parser.add_argument("command", nargs="?", choices=("components",),
                             help="verify and print pinned component identities")
         args = parser.parse_args(arguments)
@@ -87,10 +94,48 @@ def main(argv=None):
             print(json.dumps(verify_components(), indent=2, sort_keys=True))
         else:
             parser.print_help()
-            print("\nCommands: features --help | demo --help | components")
+            print("\nCommands: prepare | plan | run | score | tabular | features | demo | components (each supports --help)")
         return 0
     except (ComponentError, OSError):
         print("error: workflow arguments, local resources or output are unavailable; use --help and a complete distribution", file=sys.stderr)
+        return 2
+
+
+def regression_main(arguments):
+    from . import regression
+    from .contracts import WorkflowError
+    parser = Parser(prog="mlcalc-workflow " + arguments[0], description="Axiom Clotho: explicit device joins, grouped regression and separate saved scoring.")
+    command = arguments[0]
+    if command == "prepare":
+        parser.add_argument("--input-dir", required=True)
+        parser.add_argument("--partitions", required=True)
+        parser.add_argument("--training-targets", required=True)
+        parser.add_argument("--config", required=True)
+    elif command in ("plan", "run"):
+        parser.add_argument("--prepared", required=True)
+    else:
+        parser.add_argument("--run-dir", required=True)
+        parser.add_argument("--outcomes", required=True)
+    if command != "plan":
+        parser.add_argument("--output-dir", required=True)
+    args = parser.parse_args(arguments[1:])
+    try:
+        if command == "prepare":
+            regression.prepare(args.input_dir, args.partitions, args.training_targets, args.config, args.output_dir)
+        elif command == "plan":
+            print(json.dumps(regression.plan(args.prepared), indent=2, sort_keys=True, allow_nan=False))
+            return 0
+        elif command == "run":
+            regression.run(args.prepared, args.output_dir)
+        else:
+            regression.score(args.run_dir, args.outcomes, args.output_dir)
+        print("Completed " + command + ". Keep the complete bundle together; checksums are not scientific validation.")
+        return 0
+    except WorkflowError as error:
+        print("error: " + str(error), file=sys.stderr)
+        return 2
+    except (OSError, ImportError):
+        print("error: local I/O or existing ML dependencies are unavailable; incomplete bundles are not usable", file=sys.stderr)
         return 2
 
 

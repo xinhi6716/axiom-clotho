@@ -1,0 +1,7 @@
+device,target
+invented_fab/lot_C/batch_1/wafer_1/device_1,1.6
+invented_fab/lot_C/batch_1/wafer_1/device_2,1.3
+invented_fab/lot_C/batch_1/wafer_1/device_3,1.5
+invented_fab/lot_C/batch_2/wafer_1/device_1,0.9
+invented_fab/lot_C/batch_2/wafer_1/device_2,1.1
+invented_fab/lot_C/batch_2/wafer_1/device_3,0.8

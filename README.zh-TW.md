@@ -19,6 +19,12 @@
 
 > **下方示範的下載：** v0.2.0a3，含須明確選用的二元分類流程。這是以 sklearn 為基礎、原創的模型選擇與評估工具，不是預訓練基礎模型、完整 AutoML 系統或 TabPFN 的同等替代品。合成範例展示用法，不代表真實資料的準確度。
 
+## Axiom Clotho CSV beta
+
+現在可用**自己的量測 CSV 與自行提供的訓練目標**完成有界本機流程：`clotho prepare` → `clotho plan` → `clotho run` → 獨立的 `clotho score`。依精確裝置 ID 連接資料、明確驗證群組隔離，進行巢狀模型比較、無未來標籤的預測，再以保存的預測評分。原有計算器仍可經 `clotho tabular` 或不變的 `mlcalc`／`groupbench` 使用。
+
+[真實 CSV 使用契約](docs/CLOTHO_CSV_BETA.md) · [全合成可重現範例](examples/measurement-regression/README.md)。這是尚未發行的原始碼 beta，並非已整合所有工具箱格式；不改動凍結的 a4 資產。
+
 ## 單一套件的量測工作流程（尚未發行的原始碼）
 
 新增 `mlcalc-workflow` 入口：可由明確宣告格式的量測 CSV 萃取特徵，也能執行既有全合成的半導體端到端示例，不再需要第二份工具箱 checkout。原有 `mlcalc`／`groupbench` 不變；這只是有界整合，不代表真實資料驗證，也不改動已凍結版本。
