@@ -227,7 +227,8 @@ def load_bundle(path, kind):
             if item.is_symlink():
                 raise WorkflowError("saved bundles cannot contain symbolic links")
             if not item.is_dir():
-                actual.add(str(item.relative_to(path)))
+                # Receipt keys use '/', independently of host path separators.
+                actual.add(item.relative_to(path).as_posix())
         if actual != expected | {"COMPLETE.json"}:
             raise WorkflowError("bundle is incomplete or has unexpected files; do not repair it silently")
         receipt_raw = read_regular(path / "COMPLETE.json")
