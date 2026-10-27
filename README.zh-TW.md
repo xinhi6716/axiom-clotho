@@ -1,78 +1,151 @@
 <p align="right"><a href="README.md">English</a> · <strong>繁體中文</strong></p>
 
-# ML Super Calculator
-
-**保留整批資料做評估，再在本機預測新資料。**
+# Axiom Clotho
 
 <picture>
-  <source media="(max-width: 600px)" srcset="docs/assets/readme-workflow.zh-TW.mobile.svg">
-  <img src="docs/assets/readme-workflow.zh-TW.svg" alt="GroupBench 工作流程：準備資料表、以保留群組比較模型、檢查報告">
+  <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="docs/assets/clotho-hero-dark-mobile.svg">
+  <source media="(max-width: 600px)" srcset="docs/assets/clotho-hero-light-mobile.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/clotho-hero-dark.svg">
+  <img src="docs/assets/clotho-hero-light.svg" width="100%" alt="Axiom Clotho — the Moirai machine-learning workbench, beneath a spindle and architectural halo.">
 </picture>
 
-材料、半導體與製程的小型資料集，往往不是彼此獨立的資料列。計算器的第一個引擎 GroupBench 會在比較回歸基線時，將你指定的同批資料保留在同一側。
+**從量測走向模型。**
 
-訓練、報告和預測都留在你的電腦。不需帳號，不提供託管運算 API，也不下載模型權重或傳送遙測資料。
+**Moirai** 家族的機器學習工作台。目前，Clotho 把有明確邊界的半導體／材料量測流程接到本機群組學習引擎。長期方向是具備可擴充領域模組的通用 ML 建構器，**不代表這些模組已經完成**。
 
-> **已發布預覽版：0.2.0a3。** 從 [a3 發布頁](https://github.com/xinhi6716/ml-super-calculator/releases/tag/v0.2.0a3)安裝已審核的輸入／輸出防護修正，安裝前核對同版 SHA-256 紀錄。[變更與安裝細節（英文）](docs/RELEASE_NOTES_0.2.0a3.md)。先前的 a2 檔案保留不變，可供回退。
+[**I / 開始**](#begin) · [**II / 絲線**](#thread) · [**III / 閱讀證據**](#evidence) · [**IV / 遠景**](#horizon)
 
-[下載預發布版](https://github.com/xinhi6716/ml-super-calculator/releases/tag/v0.2.0a3) · [選擇版本](#先選擇要使用的版本) · [試跑範例](#試跑範例) · [使用自己的資料](#使用自己的資料) · [閱讀結果](#閱讀結果) · [範例](#範例) · [完整技術參考（英文）](docs/USAGE_REFERENCE.md)
+> **0.3.0b1 原始碼 beta · 本機運算 · 使用者明確提供目標。** 請以[發布索引](https://github.com/xinhi6716/axiom-clotho/releases)與同版校驗碼確認實際公開的二進位檔案；原始碼版本不是發布證明。
 
-> **下方示範的下載：** v0.2.0a3，含須明確選用的二元分類流程。這是以 sklearn 為基礎、原創的模型選擇與評估工具，不是預訓練基礎模型、完整 AutoML 系統或 TabPFN 的同等替代品。合成範例展示用法，不代表真實資料的準確度。
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/threshold-1-dark.svg"><img src="docs/assets/threshold-1-light.svg" width="100%" alt=""></picture>
 
-## Axiom Clotho CSV beta
+<a id="begin"></a>
+<a id="取得已審核的-beta-核心"></a>
 
-現在可用**自己的量測 CSV 與自行提供的訓練目標**完成有界本機流程：`clotho prepare` → `clotho plan` → `clotho run` → 獨立的 `clotho score`。依精確裝置 ID 連接資料、明確驗證群組隔離，進行巢狀模型比較、無未來標籤的預測，再以保存的預測評分。原有計算器仍可經 `clotho tabular` 或不變的 `mlcalc`／`groupbench` 使用。
+## I / 開始
 
-[真實 CSV 使用契約](docs/CLOTHO_CSV_BETA.md) · [全合成可重現範例](examples/measurement-regression/README.md)。這是尚未發行的原始碼 beta，並非已整合所有工具箱格式；不改動凍結的 a4 資產。
+依資料選擇路線，不必換成另一個產品。
 
-## 單一套件的量測工作流程（尚未發行的原始碼）
+| 你有什麼 | 從哪裡開始 |
+| --- | --- |
+| 支援的 I–V 量測、訓練目標與明確裝置群組 | 下方的**四階段量測流程**。 |
+| 用於群組迴歸或明確二元分類的數值／類別表格 | 既有**[表格計算器](#使用自己的資料)**：`clotho tabular`、`mlcalc` 或 `groupbench`。 |
+| 已存預測與後來觀察到的結果 | 完整 Clotho 群體用 **`clotho score`**；其他保存資料分析仍由表格計算器提供。 |
 
-新增 `mlcalc-workflow` 入口：可由明確宣告格式的量測 CSV 萃取特徵，也能執行既有全合成的半導體端到端示例，不再需要第二份工具箱 checkout。原有 `mlcalc`／`groupbench` 不變；這只是有界整合，不代表真實資料驗證，也不改動已凍結版本。
-[指令、輸入契約與邊界](docs/INTEGRATED_MEASUREMENT_WORKFLOW.md)。
+倉庫已更名為 **`axiom-clotho`**。發行套件刻意保留 **`ml-super-calculator`**，讓既有匯入與 CLI 名稱維持單一擁有者。不要同時安裝另一個擁有重疊檔案的套件。[相容性與遷移](docs/CLOTHO_BETA_MIGRATION.md)。
+
+<details>
+<summary><strong>從原始碼安裝已審核的 beta 核心</strong> · 全新 checkout 與虛擬環境</summary>
+
+固定 commit 是此視覺改版之前、已審核的 beta 執行核心。若要取得最終文件與報告外觀，請使用後續相符的發布封存檔。這是原始碼路線，不宣稱 b1 wheel 已發布。
+
+```bash
+git clone https://github.com/xinhi6716/axiom-clotho.git clotho-source
+cd clotho-source
+git checkout --detach 79fa4331dc8f6e4362ba040762bf1d652fcc78e0
+python -m venv .venv
+# POSIX 啟用；Windows 改用 .venv\Scripts\activate。
+. .venv/bin/activate
+python -m pip install -e .
+clotho --version
+```
+
+
+預期版本為 `0.3.0b1`。安裝可能從設定索引取得建置／執行相依套件；離線使用需事先備妥相容環境。這不是 PyPI 發布聲明。**發布後**，已核對校驗碼的本機 beta wheel 另有[安裝指南](docs/RELEASE_NOTES_0.3.0b1.md#install-a-verified-local-wheel)。
+
+</details>
+
+宣告 Python 3.10+；驗證使用 Linux／Python 3.12.14 與既有相依套件。運算留在本機，不需帳號、託管 ML API、模型權重下載或遙測。
+
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/threshold-2-dark.svg"><img src="docs/assets/threshold-2-light.svg" width="100%" alt=""></picture>
+
+<a id="thread"></a>
+<a id="這個-beta-完成什麼"></a>
+<a id="四階段快速開始"></a>
+
+## II / 絲線
+
+**Prepare → Plan → Run → Score。** 每個階段只有一項職責；後來的結果只在評分時進入。
+
+<picture>
+  <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="docs/assets/clotho-process-dark-mobile.svg">
+  <source media="(max-width: 600px)" srcset="docs/assets/clotho-process-light-mobile.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/clotho-process-dark.svg">
+  <img src="docs/assets/clotho-process-light.svg" width="100%" alt="Prepare features and training targets; inspect the plan; run grouped comparison and target-free prediction; score later outcomes without fitting.">
+</picture>
+
+| 步驟 | 做什麼 | 不做什麼 |
+| --- | --- | --- |
+| **Prepare** | 萃取支援的電阻特徵；以精確裝置 ID 連接**訓練專用目標**；驗證宣告群組。 | 不推測標籤、單位或物理分組。 |
+| **Plan** | 檢查巢狀分割、候選模型與擬合預算。 | 不擬合模型。 |
+| **Run** | 在訓練群組內比較、用訓練資料重新擬合、保存無未來標籤的預測。 | 不接受預測群體結果輸入。 |
+| **Score** | 連接後來的結果與已存預測，保存逐列與群組等權評估。 | **不新增擬合。** |
+
+<details>
+<summary><strong>執行完整四階段範例</strong> · 所有提供數值皆為虛構</summary>
+
+從 checkout 根目錄或與安裝版本相符的解壓原始碼目錄執行。輸出目錄必須全新且位於輸入之外。範例 CSV 由原始碼封存檔提供，指令不會下載它們。
+
+```bash
+clotho prepare \
+  --input-dir examples/measurement-regression/fixtures/raw \
+  --partitions examples/measurement-regression/fixtures/partitions.csv \
+  --training-targets examples/measurement-regression/fixtures/training_targets.csv \
+  --config examples/measurement-regression/fixtures/config.json \
+  --output-dir clotho-prepared
+
+clotho plan --prepared clotho-prepared
+clotho run --prepared clotho-prepared --output-dir clotho-run
+
+# 只有這個獨立評分步驟接受預測群體後來的結果。
+clotho score --run-dir clotho-run \
+  --outcomes examples/measurement-regression/fixtures/later_outcomes.csv \
+  --output-dir clotho-evaluation
+```
+
+預期結構：**18 裝置 → 12 訓練 + 6 預測**；四個訓練批次與兩個互斥預測批次；**計畫擬合 40 次**，再對六個裝置評分，**新增擬合 0 次**。這些數字檢查軟體行為，不代表真實裝置準確度。[完整重現範例](examples/measurement-regression/README.md)。
+
+</details>
+
+換用自己的量測時，請提供[原始檔、分區、訓練目標及明確設定](docs/CLOTHO_CSV_BETA.md)。目前路線限於**固定宣告條件下每裝置一列**、batch／wafer／device 分組與選定電阻特徵。科學目標意義與特徵取得時序仍由你負責。
+
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/threshold-3-dark.svg"><img src="docs/assets/threshold-3-light.svg" width="100%" alt=""></picture>
+
+<a id="evidence"></a>
+
+## III / 閱讀證據
+
+證據可讀、保持完整，這次執行才有用。
+
+| 開啟 | 用來閱讀 |
+| --- | --- |
+| `clotho-run/report.html` | 流程摘要與巢狀群組比較的連結。 |
+| `clotho-run/prediction_rows.csv` | 依精確裝置 ID 保存的未來預測，不是新的測試分數。 |
+| `clotho-evaluation/report.html` | 提供後來觀測後，獨立保存的描述性評估。 |
+| 每份輸出的 `COMPLETE.json` | 完成狀態與檔案位元組校驗，不是真實性或科學有效性認證。 |
+
+報告是獨立本機檔案。**分享前先檢查私有 ID、目標與預測。** 計算器雙語控制只改文字，不改數字；新的量測摘要頁在此 beta 仍為英文。
+
+<details>
+<summary><strong>展開表格計算器參考</strong> · 原教學圖、指令、輸出與科學界線</summary>
 
 ## 試跑範例
 
-### 先選擇要使用的版本
-
-- **已發布的 a3 下載：** `v0.2.0a3` 對應 [4bbfe99 原始碼](https://github.com/xinhi6716/ml-super-calculator/tree/4bbfe99ed55d2f9e6cb931d6f568af4fa4a887d3)。wheel 已包含迴歸與二元流程的輸出路徑檢查、已驗證 CSV 欄名保留，以及 Python API 特徵清單防護；模型家族與選模規則不變。
-- **先前的 a2 下載：** [v0.2.0a2](https://github.com/xinhi6716/ml-super-calculator/releases/tag/v0.2.0a2) 仍固定於 [20d17c1 快照](https://github.com/xinhi6716/ml-super-calculator/tree/20d17c1d18dcb5b7ecc50681f9287e7b5ea7250a)，不包含上述四項修正。中間的 [73dc3f8 原始碼修正](https://github.com/xinhi6716/ml-super-calculator/tree/73dc3f81885a1f8d9acca14198bce7ebe6aad755) 保留為歷史紀錄；現在不必為了這些修正改用原始碼安裝。
-
-回退 a2 時請使用另一個環境。從原始碼安裝時，除了套件版本，也記下 Git revision。下方固定 checkout 對應 a3 發布原始碼；之後 `main` 更新不會改動已發布檔案。
-
-**安裝已發布的 wheel：** 下載 [0.2.0a3 wheel](https://github.com/xinhi6716/ml-super-calculator/releases/download/v0.2.0a3/ml_super_calculator-0.2.0a3-py3-none-any.whl)，並與 [SHA256SUMS.txt](https://github.com/xinhi6716/ml-super-calculator/releases/download/v0.2.0a3/SHA256SUMS.txt) 核對。在[全新的 Python 虛擬環境](docs/RELEASE_NOTES_0.2.0a3.md#install-a-verified-a3-wheel)中，切換至下載目錄後執行：
+既有表格計算器另有全合成的 288 列／24 批範例：
 
 ```bash
-python -m pip install ./ml_super_calculator-0.2.0a3-py3-none-any.whl
-mlcalc demo --out runs/demo
+clotho tabular demo --out runs/demo
+# 不變的等效指令：mlcalc demo --out runs/demo
 ```
 
-安裝時可能從設定的套件索引下載相依套件；wheel 並未包含這些相依套件。模型運算仍在本機執行。這是 GitHub Release 下載，不是 PyPI 或 GitHub Packages 發布。下方使用範例檔案的指令，請搭配 [原始碼封存檔](https://github.com/xinhi6716/ml-super-calculator/releases/download/v0.2.0a3/ml_super_calculator-0.2.0a3.tar.gz) 或 checkout。
+開啟 `runs/demo/report.html`。原本教學圖保留如下；它說明計算器的表格流程，不是新的量測輸入契約。
 
-**或從 checkout 安裝：**
+<picture>
+  <source media="(max-width: 600px)" srcset="docs/assets/readme-workflow.zh-TW.mobile.svg">
+  <img src="docs/assets/readme-workflow.zh-TW.svg" alt="GroupBench 教學流程：準備資料表、以保留群組比較模型、檢查報告">
+</picture>
 
-若要取得新的固定版本 checkout，請選擇尚不存在的目的目錄；下列指令不會更新既有 checkout。需要 Git 與 Python。請使用全新的 Python 虛擬環境；[既有的 POSIX 設定範例](docs/RELEASE_NOTES_0.2.0a3.md#install-a-verified-a3-wheel)示範如何建立及啟用環境，再接著執行下方的 checkout 安裝指令。
-
-```bash
-git clone https://github.com/xinhi6716/ml-super-calculator.git mlcalc-source
-cd mlcalc-source
-git checkout --detach 4bbfe99ed55d2f9e6cb931d6f568af4fa4a887d3
-git rev-parse HEAD
-python -m pip install -e .
-mlcalc demo --out runs/demo
-```
-
-開啟 `runs/demo/report.html`。報告是獨立的本機檔案，不含遠端資源或腳本。範例包含 **24 批、288 筆完全合成的觀測值**。
-
-宣告支援 Python 3.10+。目前開發環境已驗證 Python 3.12.14、NumPy 2.3.5、pandas 2.2.3 與 scikit-learn 1.8.0；尚未完成跨版本 CI 測試矩陣。`groupbench` 是 `mlcalc` 的別名。
-
-<details>
-<summary>已備妥相依套件？不安裝、不連網也能試跑。</summary>
-
-```bash
-PYTHONPATH=src python -m groupbench demo --out runs/demo
-```
-
-</details>
+套件內的 `clotho demo` 是**另一個較早的固定半導體演練**，已不需第二份工具箱 checkout，但不是上方接受使用者 CSV 的路線。[單一套件橋接與固定來源組件](docs/INTEGRATED_MEASUREMENT_WORKFLOW.md)。
 
 ## 使用自己的資料
 
@@ -131,16 +204,9 @@ mlcalc predict measurements.csv new_process_settings.csv \
 | `manifest.json` | 核對分割、候選選擇、版本、種子、雜湊與診斷。 |
 | `checksums.json` | 核對其他四份評估檔案的位元組。 |
 
-**僅目前原始碼提供：** 結果 manifest 與評估報告另記錄
-[觀察到的套件原始碼摘要](docs/PACKAGE_SOURCE_IDENTITY.md) 或無法取得狀態。
-這是自行記錄的原始碼位元組中繼資料，不含於封存 a3 下載；
-不認證載入的程式碼、建置或可重現性。
+計算器結果 manifest 與報告記錄[觀察到的套件原始碼摘要](docs/PACKAGE_SOURCE_IDENTITY.md)或無法取得狀態。這是自行記錄的原始碼位元組資訊，不認證載入的程式碼、建置或可重現性。
 
-目前原始碼的報告也說明[所選切分可回答的問題（英文）](docs/PROTOCOL.md#read-the-split-scope)：保留群組不自動等於保留領域，也沒有另外執行隨機逐列比較。當記錄中的每個群組都只有一列時，會顯示提醒。此報告說明不含於封存 a3，不改變分數或切分規則。
-
-群組超過 15 個？目前原始碼的報告可在最高誤差表下選擇 **View all N groups**（繁中介面為「查看全部 N 個群組」），依識別碼順序查看各組已存指標。原本的前 15 組摘要仍保留，不重新計算分數。封存 a3 報告維持不變。
-
-**`4098c173` 之後的原始碼：**回歸報告也提供二元報告已有的原生 **English / 繁體中文** 控制。切換僅改變報告文字；數值、名稱、記錄診斷與命令列語言維持原樣。此回歸語言控制不含於封存 a3，亦不含於由 `4098c173` 或更早快照建立的套件。
+報告說明[所選切分可回答的問題](docs/PROTOCOL.md#read-the-split-scope)：保留群組不自動等於保留領域，也沒有另外執行隨機逐列比較。每群組一列時會提示。**查看全部 N 個群組**可展開最高誤差 15 組摘要，不重新計算分數。原生 **English / 繁體中文** 控制只改變計算器報告文字，不改動數值、診斷或 CLI 語言。這些計算器報告功能已包含於舊版 a4；新的量測流程摘要頁在此 beta 仍為英文。
 
 完整表格不會為縮檔而截掉群組：二元輸出會拒絕超過 64 MiB 的單一檔案，`verify` 也有相同的單檔上限。
 
@@ -179,17 +245,56 @@ mlcalc binary predict examples/synthetic_binary_process.csv examples/new_binary_
 
 這條預發布流程使用數值 0/1 標籤，以群組平衡 Brier 分數，在先驗 Dummy、正則化 Logistic 與有界 Extra Trees 中選擇。每個訓練分割都須包含兩種標籤；只有單一類別的保留群組仍會保留。門檻固定為 p1 ≥ 0.5，未針對製造決策最佳化。二元流程的輸出目錄必須是新的。預設回歸指令即使收到 0/1 目標也仍做回歸。[二元流程協定與限制（英文）](docs/BINARY_PROTOCOL.md)
 
-**目前原始碼的二元報告介面（不含於封存 a3 下載）：** 支援 English / 繁體中文切換、章節導覽與可用鍵盤橫向捲動的表格。切換不會改變分數或已儲存資料。[閱讀指南與版本範圍（英文）](docs/BINARY_PROTOCOL.md#read-the-offline-evaluation-report)
+**二元計算器報告介面：** 支援 English / 繁體中文切換、章節導覽與可用鍵盤橫向捲動的表格。切換不會改變分數或已儲存資料。[閱讀指南與版本範圍（英文）](docs/BINARY_PROTOCOL.md#read-the-offline-evaluation-report)
 
 ## 使用界線
 
 - **謹慎選擇群組。** 批次標籤互斥，不代表未記錄的相依性已隔離；`batch × specimen` 組合標籤也不會自動隔離兩個交叉因素。目前沒有多軸或時間保留評估。
 - **小群組可能改變排名。** 各折差異不是信賴區間；單一種子不是穩健性研究。用於重要決策前，應另行獨立驗證。
-- **輸入留在本機，並控制大小。** 上限為 20,000 列、100 個特徵；CSV 必須是本機一般 UTF-8 檔案，每份最多 64 MiB。缺少目標、格式不完整的列、NUL 字元或無效分割都會失敗，不會默默修補。這些防護不是硬性的記憶體或時間限制。
+- **表格計算器的輸入留在本機，並控制大小。** 上限為 20,000 列、100 個特徵；CSV 必須是本機一般 UTF-8 檔案，每份最多 64 MiB。缺少目標、格式不完整的列、NUL 字元或無效分割都會失敗，不會默默修補。這些防護不是硬性的記憶體或時間限制。
 - **注意類別缺值標記。** 相容性預設 `legacy-v1` 可能把字串 `__GROUPBENCH_MISSING__` 與缺值合併。選用 `distinct-v2` 可使用不碰撞的內部鍵。[編碼規格（英文）](docs/CATEGORICAL_ENCODING.md)
 - **把預測與科學主張分開。** 不提供經校準的不確定性、因果推論、物理單位驗證、外推保證、基礎模型訓練或正式環境監控。合成範例不是經驗證的材料模擬器。
 
 [完整技術參考（英文）](docs/USAGE_REFERENCE.md) 保留輸入、schema、算術、資源、輸出與相容性的詳細規格。文件範例不構成真實元件的準確度證據；有效的特徵 schema 也不代表沒有資料洩漏。
+
+新的量測路線另有 [8 MiB／檔、10,000 列及嚴格目標／宣告契約](docs/CLOTHO_CSV_BETA.md)，只支援迴歸，並非已整合全部工具箱格式或分析。新摘要頁的瀏覽器啟動遭作業系統拒絕，視覺呈現尚未驗證；未使用繞過方式。
+
+
+</details>
+
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/threshold-4-dark.svg"><img src="docs/assets/threshold-4-light.svg" width="100%" alt=""></picture>
+
+<a id="horizon"></a>
+
+## IV / 遠景
+
+**先做深，再做廣。** 方向是通用 ML 建構器：以明確輸入、可控擬合與可檢查結果為核心，組合可擴充的領域模組。第一個深耕領域是半導體／材料；其他領域、更廣的建構與自動化仍是**未來工作**，不是既有能力。
+
+現在刻意保持較窄：固定條件的裝置量測迴歸，加上既有群組表格計算器。並非全部工具箱格式都已整合；不是基礎模型、完整 AutoML、因果識別引擎或已校準不確定性服務。宣告群組無法找出未記錄的相依性，虛構範例也不證明物理準確度。
+
+報告外觀不改動選模、切分或指標。跨瀏覽器與行動裝置的呈現檢查仍待完成。
+
+[輸入契約](docs/CLOTHO_CSV_BETA.md) · [評估協定](docs/PROTOCOL.md) · [Beta 發行指南](docs/RELEASE_NOTES_0.3.0b1.md) · [路線圖](ROADMAP.md) · [安全說明](SECURITY.md)
+
+<details>
+<summary><strong>舊版發行與回退</strong> · 凍結的 a4、a3 與更早檔案</summary>
+
+## 舊版發行
+
+<a id="先選擇要使用的版本"></a>
+
+已核驗的**舊計算器預發布版為 [v0.2.0a4](https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.2.0a4)**，對應 [`f838ab0` 原始碼](https://github.com/xinhi6716/axiom-clotho/tree/f838ab032b06d3f85a6b56dee2f940342a32aded)。它包含雙語計算器報告、所有群組檢視、原始碼位元組紀錄與保存區間評估 CLI，**不含**新的 Clotho CSV 指令。wheel、原始碼封存檔與校驗碼保持不變。
+
+- [a4 檔案與安裝紀錄](https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.2.0a4)：核對該版 `SHA256SUMS.txt`；回退請用獨立環境。
+- [a3](https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.2.0a3) 與其[歷史說明](docs/RELEASE_NOTES_0.2.0a3.md)、[a2](https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.2.0a2)、[a1](https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.2.0a1) 保留為歷史快照，不是目前 beta 快速開始流程。
+
+Clotho 產品名稱不會更名已安裝的 Python 套件，也不重寫凍結版本。[遷移說明](docs/CLOTHO_BETA_MIGRATION.md)。
+
+
+</details>
+
+<details>
+<summary><strong>開發、授權與完整參考索引</strong></summary>
 
 ## 開發與貢獻
 
@@ -210,3 +315,7 @@ TabPFN 提供的是易用 `fit`／`predict` 介面與套件設計的參考，不
 詳細段落已移至 [完整技術參考（英文）](docs/USAGE_REFERENCE.md)。英文首頁保留舊段落錨點，方便沿用原本的連結。
 
 </details>
+
+</details>
+
+[Original editorial artwork and font notices](docs/assets/CLOTHO_EDITORIAL_NOTICES.md).

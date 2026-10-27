@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.0b1 — Clotho beta source
+
+- Add the complete explicit measurement → target join → grouped comparison → target-free prediction → saved scoring route.
+- Add `clotho` while retaining the `ml-super-calculator` distribution, previous CLIs and Python API.
+- Make Axiom Clotho the product landing identity with original Celestial headers; keep existing scientific/workflow figures.
+- Retain frozen a4 and earlier releases. This source entry is not proof of binary publication; see the [beta release guide](docs/RELEASE_NOTES_0.3.0b1.md).
+
+## 0.2.0a4 — legacy prerelease
+
+The [published a4 receipt](https://github.com/xinhi6716/ml-super-calculator/releases/tag/v0.2.0a4) records bilingual calculator reports, all-groups inspection, supplied-group scope, observed package-source metadata and the saved-interval CLI. Its exact source and assets remain frozen.
+
 ## 0.2.0a3 — prerelease
 
 This prerelease packages the accepted source fixes after the immutable 0.2.0a2

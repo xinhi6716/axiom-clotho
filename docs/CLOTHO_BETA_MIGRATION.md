@@ -5,15 +5,15 @@
 | Identity | Chosen value |
 | --- | --- |
 | Product | **Axiom Clotho** (Moirai family) |
-| Proposed repository | `axiom-clotho`, by renaming the existing calculator repository rather than duplicating it |
+| Canonical repository | [`axiom-clotho`](https://github.com/xinhi6716/axiom-clotho), renamed in place from the calculator repository |
 | Distribution name for this beta | **`ml-super-calculator`**, intentionally retained |
 | New candidate version | **`0.3.0b1`** |
 | Primary additive CLI | `clotho` |
 | Preserved interfaces | `mlcalc`, `groupbench`, `mlcalc-workflow`, `import groupbench` |
 | Proposed release route | GitHub-only prerelease after independent acceptance; no PyPI upload |
 
-The repository rename/publication is a separate maintainer action; this document
-does not claim it has occurred. Frozen `v0.2.0a4` and earlier tags, source archives
+The repository rename is verified (same repository ID `1431307608`); beta
+publication is still a separate action and is not implied by the name. Frozen `v0.2.0a4` and earlier tags, source archives
 and binaries must remain untouched. New beta assets must use their own version,
 not replace an older download under an old filename.
 

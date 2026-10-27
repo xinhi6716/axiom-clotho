@@ -1,81 +1,151 @@
 <p align="right"><strong>English</strong> · <a href="README.zh-TW.md">繁體中文</a></p>
 
-# ML Super Calculator
-
-**Compare models on held-out batches. Predict new rows locally.**
+# Axiom Clotho
 
 <picture>
-  <source media="(max-width: 600px)" srcset="docs/assets/readme-workflow.mobile.svg">
-  <img src="docs/assets/readme-workflow.svg" alt="GroupBench workflow: prepare a table, compare on held-out groups, inspect the report">
+  <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="docs/assets/clotho-hero-dark-mobile.svg">
+  <source media="(max-width: 600px)" srcset="docs/assets/clotho-hero-light-mobile.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/clotho-hero-dark.svg">
+  <img src="docs/assets/clotho-hero-light.svg" width="100%" alt="Axiom Clotho — the Moirai machine-learning workbench, beneath a spindle and architectural halo.">
 </picture>
 
-Small materials, semiconductor and process datasets rarely arrive as independent rows. GroupBench, the first engine in this calculator, keeps your declared batches together when comparing regression baselines.
+**From measurements to models.**
 
-Training, reports and predictions stay on your computer. No account, hosted compute API, model-weight download or telemetry.
+The machine-learning workbench of the **Moirai** family. Today, Clotho connects a bounded semiconductor/materials measurement workflow to a local grouped-learning engine. Its longer-term direction is a general ML builder with extensible domain modules—not a claim that those modules already exist.
 
-> **Published prerelease: 0.2.0a3.** Install the reviewed input/output safeguards from the [a3 release](https://github.com/xinhi6716/ml-super-calculator/releases/tag/v0.2.0a3), checking the matching SHA-256 record before installation. [Changes and installation details](docs/RELEASE_NOTES_0.2.0a3.md). The earlier a2 assets remain unchanged for rollback.
+[**I / Begin**](#begin) · [**II / The thread**](#thread) · [**III / Read the evidence**](#evidence) · [**IV / Horizon**](#horizon)
 
-[Download prerelease](https://github.com/xinhi6716/ml-super-calculator/releases/tag/v0.2.0a3) · [Choose a version](#choose-the-version-you-mean) · [Try the demo](#try-the-demo) · [Bring your data](#bring-your-data) · [Read the results](#read-the-results) · [Examples](#examples) · [Detailed reference (English)](docs/USAGE_REFERENCE.md)
+> **0.3.0b1 source beta · local computation · explicit user-supplied endpoints.** Check the [release index](https://github.com/xinhi6716/axiom-clotho/releases) and matching checksums for actual published binaries. A source version is not a publication receipt.
 
-> **Download shown below:** v0.2.0a3, including an explicitly selected binary-classification workflow. This is an original sklearn-based selection and evaluation toolkit, not a pretrained foundation model, full AutoML system or TabPFN equivalent. Synthetic examples show how to use it, not real-world accuracy.
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/threshold-1-dark.svg"><img src="docs/assets/threshold-1-light.svg" width="100%" alt=""></picture>
 
-## Axiom Clotho CSV beta
+<a id="begin"></a>
+<a id="get-the-reviewed-beta-core"></a>
 
-A complete, bounded local route now accepts **your own measurement CSVs and training endpoints**: `clotho prepare` → `clotho plan` → `clotho run` → separate `clotho score`. It performs exact device joins, explicit group validation, nested model comparison, target-free prediction and saved evaluation. The existing calculator remains available through `clotho tabular` or unchanged `mlcalc` / `groupbench` commands.
+## I / Begin
 
-[Start the real-CSV workflow](docs/CLOTHO_CSV_BETA.md) · [Run the invented reproduction](examples/measurement-regression/README.md). This unreleased source beta does not claim every toolbox format is integrated, and does not change frozen a4 assets.
+Choose the route that matches your data—not a different product.
 
-## Single-distribution measurement workflow (unreleased source)
+| You have… | Start here |
+| --- | --- |
+| Supported I–V measurements, training endpoints and declared device groups | The **four-stage measurement workflow** below. |
+| A numeric/categorical table for grouped regression or explicit binary classification | The existing **[tabular calculator](#bring-your-data)**, via `clotho tabular`, `mlcalc` or `groupbench`. |
+| Saved predictions and later observed outcomes | **`clotho score`** for a complete Clotho cohort; other saved analyses remain in the tabular calculator. |
 
-The new `mlcalc-workflow` entry point extracts declared measurement CSVs and runs
-the existing invented semiconductor end-to-end example without a second toolbox
-checkout. It preserves `mlcalc` / `groupbench`; this is a bounded integration, not
-real-data validation or a replacement for the frozen releases.
-[Commands, input contract and boundaries](docs/INTEGRATED_MEASUREMENT_WORKFLOW.md).
+The repository is now **`axiom-clotho`**. The distribution deliberately remains **`ml-super-calculator`**; existing imports and CLI names keep one owner. Do not co-install a second overlapping distribution. [Compatibility and migration](docs/CLOTHO_BETA_MIGRATION.md).
+
+<details>
+<summary><strong>Install the reviewed beta core from source</strong> · new checkout and virtual environment</summary>
+
+The pinned commit is the reviewed beta execution core, before this visual-only refinement. Use the eventual matching release archive for its exact final documentation and report presentation. This is a source-install path, not a claim that a b1 wheel has been published.
+
+```bash
+git clone https://github.com/xinhi6716/axiom-clotho.git clotho-source
+cd clotho-source
+git checkout --detach 79fa4331dc8f6e4362ba040762bf1d652fcc78e0
+python -m venv .venv
+# POSIX activation; on Windows use .venv\Scripts\activate instead.
+. .venv/bin/activate
+python -m pip install -e .
+clotho --version
+```
+
+
+The expected version is `0.3.0b1`. Installation may fetch build/runtime dependencies from your configured index. Offline use requires an already-provisioned compatible environment. No PyPI publication is implied. A checksum-verified local beta wheel, **after publication**, has a separate [installation guide](docs/RELEASE_NOTES_0.3.0b1.md#install-a-verified-local-wheel).
+
+</details>
+
+Python 3.10+ is declared; verification used Linux/Python 3.12.14 and existing dependencies. Computation stays local: no account, hosted ML API, model-weight download or telemetry.
+
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/threshold-2-dark.svg"><img src="docs/assets/threshold-2-light.svg" width="100%" alt=""></picture>
+
+<a id="thread"></a>
+<a id="what-this-beta-completes"></a>
+<a id="four-stage-quickstart"></a>
+
+## II / The thread
+
+**Prepare → Plan → Run → Score.** Each stage has one responsibility; later outcomes enter only at scoring.
+
+<picture>
+  <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="docs/assets/clotho-process-dark-mobile.svg">
+  <source media="(max-width: 600px)" srcset="docs/assets/clotho-process-light-mobile.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/clotho-process-dark.svg">
+  <img src="docs/assets/clotho-process-light.svg" width="100%" alt="Prepare features and training targets; inspect the plan; run grouped comparison and target-free prediction; score later outcomes without fitting.">
+</picture>
+
+| Step | What happens | What does not happen |
+| --- | --- | --- |
+| **Prepare** | Extract supported resistance features; join exact device IDs to **training-only targets**; validate declared groups. | No inferred labels, units or physical grouping. |
+| **Plan** | Inspect nested splits, candidates and the fit budget. | No model fitting. |
+| **Run** | Compare within training groups, refit on training data and save target-free future predictions. | No prediction-cohort outcome input. |
+| **Score** | Join later outcomes to saved predictions; save row/equal-group evaluation. | **No new fits.** |
+
+<details>
+<summary><strong>Run the complete four-stage example</strong> · all supplied values are invented</summary>
+
+From the checkout root, or the extracted source archive matching your installation, choose fresh output directories outside the inputs. The fixture CSVs come from the source archive; the commands do not download them.
+
+```bash
+clotho prepare \
+  --input-dir examples/measurement-regression/fixtures/raw \
+  --partitions examples/measurement-regression/fixtures/partitions.csv \
+  --training-targets examples/measurement-regression/fixtures/training_targets.csv \
+  --config examples/measurement-regression/fixtures/config.json \
+  --output-dir clotho-prepared
+
+clotho plan --prepared clotho-prepared
+clotho run --prepared clotho-prepared --output-dir clotho-run
+
+# Only this separate scoring step accepts the prediction cohort's later outcomes.
+clotho score --run-dir clotho-run \
+  --outcomes examples/measurement-regression/fixtures/later_outcomes.csv \
+  --output-dir clotho-evaluation
+```
+
+Expected structure: **18 devices → 12 training + 6 prediction**; four training batches and two disjoint prediction batches; **40 planned fits**, then six-device scoring with **zero new fits**. These counts check software behavior, not real-device accuracy. [Complete reproduction](examples/measurement-regression/README.md).
+
+</details>
+
+For your measurements, replace the invented inputs with your own [raw files, partitions, training targets and explicit configuration](docs/CLOTHO_CSV_BETA.md). The current route is **one row per device at a fixed declared condition**, batch/wafer/device grouping, and selected resistance predictors. Scientific endpoint meaning and feature timing remain your responsibility.
+
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/threshold-3-dark.svg"><img src="docs/assets/threshold-3-light.svg" width="100%" alt=""></picture>
+
+<a id="evidence"></a>
+
+## III / Read the evidence
+
+The run is useful only when its evidence is readable and kept together.
+
+| Open | Read it for |
+| --- | --- |
+| `clotho-run/report.html` | The workflow summary and links to the nested grouped comparison. |
+| `clotho-run/prediction_rows.csv` | Exact device-keyed future predictions—not a fresh test score. |
+| `clotho-evaluation/report.html` | Separate descriptive evaluation once later observations are supplied. |
+| `COMPLETE.json` in each bundle | Completion and file-byte checksums—not authenticity or scientific validity. |
+
+Reports are standalone local files. **Review private IDs, targets and predictions before sharing.** The calculator's bilingual controls change report copy, not numbers; the new measurement summary pages remain English in this beta.
+
+<details>
+<summary><strong>Open the tabular calculator reference</strong> · original workflow figure, commands, outputs and scientific limits</summary>
 
 ## Try the demo
 
-### Choose the version you mean
-
-- **Published a3 download:** `v0.2.0a3` uses [source `4bbfe99`](https://github.com/xinhi6716/ml-super-calculator/tree/4bbfe99ed55d2f9e6cb931d6f568af4fa4a887d3). Its wheel includes the regression and binary output-path checks, validated CSV-header preservation, and the Python API feature-list guard. Model families and selection rules are unchanged.
-- **Earlier a2 download:** [v0.2.0a2](https://github.com/xinhi6716/ml-super-calculator/releases/tag/v0.2.0a2) remains the frozen [20d17c1 snapshot](https://github.com/xinhi6716/ml-super-calculator/tree/20d17c1d18dcb5b7ecc50681f9287e7b5ea7250a), without those four fixes. The intermediate [73dc3f8 source fixes](https://github.com/xinhi6716/ml-super-calculator/tree/73dc3f81885a1f8d9acca14198bce7ebe6aad755) are historical, not a requirement to install from source now.
-
-Use a separate environment when reverting to a2. For source installs, record the Git revision as well as the package version. The pinned checkout below matches the a3 release source; later `main` changes do not alter either published artifact.
-
-**Install the published wheel:** download the [0.2.0a3 wheel](https://github.com/xinhi6716/ml-super-calculator/releases/download/v0.2.0a3/ml_super_calculator-0.2.0a3-py3-none-any.whl) and compare it with [SHA256SUMS.txt](https://github.com/xinhi6716/ml-super-calculator/releases/download/v0.2.0a3/SHA256SUMS.txt). In your [fresh Python virtual environment](docs/RELEASE_NOTES_0.2.0a3.md#install-a-verified-a3-wheel), from the download directory:
+For the existing tabular calculator's wholly invented 288-row / 24-batch demo:
 
 ```bash
-python -m pip install ./ml_super_calculator-0.2.0a3-py3-none-any.whl
-mlcalc demo --out runs/demo
+clotho tabular demo --out runs/demo
+# Unchanged equivalent: mlcalc demo --out runs/demo
 ```
 
-Installation may download dependencies from your configured package index; the wheel does not bundle them. Runtime modeling stays local. These are GitHub Release downloads, not a PyPI or GitHub Packages publication. For the file-based examples below, use the [source archive](https://github.com/xinhi6716/ml-super-calculator/releases/download/v0.2.0a3/ml_super_calculator-0.2.0a3.tar.gz) or a checkout.
+Open `runs/demo/report.html`. The original instructional figure remains below; it describes the calculator's table workflow, not the new measurement contract.
 
-**Or install from a checkout:**
+<picture>
+  <source media="(max-width: 600px)" srcset="docs/assets/readme-workflow.mobile.svg">
+  <img src="docs/assets/readme-workflow.svg" alt="GroupBench instructional workflow: prepare a table, compare on held-out groups, inspect the report">
+</picture>
 
-For a fresh, pinned checkout, choose a new destination directory; the commands below do not update an existing checkout. Git and Python are required. Use a fresh Python virtual environment; the [existing POSIX setup example](docs/RELEASE_NOTES_0.2.0a3.md#install-a-verified-a3-wheel) shows how to create and activate one. Then use the checkout installation commands below.
-
-```bash
-git clone https://github.com/xinhi6716/ml-super-calculator.git mlcalc-source
-cd mlcalc-source
-git checkout --detach 4bbfe99ed55d2f9e6cb931d6f568af4fa4a887d3
-git rev-parse HEAD
-python -m pip install -e .
-mlcalc demo --out runs/demo
-```
-
-Open `runs/demo/report.html`. The report is a self-contained local file with no remote assets or scripts. The demo uses **288 wholly synthetic observations in 24 batches**.
-
-Python 3.10+ is declared. Development has been verified with Python 3.12.14, NumPy 2.3.5, pandas 2.2.3 and scikit-learn 1.8.0; there is no tested cross-version CI matrix yet. `groupbench` is an alias for `mlcalc`.
-
-<details>
-<summary>Already have the dependencies? Run without installing or using the network.</summary>
-
-```bash
-PYTHONPATH=src python -m groupbench demo --out runs/demo
-```
-
-</details>
+The bundled `clotho demo` is a **different, older fixed semiconductor rehearsal**. It no longer needs a second toolbox checkout, but is not the caller-CSV route above. [Single-distribution bridge and pinned components](docs/INTEGRATED_MEASUREMENT_WORKFLOW.md).
 
 ## Bring your data
 
@@ -136,16 +206,9 @@ If a prediction CSV is rejected, follow the [no-fit column-repair steps](docs/US
 | `manifest.json` | Check splits, candidate selections, versions, seeds, hashes and diagnostics. |
 | `checksums.json` | Check the bytes of the four other evaluation files. |
 
-**Current source only:** result manifests and evaluation reports also record an
-[observed package-source digest](docs/PACKAGE_SOURCE_IDENTITY.md), or its
-unavailability. This self-reported source-byte metadata is not included in the
-frozen a3 download and does not certify loaded code, a build or reproducibility.
+Calculator result manifests and reports record an [observed package-source digest](docs/PACKAGE_SOURCE_IDENTITY.md), or its unavailability. It is self-reported source-byte metadata, not proof of loaded code, an authenticated build or reproducibility.
 
-Current-source reports also explain [what the chosen split can answer](docs/PROTOCOL.md#read-the-split-scope): group-heldout is not automatically domain-heldout, and no separate random-row comparison is run. A note appears when every recorded group has one row. This report guidance is not included in frozen a3 and does not change scores or splitting rules.
-
-Have more than 15 groups? In current-source reports, choose **View all N groups** below the highest-error table to inspect every group's saved metrics in ID order. The compact worst-15 view stays available; no scores are recalculated. Frozen a3 reports remain unchanged.
-
-**Source after `4098c173`:** regression reports also offer the native **English / 繁體中文** controls used by binary reports. The switch changes report copy only; values, names, recorded diagnostics and CLI language stay unchanged. This regression language control is not in frozen a3 or package builds from `4098c173` and earlier snapshots.
+Reports explain [what the chosen split can answer](docs/PROTOCOL.md#read-the-split-scope): group-heldout is not automatically domain-heldout, and no separate random-row comparison is run. A note appears when each recorded group has one row. **View all N groups** expands the compact worst-15 view without recalculating scores. Native **English / 繁體中文** controls change calculator report copy only, not saved values, diagnostics or CLI language. These calculator report features were already included in legacy a4; the new measurement workflow's summary pages remain English in this beta.
 
 Full tables are not truncated to fit: binary output rejects a payload over 64 MiB; `verify` has the same per-file limit.
 
@@ -182,17 +245,56 @@ mlcalc binary predict examples/synthetic_binary_process.csv examples/new_binary_
 
 This prerelease workflow expects numeric 0/1 labels and selects among prior Dummy, regularized Logistic and bounded Extra Trees using group-balanced Brier. Both labels must appear in every training partition; single-class held-out groups are retained. The threshold is fixed at p1 ≥ 0.5, not optimized for manufacturing decisions. Binary output directories must be fresh. Default regression commands stay regression even for 0/1 targets. [Binary protocol and limits](docs/BINARY_PROTOCOL.md)
 
-**Current-source binary report UI (not the frozen a3 download):** English / 繁體中文 switching, section navigation and keyboard-scrollable tables. Scores and saved data are unchanged by the switch. [Reading guide and version scope](docs/BINARY_PROTOCOL.md#read-the-offline-evaluation-report)
+**Binary calculator report UI:** English / 繁體中文 switching, section navigation and keyboard-scrollable tables. Scores and saved data are unchanged by the switch. [Reading guide and version scope](docs/BINARY_PROTOCOL.md#read-the-offline-evaluation-report)
 
 ## Know the boundaries
 
 - **Choose groups with care.** Disjoint batch labels do not isolate unrecorded dependencies or both factors in a crossed `batch × specimen` label. Multi-axis and temporal holdouts are not implemented.
 - **Small groups can change the ranking.** Fold variation is not a confidence interval; one seed is not a robustness study. Validate independently before consequential use.
-- **Keep inputs bounded and local.** At most 20,000 rows and 100 features; CSVs must be regular local UTF-8 files, at most 64 MiB each. Missing targets, malformed records, NUL characters and invalid splits fail rather than being silently repaired. These guards are not hard memory or time limits.
+- **Keep tabular-calculator inputs bounded and local.** At most 20,000 rows and 100 features; CSVs must be regular local UTF-8 files, at most 64 MiB each. Missing targets, malformed records, NUL characters and invalid splits fail rather than being silently repaired. These guards are not hard memory or time limits.
 - **Check categorical markers.** The compatibility default `legacy-v1` can merge a literal `__GROUPBENCH_MISSING__` string with missing values. Choose `distinct-v2` for collision-free internal keys. [Encoding contract](docs/CATEGORICAL_ENCODING.md)
 - **Separate predictions from scientific claims.** No calibrated uncertainty, causal inference, scientific-unit validation, extrapolation guarantee, foundation-model training or production monitoring is included. Synthetic fixtures are not validated materials simulators.
 
+The measurement route separately enforces its [8 MiB/file, 10,000-row and strict endpoint/declaration contracts](docs/CLOTHO_CSV_BETA.md). It is regression-only; not every toolbox format or analysis is integrated. Browser rendering of the new summary pages remains unverified after an OS-denied launch; no workaround was used.
+
 The [complete usage reference](docs/USAGE_REFERENCE.md) retains the detailed input, schema, arithmetic, resource, output and compatibility contracts. Documentation examples do not establish real-device accuracy. A valid feature schema is not proof against leakage.
+
+
+</details>
+
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/threshold-4-dark.svg"><img src="docs/assets/threshold-4-light.svg" width="100%" alt=""></picture>
+
+<a id="horizon"></a>
+
+## IV / Horizon
+
+**First depth, then breadth.** The direction is a general ML builder: composable domain modules around explicit inputs, controlled fitting and inspectable results. The first deep domain is semiconductor/materials work. Other domains and broader construction/automation are **future work**, not delivered capability.
+
+Today is deliberately narrower: fixed-condition device-level measurement regression, plus the existing grouped tabular calculator. Not every toolbox format is integrated. This is not a foundation model, full AutoML system, causal identification engine or calibrated-uncertainty service. Declared groups cannot reveal unrecorded dependencies, and invented examples do not establish physical accuracy.
+
+Report styling does not change model selection, splits or metrics. Cross-browser and mobile presentation checks are still pending.
+
+[Input contract](docs/CLOTHO_CSV_BETA.md) · [Evaluation protocol](docs/PROTOCOL.md) · [Beta release guide](docs/RELEASE_NOTES_0.3.0b1.md) · [Roadmap](ROADMAP.md) · [Security](SECURITY.md)
+
+<details>
+<summary><strong>Legacy releases and rollback</strong> · frozen a4, a3 and earlier assets</summary>
+
+## Legacy releases
+
+<a id="choose-the-version-you-mean"></a>
+
+The verified **legacy calculator prerelease is [v0.2.0a4](https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.2.0a4)**, from source [`f838ab0`](https://github.com/xinhi6716/axiom-clotho/tree/f838ab032b06d3f85a6b56dee2f940342a32aded). It includes the bilingual calculator reports, all-groups view, source-byte metadata and saved-interval CLI, **not** the new Clotho CSV commands. Its wheel, source archive and checksums remain unchanged.
+
+- [a4 assets and installation receipt](https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.2.0a4): verify that release's `SHA256SUMS.txt`, and use a separate environment for rollback.
+- [a3](https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.2.0a3) and its [historical notes](docs/RELEASE_NOTES_0.2.0a3.md), [a2](https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.2.0a2), and [a1](https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.2.0a1) remain historical snapshots, not the current beta quickstart.
+
+The Clotho product name does not rename installed Python packages or rewrite these frozen releases. [Migration guidance](docs/CLOTHO_BETA_MIGRATION.md).
+
+
+</details>
+
+<details>
+<summary><strong>Development, licensing and detailed reference index</strong></summary>
 
 ## Develop and contribute
 
@@ -297,3 +399,7 @@ The detailed sections now live in the usage reference. Existing section anchors 
 - [Optional saved prediction consistency](docs/USAGE_REFERENCE.md#optional-saved-prediction-consistency)
 
 </details>
+
+</details>
+
+[Original editorial artwork and font notices](docs/assets/CLOTHO_EDITORIAL_NOTICES.md).
