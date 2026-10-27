@@ -11,6 +11,7 @@ import pandas as pd
 import sklearn
 
 from .. import __version__
+from ..package_source import observe_package_source
 from ..categorical import LEGACY, DISTINCT, encoding_options, preprocessing_description
 from ..data import data_fingerprint, duplicate_diagnostics, validate_prediction_features, validate_seed
 from ..input_support import prediction_input_support
@@ -252,6 +253,7 @@ def benchmark_binary(frame, *, target, group, features=None, outer_splits=5, inn
     if diagnostics["identical_feature_target_rows_across_groups"]:
         limitations.append("Identical feature/target rows span groups; inspect duplicates. No records were removed.")
     manifest = {**run_input, "groupbench_version": __version__, "run_key": run_key,
+                "package_source": observe_package_source(),
                 "created_at_utc": datetime.now(timezone.utc).isoformat(), "source_file_sha256": source_sha256,
                 "n_rows": len(X), "n_groups": len(pd.unique(groups)), "training_class_counts": class_counts(y),
                 "data_diagnostics": diagnostics, "environment": _environment(), "network_required_at_runtime": False,
@@ -277,6 +279,7 @@ def fit_predict_binary(frame, new_rows, *, target, group, features=None, inner_s
     estimator._fit_prepared(X, y, groups, plan)
     p = estimator.predict_proba(incoming)
     manifest = {**_identity("prediction.manifest", categorical_encoding), "groupbench_version": __version__, "mode": "fit_predict",
+                "package_source": observe_package_source(),
                 "protocol": "group-binary-brier-fit-predict-v1", "created_at_utc": datetime.now(timezone.utc).isoformat(),
                 "training_data_sha256": data_fingerprint(X, y, groups),
                 "new_features_sha256": hashlib.sha256(pd.util.hash_pandas_object(incoming, index=False).values.tobytes()).hexdigest(),

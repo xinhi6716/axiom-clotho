@@ -13,6 +13,7 @@ import pandas as pd
 import sklearn
 
 from . import __version__
+from .package_source import observe_package_source
 from .categorical import LEGACY, DISTINCT, encoding_options, preprocessing_description
 from .data import (data_fingerprint, duplicate_diagnostics, prepare_data,
                    validate_features, validate_prediction_features)
@@ -85,6 +86,7 @@ def fit_predict(frame: pd.DataFrame, new_rows: pd.DataFrame, *, target: str, gro
     new_hash = hashlib.sha256(pd.util.hash_pandas_object(incoming[list(X.columns)], index=False).values.tobytes()).hexdigest()
     manifest = {
         "schema_version": "1.1", "groupbench_version": __version__, "mode": "fit_predict",
+        "package_source": observe_package_source(),
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
         "training_data_sha256": data_fingerprint(X, y, groups), "new_features_sha256": new_hash,
         "source_file_sha256": source_sha256, "prediction_source_file_sha256": prediction_source_sha256,

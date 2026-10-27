@@ -49,6 +49,8 @@ All JSON still rejects duplicate keys, nonfinite values, or numeric tokens longe
 than 100 characters. This is a documented metadata subset, not a complete
 manifest validator. Selection records, model parameters, environment, timestamps,
 source hashes, training-group identifiers and unchecked metadata are not verified.
+The optional current-source `package_source` record is also allowed but not
+validated or authenticated; see [observed package-source metadata](PACKAGE_SOURCE_IDENTITY.md).
 `PredictionSchemaResult.checked_scope` and `.unchecked_metadata` state the scope;
 `.contract_version` is `1.0` for this consumer, not a new writer schema.
 

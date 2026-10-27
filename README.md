@@ -118,6 +118,11 @@ Prediction performs grouped inner selection on all labeled rows and refits local
 | `manifest.json` | Check splits, candidate selections, versions, seeds, hashes and diagnostics. |
 | `checksums.json` | Check the bytes of the four other evaluation files. |
 
+**Current source only:** result manifests and evaluation reports also record an
+[observed package-source digest](docs/PACKAGE_SOURCE_IDENTITY.md), or its
+unavailability. This self-reported source-byte metadata is not included in the
+frozen a3 download and does not certify loaded code, a build or reproducibility.
+
 Regression compares **Dummy mean, Ridge and Extra Trees** with the same folds and preprocessing. Hyperparameters are selected inside each outer training partition. The `selected` entry evaluates the selection procedure, rather than choosing a winner after inspecting the outer test scores. Families do **not** receive equal compute budgets.
 
 Group MAE gives each group equal weight; row MAE and RMSE pool observations. Constant-target or one-row R² is `null`. Do not repeatedly tune against the outer leaderboard and then present those same scores as unbiased evidence. [Full evaluation protocol](docs/PROTOCOL.md)

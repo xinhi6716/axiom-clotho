@@ -118,6 +118,11 @@ mlcalc predict measurements.csv new_process_settings.csv \
 | `manifest.json` | 核對分割、候選選擇、版本、種子、雜湊與診斷。 |
 | `checksums.json` | 核對其他四份評估檔案的位元組。 |
 
+**僅目前原始碼提供：** 結果 manifest 與評估報告另記錄
+[觀察到的套件原始碼摘要](docs/PACKAGE_SOURCE_IDENTITY.md) 或無法取得狀態。
+這是自行記錄的原始碼位元組中繼資料，不含於封存 a3 下載；
+不認證載入的程式碼、建置或可重現性。
+
 回歸流程使用相同分割與前處理，比較 **Dummy 平均值、Ridge 與 Extra Trees**。超參數只在各外折的訓練部分內選擇。`selected` 評估的是整個選模程序，不是看完外層測試分數後才挑勝者。不同模型家族**沒有取得相同運算預算**。
 
 Group MAE 給每個群組相同權重；row MAE 與 RMSE 合併所有觀測列計算。目標為常數或只有一列時，R² 為 `null`。不要反覆依外層排行榜調參，再把同一批分數當成無偏證據。[完整評估協定（英文）](docs/PROTOCOL.md)

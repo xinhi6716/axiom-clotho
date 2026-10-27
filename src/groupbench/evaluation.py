@@ -14,6 +14,7 @@ import pandas as pd
 import sklearn
 
 from . import __version__
+from .package_source import observe_package_source
 from .categorical import LEGACY, DISTINCT, encoding_options, preprocessing_description
 from .data import data_fingerprint, duplicate_diagnostics, prepare_data, validate_seed
 from .metrics import grouped_metrics
@@ -131,6 +132,7 @@ def benchmark(frame: pd.DataFrame, *, target: str, group: str, features=None,
         warnings.append(f"Found {diagnostics['identical_feature_target_rows_across_groups']} identical feature/target rows spanning different groups. Inspect duplicates before trusting evaluation; no rows were removed.")
     manifest = {
         "schema_version": "1.0", "groupbench_version": __version__,
+        "package_source": observe_package_source(),
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
         "run_key": run_key, "data_sha256": fingerprint, "source_file_sha256": source_sha256,
         "n_rows": len(X), "n_groups": len(pd.unique(groups)),
