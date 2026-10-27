@@ -243,7 +243,7 @@ def evaluate_saved_intervals(document):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(prog="mlcalc evaluate-intervals", description=__doc__)
     parser.add_argument("input", type=Path, help="Regular local saved-interval JSON; report goes to stdout only")
     args = parser.parse_args(argv)
     try:

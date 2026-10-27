@@ -5,6 +5,18 @@ bounds. It does not generate intervals, fit or load models, calibrate anything,
 contact a service, or change existing evaluation/prediction bundles. This is a
 general-purpose ML Super Calculator utility, not a semiconductor-specific model.
 
+In current source, the main CLI also provides this operation:
+
+```sh
+mlcalc evaluate-intervals saved_intervals.json
+mlcalc evaluate-intervals --help
+```
+
+This alias is a source addition after `64da0e4`; it is not in frozen a3 or
+packages built from that snapshot. The existing module command below remains
+available. Both routes use the same parser, evaluator and stdout JSON; help and
+argument errors display the canonical name `mlcalc evaluate-intervals`.
+
 ```sh
 PYTHONPATH=src python -m groupbench.interval_evaluation \
   examples/saved-interval-evaluation/invented_voltage.json
