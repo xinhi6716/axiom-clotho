@@ -1,12 +1,16 @@
 """Renderer-only structure/copy tests; not browser or assistive-technology checks."""
 import copy
 import html
+import math
+from pathlib import Path
+import sys
+import tempfile
 import re
 from html.parser import HTMLParser
 from types import SimpleNamespace
 import unittest
 
-from groupbench.report import render_html
+from groupbench.report import _number, render_html, write_report
 
 
 class Document(HTMLParser):
@@ -311,6 +315,56 @@ class ReadingPathTests(unittest.TestCase):
                 self.assertIn('<code>' + english + '</code>', language_html(text, 'en'))
                 self.assertIn('<code>' + chinese + '</code>', language_html(text, 'zh'))
 
+
+    def test_small_number_format_preserves_zero_threshold_and_normal_range(self):
+        smallest = math.nextafter(0.0, 1.0)
+        below = math.nextafter(0.0001, 0.0)
+        for value, expected in ((smallest, "4.9407e-324"),
+                                (-smallest, "-4.9407e-324"),
+                                (sys.float_info.min, "2.2251e-308"),
+                                (-sys.float_info.min, "-2.2251e-308"),
+                                (below, "1.0000e-04"), (-below, "-1.0000e-04"),
+                                (1e-10, "1.0000e-10"), (-1e-10, "-1.0000e-10")):
+            with self.subTest(value=value):
+                self.assertEqual(_number(value), expected)
+                self.assertNotEqual(float(_number(value)), 0.0)
+        for value in (0.0, -0.0, 0.0001, -0.0001,
+                      math.nextafter(0.0001, math.inf),
+                      -math.nextafter(0.0001, math.inf),
+                      0.25, -0.75, 1234.56789, sys.float_info.max):
+            with self.subTest(value=value):
+                self.assertEqual(_number(value), f"{value:,.4f}")
+        self.assertEqual(language_html(_number(None), 'en'), 'undefined')
+        self.assertEqual(language_html(_number(None), 'zh'), '未定義')
+
+    def test_small_metrics_and_negative_r2_share_bilingual_number_text(self):
+        self._set_group_count(16)
+        self.result.summary['models']['selected']['overall'].update(
+            group_mae=1e-9, mae=1e-9, rmse=2e-9, worst_group_mae=1e-9, r2=-1e-12)
+        for row in self.result.summary['models']['selected']['per_group']:
+            row.update(mae=1e-9, rmse=2e-9, bias=-3e-9)
+        before = copy.deepcopy(self.result)
+        text = render_html(self.result)
+        en, zh = [language_html(text, language) for language in ('en', 'zh')]
+        self.assertIn('<span class="value">1.0000e-09</span>', text)
+        self.assertIn('<td>-1.0000e-12</td>', self._body(text, 'comparison-table'))
+        self.assertIn('scientific notation', en)
+        self.assertIn('非零數值以科學記號顯示', zh)
+        for caption in ('comparison-table', 'groups-table', 'all-groups-table', 'audit-table'):
+            self.assertEqual(Cells(self._body(en, caption)).cells,
+                             Cells(self._body(zh, caption)).cells)
+        self.assertIn('<td>-3.0000e-09</td>', self._body(text, 'all-groups-table'))
+        self.assertEqual(self.result.summary, before.summary)
+        self.assertEqual(self.result.manifest, before.manifest)
+
+    def test_nonfinite_metrics_still_fail_before_bundle_write(self):
+        for value in (float('nan'), float('inf'), -float('inf')):
+            with self.subTest(value=value), tempfile.TemporaryDirectory() as directory:
+                self.result.summary['models']['selected']['overall']['r2'] = value
+                output = Path(directory) / 'new'
+                with self.assertRaises(ValueError):
+                    write_report(self.result, output)
+                self.assertFalse(output.exists())
 
 if __name__ == '__main__':
     unittest.main()
