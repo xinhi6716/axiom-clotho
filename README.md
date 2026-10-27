@@ -19,6 +19,8 @@ Prepare device measurements, compare models without mixing declared batches, and
 
 > **Current source: 0.3.0b2.** It includes the portable measurement-bundle inventory fix; frozen b1 does not. Confirm accepted b2 artifacts on the [Releases page](https://github.com/xinhi6716/axiom-clotho/releases) before installing; this source label is not a publication receipt. [b2 changes and verification scope](docs/RELEASE_NOTES_0.3.0b2.md).
 
+> **Unreleased FET source candidate:** [one declared acquisition per composite device](docs/FET_DEVICE_REGRESSION.md) now has a separate v2 integration guide. This candidate-only route is **not in the frozen published b2 assets**; the b2 installation instructions below do not install it.
+
 <picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/threshold-1-dark.svg"><img src="docs/assets/threshold-1-light.svg" width="100%" alt=""></picture>
 
 <a id="begin"></a>

@@ -19,6 +19,8 @@
 
 > **目前原始碼：0.3.0b2。** 已納入量測封包清單的跨平台路徑修正；凍結的 b1 不含此修正。安裝前請到[發布頁](https://github.com/xinhi6716/axiom-clotho/releases)確認已接受的 b2 資產；原始碼版本標記不代表發布收據。[b2 變更與驗證範圍](docs/RELEASE_NOTES_0.3.0b2.md)。
 
+> **尚未發布的 FET 原始碼候選路線：**[每個複合裝置身分只接受一段明確宣告的量測分支](docs/FET_DEVICE_REGRESSION.md)，另有 v2 整合說明。這條候選路線**不包含在已發布且凍結的 b2 資產中**；下方 b2 安裝步驟不會安裝它。
+
 <picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/threshold-1-dark.svg"><img src="docs/assets/threshold-1-light.svg" width="100%" alt=""></picture>
 
 <a id="begin"></a>

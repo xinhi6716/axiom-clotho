@@ -1,0 +1,36 @@
+{
+  "adapter": "fet-transfer-device-v1",
+  "baselines": [
+    "dummy",
+    "ridge"
+  ],
+  "declarations": {
+    "endpoint_not_derived_from_features": true,
+    "global_physical_ids": true,
+    "measurement_assumptions_accepted": true,
+    "pre_outcome_features": true
+  },
+  "endpoint_name": "invented_later_response",
+  "features": [
+    "criterion_gate_source_voltage_V",
+    "log_current_slope_decades_per_V"
+  ],
+  "group_by": "lot",
+  "inner_splits": 2,
+  "max_fits": 500,
+  "measurement": {
+    "criterion_current": "50",
+    "criterion_current_unit": "nA",
+    "current_polarity": "positive",
+    "current_unit": "nA",
+    "max_bracket_span": "0.1",
+    "voltage_unit": "V",
+    "window_max": "0.4",
+    "window_min": "0.1"
+  },
+  "objective": "group_mae",
+  "outer_splits": 2,
+  "schema_version": "measurement-regression-v2",
+  "seed": 1729,
+  "target_unit": "arbitrary_units"
+}

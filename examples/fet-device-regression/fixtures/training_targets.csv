@@ -1,0 +1,13 @@
+lot,wafer,device,target
+invented_lot_1,01,001,11.2
+invented_lot_1,01,002,7.4
+invented_lot_1,01,003,16.8
+invented_lot_2,01,001,6.1
+invented_lot_2,01,002,13.7
+invented_lot_2,01,003,9.5
+invented_lot_3,01,001,17.3
+invented_lot_3,01,002,8.2
+invented_lot_3,01,003,12.6
+invented_lot_4,01,001,10.9
+invented_lot_4,01,002,15.1
+invented_lot_4,01,003,5.7

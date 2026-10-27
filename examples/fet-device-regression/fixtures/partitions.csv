@@ -1,0 +1,16 @@
+lot,wafer,device,partition
+invented_lot_1,01,001,train
+invented_lot_1,01,002,train
+invented_lot_1,01,003,train
+invented_lot_2,01,001,train
+invented_lot_2,01,002,train
+invented_lot_2,01,003,train
+invented_lot_3,01,001,train
+invented_lot_3,01,002,train
+invented_lot_3,01,003,train
+invented_lot_4,01,001,train
+invented_lot_4,01,002,train
+invented_lot_4,01,003,train
+invented_lot_5,01,001,predict
+invented_lot_5,01,002,predict
+invented_lot_5,01,003,predict

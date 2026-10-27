@@ -86,7 +86,7 @@ def main(argv=None):
         if arguments and arguments[0] == "demo":
             return run_demo(arguments[1:])
         parser = Parser(description=__doc__)
-        parser.add_argument("--version", action="version", version=f"Axiom Clotho {__version__}; measurement-regression-v1")
+        parser.add_argument("--version", action="version", version=f"Axiom Clotho {__version__}; RRAM measurement-regression-v1; FET measurement-regression-v2")
         parser.add_argument("command", nargs="?", choices=("components",),
                             help="verify and print pinned component identities")
         args = parser.parse_args(arguments)

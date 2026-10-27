@@ -7,6 +7,10 @@ temporarily so existing imports and scripts have one owner. See the explicit
 [version/upgrade boundary](CLOTHO_BETA_MIGRATION.md); this is not an already
 published release or a claim that existing user environments were upgraded.
 
+> **Separate unreleased FET candidate:** see [FET device regression](FET_DEVICE_REGRESSION.md)
+> for the explicit v2 composite-device contract. It is not included in the frozen
+> published b2 assets. The remainder of this page describes **RRAM v1**, not FET.
+
 Clotho now does more than run a bundled synthetic demonstration: it accepts your
 own declared measurement CSVs, joins your own training endpoints by exact device
 ID, compares models with nested group-disjoint validation, predicts an explicitly

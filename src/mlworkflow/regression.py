@@ -61,6 +61,10 @@ def _check_groups(cohort, config):
 def prepare(input_dir, partitions_csv, training_targets_csv, config_json, output_dir):
     """Use exact device joins; no future outcome path is accepted or opened."""
     protect_output(output_dir, input_dir)
+    from .adapters import is_v2_config
+    if is_v2_config(parse_json(read_regular(config_json))):
+        from .adapters.fet_transfer import prepare as prepare_fet
+        return prepare_fet(input_dir, partitions_csv, training_targets_csv, config_json, output_dir)
     raw = {name: read_regular(Path(input_dir) / name) for name in RAW_FILES}
     partition_raw, target_raw, config_raw = map(read_regular, (partitions_csv, training_targets_csv, config_json))
     config = validate_config(parse_json(config_raw))
@@ -117,6 +121,10 @@ def prepare(input_dir, partitions_csv, training_targets_csv, config_json, output
 
 
 def _prepared(path):
+    from .adapters import is_v2_bundle
+    if is_v2_bundle(path):
+        from .adapters.fet_transfer import prepared
+        return prepared(path)
     payloads, receipt_sha = load_bundle(path, "prepared")
     config = validate_config(parse_json(payloads["config.json"]))
     cohort = parse_csv(payloads["cohort.csv"], COHORT_COLUMNS)
@@ -161,7 +169,7 @@ def _plans(prepared_dir):
     total = comparison["fit_budget"]["total_fits"] + prediction["fit_budget"]["total_fits"]
     if total > config["max_fits"]:
         raise WorkflowError("planned pipeline fits exceed the explicitly declared max_fits; no fitting was performed")
-    plan = {"schema_version": "measurement-execution-plan-v1", "fits_performed": 0,
+    plan = {"schema_version": "measurement-execution-plan-v2" if config["schema_version"] == "measurement-regression-v2" else "measurement-execution-plan-v1", "fits_performed": 0,
             "total_planned_fits": total, "max_fits": config["max_fits"], "comparison": comparison,
             "prediction": prediction, "prepared_receipt_sha256": receipt_sha}
     return config, train, future, payloads, receipt_sha, frame, new, options, plan
@@ -171,7 +179,7 @@ def plan(prepared_dir):
     return _plans(prepared_dir)[-1]
 
 
-def _report(title, config, paragraphs, links):
+def _report(title, config, paragraphs, links, limitations=None):
     esc = html.escape
     return ("<!doctype html><html lang='en'><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
             "<meta http-equiv='Content-Security-Policy' content=\"default-src 'none'; style-src 'unsafe-inline'\">"
@@ -188,12 +196,16 @@ def _report(title, config, paragraphs, links):
             + "<section><h2>Inspect the saved evidence</h2><ul>"
             + "".join("<li><a href='" + esc(url, quote=True) + "'>" + esc(label) + "</a></li>" for url, label in links)
             + "</ul></section><section><h2>What this does not establish</h2><ul>"
-            + "".join("<li>" + esc(line) + "</li>" for line in LIMITATIONS)
+            + "".join("<li>" + esc(line) + "</li>" for line in (LIMITATIONS if limitations is None else limitations))
             + "</ul></section></main></html>\n").encode()
 
 
 def run(prepared_dir, output_dir):
     protect_output(output_dir, prepared_dir)
+    from .adapters import is_v2_bundle
+    if is_v2_bundle(prepared_dir):
+        from .adapters.fet_transfer import run as run_fet
+        return run_fet(prepared_dir, output_dir)
     config, train, future, payloads, receipt_sha, frame, new, options, planned = _plans(prepared_dir)
     from groupbench import benchmark, fit_predict
     try:
@@ -232,6 +244,10 @@ def run(prepared_dir, output_dir):
 def score(run_dir, outcomes_csv, output_dir):
     """Use already saved predictions; do not load ML, train, select, or refit."""
     protect_output(output_dir, run_dir)
+    from .adapters import is_v2_bundle
+    if is_v2_bundle(run_dir):
+        from .adapters.fet_transfer import score as score_fet
+        return score_fet(run_dir, outcomes_csv, output_dir)
     payloads, receipt_sha = load_bundle(run_dir, "run")
     metadata = parse_json(payloads["run.json"])
     try:
