@@ -28,7 +28,7 @@
 
 回退 a2 時請使用另一個環境。從原始碼安裝時，除了套件版本，也記下 Git revision。下方固定 checkout 對應 a3 發布原始碼；之後 `main` 更新不會改動已發布檔案。
 
-**安裝已發布的 wheel：** 下載 [0.2.0a3 wheel](https://github.com/xinhi6716/ml-super-calculator/releases/download/v0.2.0a3/ml_super_calculator-0.2.0a3-py3-none-any.whl)，並與 [SHA256SUMS.txt](https://github.com/xinhi6716/ml-super-calculator/releases/download/v0.2.0a3/SHA256SUMS.txt) 核對。在 Python 虛擬環境中，切換至下載目錄後執行：
+**安裝已發布的 wheel：** 下載 [0.2.0a3 wheel](https://github.com/xinhi6716/ml-super-calculator/releases/download/v0.2.0a3/ml_super_calculator-0.2.0a3-py3-none-any.whl)，並與 [SHA256SUMS.txt](https://github.com/xinhi6716/ml-super-calculator/releases/download/v0.2.0a3/SHA256SUMS.txt) 核對。在[全新的 Python 虛擬環境](docs/RELEASE_NOTES_0.2.0a3.md#install-a-verified-a3-wheel)中，切換至下載目錄後執行：
 
 ```bash
 python -m pip install ./ml_super_calculator-0.2.0a3-py3-none-any.whl
@@ -39,7 +39,7 @@ mlcalc demo --out runs/demo
 
 **或從 checkout 安裝：**
 
-若要取得新的固定版本 checkout，請選擇尚不存在的目的目錄；下列指令不會更新既有 checkout。需要 Git 與 Python。
+若要取得新的固定版本 checkout，請選擇尚不存在的目的目錄；下列指令不會更新既有 checkout。需要 Git 與 Python。請使用全新的 Python 虛擬環境；[既有的 POSIX 設定範例](docs/RELEASE_NOTES_0.2.0a3.md#install-a-verified-a3-wheel)示範如何建立及啟用環境，再接著執行下方的 checkout 安裝指令。
 
 ```bash
 git clone https://github.com/xinhi6716/ml-super-calculator.git mlcalc-source

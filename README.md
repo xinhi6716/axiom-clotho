@@ -28,7 +28,7 @@ Training, reports and predictions stay on your computer. No account, hosted comp
 
 Use a separate environment when reverting to a2. For source installs, record the Git revision as well as the package version. The pinned checkout below matches the a3 release source; later `main` changes do not alter either published artifact.
 
-**Install the published wheel:** download the [0.2.0a3 wheel](https://github.com/xinhi6716/ml-super-calculator/releases/download/v0.2.0a3/ml_super_calculator-0.2.0a3-py3-none-any.whl) and compare it with [SHA256SUMS.txt](https://github.com/xinhi6716/ml-super-calculator/releases/download/v0.2.0a3/SHA256SUMS.txt). In your Python virtual environment, from the download directory:
+**Install the published wheel:** download the [0.2.0a3 wheel](https://github.com/xinhi6716/ml-super-calculator/releases/download/v0.2.0a3/ml_super_calculator-0.2.0a3-py3-none-any.whl) and compare it with [SHA256SUMS.txt](https://github.com/xinhi6716/ml-super-calculator/releases/download/v0.2.0a3/SHA256SUMS.txt). In your [fresh Python virtual environment](docs/RELEASE_NOTES_0.2.0a3.md#install-a-verified-a3-wheel), from the download directory:
 
 ```bash
 python -m pip install ./ml_super_calculator-0.2.0a3-py3-none-any.whl
@@ -39,7 +39,7 @@ Installation may download dependencies from your configured package index; the w
 
 **Or install from a checkout:**
 
-For a fresh, pinned checkout, choose a new destination directory; the commands below do not update an existing checkout. Git and Python are required.
+For a fresh, pinned checkout, choose a new destination directory; the commands below do not update an existing checkout. Git and Python are required. Use a fresh Python virtual environment; the [existing POSIX setup example](docs/RELEASE_NOTES_0.2.0a3.md#install-a-verified-a3-wheel) shows how to create and activate one. Then use the checkout installation commands below.
 
 ```bash
 git clone https://github.com/xinhi6716/ml-super-calculator.git mlcalc-source

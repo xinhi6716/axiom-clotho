@@ -443,7 +443,7 @@ Existing files are preserved unless `--overwrite` is explicit. Atomic per-file n
 ### Verify an existing bundle offline
 
 ```bash
-mlcalc verify runs/example
+mlcalc verify runs/example-evaluation
 mlcalc verify runs/example-predictions
 # The groupbench alias and python -m groupbench support the same command.
 ```
