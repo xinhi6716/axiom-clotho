@@ -242,6 +242,44 @@ This performs grouped inner selection on all labeled rows, refits locally, and w
 
 No executable model file is loaded or saved. The Python API can retain the fitted estimator in memory; the CLI refits when called again.
 
+### Repair a prediction-column mismatch
+
+**Current source only:** when prediction feature names do not match, the error
+lists missing and unexpected columns for regression and binary prediction,
+including their no-fit plans. For example, a CSV with `pressure_MPa` and `notes`
+instead of the selected `pressure_mpa` reports:
+
+```text
+Missing columns (1): 'pressure_mpa'. Unexpected columns (2): 'pressure_MPa', 'notes'.
+```
+
+1. Check the intended features with `mlcalc plan run TRAIN.csv --target TARGET
+   --group GROUP` and read `feature_schema`. Include the same `--features` or
+   `--features-file` selection that you will use for prediction. For binary data,
+   use `mlcalc binary plan run` instead. Plans print JSON; they do not fit or write.
+2. Re-export the new-row CSV with exactly those feature names. Match case and
+   spaces. Verify a suspected typo against the actual measurement before renaming
+   it; do not invent missing measurements or fill them with arbitrary zeros.
+   Exclude the target, group, IDs and notes unless an item is deliberately an
+   allowed feature. Column order may differ. The calculator does not silently
+   rename, remove or guess columns, or infer scientific units.
+3. Retry `mlcalc plan predict TRAIN.csv NEW.csv --target TARGET --group GROUP`
+   with the same selection and split options. Use `mlcalc binary plan predict`
+   for binary data. After the plan succeeds, run the matching `predict` command
+   with a fresh `--out` directory. A valid schema does not establish model quality.
+
+These are command templates: replace the uppercase placeholders with your paths
+and column names. A schema error exits with status **2**, before fitting or
+creating result files; repeating it does not repair or modify either CSV.
+Duplicate headers are rejected separately, before name matching.
+
+Diagnostics show up to five names per list, abbreviate long names, escape
+control characters, and report how many names were omitted. No row values or
+input paths are added to these schema messages. Column names themselves may be
+sensitive, so review errors before sharing. The frozen `v0.2.0a3` download still
+uses the earlier generic mismatch message; these diagnostics do not change its
+files or relax validation.
+
 ### Check whether new inputs were observed in training
 
 `plan predict` includes an `input_support` summary before any fitting. `predict`

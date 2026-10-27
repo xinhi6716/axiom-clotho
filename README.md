@@ -110,6 +110,8 @@ mlcalc predict measurements.csv new_process_settings.csv \
 
 Prediction performs grouped inner selection on all labeled rows and refits locally. It writes predictions in target units, not a new test-performance estimate. No executable model is loaded or saved; the CLI refits each time. Simple input-support flags can highlight unseen values, but they are **not uncertainty intervals or an out-of-distribution test**. [Prediction and input-support details](docs/USAGE_REFERENCE.md#predict-new-rows)
 
+If a prediction CSV is rejected, follow the [no-fit column-repair steps](docs/USAGE_REFERENCE.md#repair-a-prediction-column-mismatch). Current source identifies missing and unexpected feature names; it does not silently alter your data.
+
 ## Read the results
 
 | File | Start here when you want to… |

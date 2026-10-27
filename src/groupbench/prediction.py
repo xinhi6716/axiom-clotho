@@ -15,7 +15,7 @@ import sklearn
 from . import __version__
 from .package_source import observe_package_source
 from .categorical import LEGACY, DISTINCT, encoding_options, preprocessing_description
-from .data import (data_fingerprint, duplicate_diagnostics, prepare_data,
+from .data import (_prediction_column_details, data_fingerprint, duplicate_diagnostics, prepare_data,
                    validate_features, validate_prediction_features)
 from .model import GroupBenchRegressor, selection_plan
 from .input_support import prediction_input_support
@@ -53,7 +53,8 @@ def _prepare_prediction(frame, new_rows, *, target, group, features, inner_split
     X, y, groups = prepare_data(frame, target, group, features)
     incoming = validate_features(new_rows)
     if set(incoming.columns) != set(X.columns):
-        raise ValueError("New rows must contain exactly the training feature columns, without target or group columns.")
+        raise ValueError("New rows must contain exactly the training feature columns, without target or group columns. "
+                         + _prediction_column_details(incoming.columns, X.columns))
     # No imputation/encoding is fitted; match the estimator's prediction type
     # rules, including its all-missing-column accommodation, before training.
     validate_prediction_features(incoming, X.columns, [str(X[c].dtype) for c in X])

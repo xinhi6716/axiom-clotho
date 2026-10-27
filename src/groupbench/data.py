@@ -6,6 +6,7 @@ import hashlib
 import json
 from numbers import Integral
 from pathlib import Path
+import reprlib
 
 import numpy as np
 import pandas as pd
@@ -52,11 +53,34 @@ def validate_features(X: pd.DataFrame) -> pd.DataFrame:
     return X
 
 
+def _prediction_column_details(actual, expected):
+    """Bounded schema-only guidance; never include row values or infer renames."""
+    actual, expected = list(actual), list(expected)
+    actual_set, expected_set = set(actual), set(expected)
+    missing = [name for name in expected if name not in actual_set]
+    unexpected = [name for name in actual if name not in expected_set]
+    display = reprlib.Repr()
+    display.maxstring = 80
+
+    def describe(label, names):
+        # repr escapes terminal controls; cap both the count and each name.
+        shown = ", ".join(display.repr(name) for name in names[:5]) or "none"
+        if len(names) > 5:
+            shown += f" (+{len(names) - 5} more)"
+        return f"{label} ({len(names)}): {shown}."
+
+    return (describe("Missing columns", missing) + " "
+            + describe("Unexpected columns", unexpected)
+            + " Match names exactly (including case and spaces) and supply only the selected features."
+            + " No columns were renamed or dropped.")
+
+
 def validate_prediction_features(X, feature_names, feature_types):
     """Use the same stateless schema/type checks before planning and inference."""
     X = validate_features(X)
     if set(X.columns) != set(feature_names):
-        raise ValueError("Prediction columns must exactly match training feature names.")
+        raise ValueError("Prediction columns must exactly match training feature names. "
+                         + _prediction_column_details(X.columns, feature_names))
     X = X[list(feature_names)]
     for col, expected_type in zip(X.columns, feature_types):
         if X[col].isna().all():
