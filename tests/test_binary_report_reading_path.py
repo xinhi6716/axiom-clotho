@@ -50,6 +50,54 @@ class BinaryReportReadingPathTests(unittest.TestCase):
         self.text = render_binary_html(self.result)
         self.document = Document(self.text)
 
+    def test_split_scope_precedes_scores_in_both_languages(self):
+        self.assertLess(self.text.index('id="split-scope-heading"'),
+                        self.text.index('<caption id="comparison-table">'))
+        for expected in ('Whole-group holdout on: ', '<code>lot</code>',
+                         'Zero group-ID overlap checks only the supplied IDs',
+                         'other domain/site axes are not separately audited',
+                         'If that column defines the intended domain boundary',
+                         'Not run. The seed assigns whole groups to folds',
+                         '此切分可回答的問題', '未另稽核其他領域／場域軸',
+                         '若該欄位定義預定的領域邊界',
+                         '未執行。種子將完整群組分配至各折',
+                         '不同群組識別碼仍可能共享場域、時段或其他相依軸'):
+            self.assertIn(expected, self.text)
+
+    def test_singleton_note_requires_positive_integer_equal_counts(self):
+        for rows, groups, expected in ((6, 6, True), (6, 2, False), (6, 4, False),
+                                       (0, 0, False), (True, True, False), (6.0, 6.0, False)):
+            with self.subTest(rows=rows, groups=groups):
+                self.result.manifest.update(n_rows=rows, n_groups=groups)
+                text = render_binary_html(self.result)
+                self.assertEqual('Recorded rows = groups:' in text, expected)
+                self.assertEqual('記錄列數等於群組數' in text, expected)
+                if expected:
+                    self.assertIn('every supplied group has one row', text)
+                    self.assertIn('請檢查相關列是否被指定為不同識別碼', text)
+                self.assertNotIn('equivalent to a random', text)
+
+    def test_domain_named_group_is_displayed_not_inferred_or_certified(self):
+        self.result.manifest['config']['group'] = 'domain'
+        text = render_binary_html(self.result)
+        self.assertIn('<code>domain</code>', text)
+        self.assertIn('the scientific meaning of the IDs is not verified', text)
+        self.assertIn('識別碼的科學意義並未經驗證', text)
+        self.assertNotIn('This is not domain-heldout', text)
+
+    def test_old_manifest_scope_escapes_long_unicode_group_without_mutation(self):
+        import html
+        name = '群組<&"' + '域' * 160
+        self.result.manifest['config']['group'] = name
+        self.result.manifest.pop('package_source', None)
+        before = copy.deepcopy(self.result)
+        text = render_binary_html(self.result)
+        self.assertIn('<code>' + html.escape(name, quote=True) + '</code>', text)
+        self.assertNotIn(name, text)
+        self.assertIn('未記錄', text)
+        self.assertEqual(self.result.manifest, before.manifest)
+        self.assertEqual(self.result.summary, before.summary)
+
     def test_ids_and_all_accessible_references_resolve(self):
         ids = [attrs['id'] for _, attrs in self.document.tags if 'id' in attrs]
         self.assertEqual(len(ids), len(set(ids)))

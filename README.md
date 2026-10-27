@@ -123,6 +123,8 @@ Prediction performs grouped inner selection on all labeled rows and refits local
 unavailability. This self-reported source-byte metadata is not included in the
 frozen a3 download and does not certify loaded code, a build or reproducibility.
 
+Current-source reports also explain [what the chosen split can answer](docs/PROTOCOL.md#read-the-split-scope): group-heldout is not automatically domain-heldout, and no separate random-row comparison is run. A note appears when every recorded group has one row. This report guidance is not included in frozen a3 and does not change scores or splitting rules.
+
 Regression compares **Dummy mean, Ridge and Extra Trees** with the same folds and preprocessing. Hyperparameters are selected inside each outer training partition. The `selected` entry evaluates the selection procedure, rather than choosing a winner after inspecting the outer test scores. Families do **not** receive equal compute budgets.
 
 Group MAE gives each group equal weight; row MAE and RMSE pool observations. Constant-target or one-row R² is `null`. Do not repeatedly tune against the outer leaderboard and then present those same scores as unbiased evidence. [Full evaluation protocol](docs/PROTOCOL.md)

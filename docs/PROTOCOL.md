@@ -4,6 +4,39 @@
 
 The default experiment estimates the performance of a fixed, inner-selected regression procedure on rows from groups absent from its training set. A group should represent the domain's independence boundary. It does not estimate future-time performance unless the chosen grouping and population justify that interpretation.
 
+## Read the split scope
+
+Both ordinary regression and binary evaluation hold out whole values of the
+single `--group` column. Choose that boundary before looking at scores:
+
+| Question | What the ordinary report supports |
+| --- | --- |
+| New groups along the supplied axis? | Each outer test group's ID is absent from its training fold. Zero ID overlap does not establish physical independence or exclude other leakage. |
+| New domain or site? | Only if the supplied grouping boundary and population justify that interpretation. A batch holdout can still share sites; other domain/site axes are not separately audited. A column named `domain` is not evidence by itself. |
+| Random-row performance? | No separate random-row comparison is run. The seed allocates whole groups, not individual rows within a group. Do not compare these scores to row-random results as though they answer the same question. |
+
+Current-source reports put this scope beside the model comparison. If recorded
+row and unique-group counts are equal, a nonblocking note explains that every
+group has one row: there are no repeated-observation groups for the split to
+protect. Independent single-row groups are allowed; the note does not diagnose
+bad IDs, reject data, or claim this algorithm equals a row-random splitter.
+Neither report wording nor a successful run proves domain independence,
+future-time transfer or causal effects. Frozen a3 reports are unchanged.
+
+Before fitting, run `mlcalc plan run` (or `mlcalc binary plan run`) with the same
+input, target, group and feature arguments. Missing/blank group IDs, a missing
+group column, or selecting the group as a feature already fail validation.
+Every actual outer training partition also needs enough distinct groups for
+the inner folds; too few groups cause an error, never a row-random fallback.
+For example, two domains cannot support two outer folds plus two inner folds.
+Do not relabel related rows or silently substitute a weaker boundary to pass.
+
+For a separately declared fixed new environment, see the existing
+[environment-heldout comparison companion](../examples/environment-heldout-comparison/README.md).
+It requires one row per device, an explicit held-out environment and no shared
+declared dependency block across training/future. Its target-free prediction
+and separate scoring are not the ordinary nested-CV command or causal evidence.
+
 ## Algorithm
 
 1. Validate columns, finite one-dimensional targets, and non-missing group identifiers. Preserve row order; exclude target and group from features.

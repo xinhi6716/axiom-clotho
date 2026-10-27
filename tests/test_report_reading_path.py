@@ -97,6 +97,53 @@ class ReadingPathTests(unittest.TestCase):
         self.assertEqual(self.result.summary, self.before.summary)
         self.assertEqual(self.result.manifest, self.before.manifest)
 
+    def test_split_scope_precedes_comparison_scores_without_claiming_domain_validity(self):
+        scope = self.text.index('id="split-scope-heading"')
+        self.assertLess(scope, self.text.index('class="bar-row"'))
+        self.assertLess(scope, self.text.index('<caption id="comparison-table">'))
+        for expected in ('Whole-group holdout on: <code>batch</code>',
+                         'Zero group-ID overlap checks only the supplied IDs',
+                         'other domain/site axes are not separately audited',
+                         'If that column defines the intended domain boundary',
+                         'Random-row comparison?',
+                         'Not run. The seed assigns whole groups to folds',
+                         'may still share a site, time period or another dependence axis'):
+            self.assertIn(expected, self.text)
+        self.assertNotIn('batch it has never seen', self.text)
+
+    def test_singleton_note_requires_positive_integer_equal_counts(self):
+        for rows, groups, expected in ((4, 4, True), (4, 2, False), (4, 3, False),
+                                       (0, 0, False), (True, True, False), (4.0, 4.0, False)):
+            with self.subTest(rows=rows, groups=groups):
+                self.result.manifest.update(n_rows=rows, n_groups=groups)
+                text = render_html(self.result)
+                self.assertEqual('Recorded rows = groups:' in text, expected)
+                if expected:
+                    self.assertIn('every supplied group has one row', text)
+                    self.assertIn('check that related rows have not been assigned different IDs', text)
+                self.assertNotIn('equivalent to a random', text)
+
+    def test_domain_named_group_is_displayed_not_inferred_or_certified(self):
+        self.result.manifest['config']['group'] = 'domain'
+        text = render_html(self.result)
+        self.assertIn('Whole-group holdout on: <code>domain</code>', text)
+        self.assertIn('the scientific meaning of the IDs is not verified', text)
+        self.assertIn('If that column defines the intended domain boundary', text)
+        self.assertNotIn('This is not domain-heldout', text)
+
+    def test_old_manifest_scope_escapes_long_unicode_group_without_mutation(self):
+        import html
+        name = '群組<&"' + '域' * 160
+        self.result.manifest['config']['group'] = name
+        self.result.manifest.pop('package_source', None)
+        before = copy.deepcopy(self.result)
+        text = render_html(self.result)
+        self.assertIn('<code>' + html.escape(name, quote=True) + '</code>', text)
+        self.assertNotIn(name, text)
+        self.assertIn('not recorded', text)
+        self.assertEqual(self.result.manifest, before.manifest)
+        self.assertEqual(self.result.summary, before.summary)
+
 
 if __name__ == '__main__':
     unittest.main()
