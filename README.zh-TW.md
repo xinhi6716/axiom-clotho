@@ -1,12 +1,12 @@
 <p align="right"><a href="README.md">English</a> · <strong>繁體中文</strong></p>
 
-# Axiom Clotho
+<h1 id="axiom-clotho" align="center">Axiom Clotho</h1>
 
 <picture>
-  <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="docs/assets/clotho-hero-dark-mobile.svg">
-  <source media="(max-width: 600px)" srcset="docs/assets/clotho-hero-light-mobile.svg">
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/clotho-hero-dark.svg">
-  <img src="docs/assets/clotho-hero-light.svg" width="100%" alt="Axiom Clotho — the Moirai machine-learning workbench, beneath a spindle and architectural halo.">
+  <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="docs/assets/clotho-ritual-hero-dark-mobile.svg">
+  <source media="(max-width: 600px)" srcset="docs/assets/clotho-ritual-hero-light-mobile.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/clotho-ritual-hero-dark.svg">
+  <img src="docs/assets/clotho-ritual-hero-light.svg" width="100%" alt="A continuous celestial thread converging on a stellar origin.">
 </picture>
 
 **從量測走向模型。**
@@ -19,12 +19,10 @@
 
 > **你有 FET 轉移曲線？** 請從 [FET 裝置迴歸指南](docs/FET_DEVICE_REGRESSION.md)開始：每個 `(lot, wafer, device)` 接受一段宣告量測，以兩項明確特徵接上相同的群組 ML 核心。凍結的 b2 與更早版本仍保留供回復使用。
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/threshold-1-dark.svg"><img src="docs/assets/threshold-1-light.svg" width="100%" alt=""></picture>
-
 <a id="begin"></a>
 <a id="取得已審核的-beta-核心"></a>
 
-## I / 開始
+<h2 id="i--開始" align="center">I / 開始</h2>
 
 依資料選擇路線，不必換成另一個產品。
 
@@ -77,21 +75,19 @@ clotho --version
 
 宣告 Python 3.10+；驗證使用 Linux／Python 3.12.14 與既有相依套件。運算留在本機，不需帳號、託管 ML API、模型權重下載或遙測。
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/threshold-2-dark.svg"><img src="docs/assets/threshold-2-light.svg" width="100%" alt=""></picture>
-
 <a id="thread"></a>
 <a id="這個-beta-完成什麼"></a>
 <a id="四階段快速開始"></a>
 
-## II / 絲線
+<h2 id="ii--絲線" align="center">II / 絲線</h2>
 
 **Prepare → Plan → Run → Score。** 每個階段只有一項職責；後來的結果只在評分時進入。
 
 <picture>
-  <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="docs/assets/clotho-process-dark-mobile.svg">
-  <source media="(max-width: 600px)" srcset="docs/assets/clotho-process-light-mobile.svg">
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/clotho-process-dark.svg">
-  <img src="docs/assets/clotho-process-light.svg" width="100%" alt="Prepare features and training targets; inspect the plan; run grouped comparison and target-free prediction; score later outcomes without fitting.">
+  <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="docs/assets/clotho-ritual-process-dark-mobile.svg">
+  <source media="(max-width: 600px)" srcset="docs/assets/clotho-ritual-process-light-mobile.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/clotho-ritual-process-dark.svg">
+  <img src="docs/assets/clotho-ritual-process-light.svg" width="100%" alt="Prepare features and training targets; inspect the plan; run grouped comparison and target-free prediction; score later outcomes without fitting.">
 </picture>
 
 | 步驟 | 做什麼 | 不做什麼 |
@@ -129,11 +125,9 @@ clotho score --run-dir clotho-run \
 
 換用自己的量測時，請提供[原始檔、分區、訓練目標及明確設定](docs/CLOTHO_CSV_BETA.md)。這條 b3 RRAM 路線限於**固定宣告條件下每裝置一列**、batch／wafer／device 分組與選定電阻特徵。科學目標意義與特徵取得時序仍由你負責。
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/threshold-3-dark.svg"><img src="docs/assets/threshold-3-light.svg" width="100%" alt=""></picture>
-
 <a id="evidence"></a>
 
-## III / 閱讀證據
+<h2 id="iii--閱讀證據" align="center">III / 閱讀證據</h2>
 
 證據可讀、保持完整，這次執行才有用。
 
@@ -301,11 +295,9 @@ mlcalc binary predict examples/synthetic_binary_process.csv examples/new_binary_
 
 </details>
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/threshold-4-dark.svg"><img src="docs/assets/threshold-4-light.svg" width="100%" alt=""></picture>
-
 <a id="horizon"></a>
 
-## IV / 遠景
+<h2 id="iv--遠景" align="center">IV / 遠景</h2>
 
 **先做深，再做廣。** 方向是通用 ML 建構器：以明確輸入、可控擬合與可檢查結果為核心，組合可擴充的領域模組。第一個深耕領域是半導體／材料；其他領域、更廣的建構與自動化仍是**未來工作**，不是既有能力。
 

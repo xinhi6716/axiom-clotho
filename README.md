@@ -1,13 +1,13 @@
 <p align="right"><strong>English</strong> · <a href="README.zh-TW.md">繁體中文</a></p>
 
-<h1 id="axiom-clotho">
+<h1 id="axiom-clotho" align="center">Axiom Clotho</h1>
+
 <picture>
-  <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="docs/assets/clotho-hero-dark-mobile.svg">
-  <source media="(max-width: 600px)" srcset="docs/assets/clotho-hero-light-mobile.svg">
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/clotho-hero-dark.svg">
-  <img src="docs/assets/clotho-hero-light.svg" width="100%" alt="Axiom Clotho">
+  <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="docs/assets/clotho-ritual-hero-dark-mobile.svg">
+  <source media="(max-width: 600px)" srcset="docs/assets/clotho-ritual-hero-light-mobile.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/clotho-ritual-hero-dark.svg">
+  <img src="docs/assets/clotho-ritual-hero-light.svg" width="100%" alt="A continuous celestial thread converging on a stellar origin.">
 </picture>
-</h1>
 
 Prepare device measurements, compare models without mixing declared batches, and predict new samples locally. Clotho is the **Moirai** machine-learning workbench: today, fixed-condition device regression and grouped tabular learning; broader domain modules are future work.
 
@@ -18,14 +18,7 @@ Prepare device measurements, compare models without mixing declared batches, and
 <a id="begin"></a>
 <a id="get-the-reviewed-beta-core"></a>
 
-<h2 id="i--begin">
-<picture>
-  <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="docs/assets/chapter-1-dark-mobile.svg">
-  <source media="(max-width: 600px)" srcset="docs/assets/chapter-1-light-mobile.svg">
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/chapter-1-dark.svg">
-  <img src="docs/assets/chapter-1-light.svg" width="100%" alt="I / Begin">
-</picture>
-</h2>
+<h2 id="i--begin" align="center">I / Begin</h2>
 
 Choose the route that matches your data—not a different product.
 
@@ -99,22 +92,15 @@ Python 3.10+ is declared; verification used Linux/Python 3.12.14 and existing de
 <a id="what-this-beta-completes"></a>
 <a id="four-stage-quickstart"></a>
 
-<h2 id="ii--the-thread">
-<picture>
-  <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="docs/assets/chapter-2-dark-mobile.svg">
-  <source media="(max-width: 600px)" srcset="docs/assets/chapter-2-light-mobile.svg">
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/chapter-2-dark.svg">
-  <img src="docs/assets/chapter-2-light.svg" width="100%" alt="II / The thread">
-</picture>
-</h2>
+<h2 id="ii--the-thread" align="center">II / The thread</h2>
 
 **Prepare → Plan → Run → Score.** Each stage has one responsibility; later outcomes enter only at scoring.
 
 <picture>
-  <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="docs/assets/clotho-process-dark-mobile.svg">
-  <source media="(max-width: 600px)" srcset="docs/assets/clotho-process-light-mobile.svg">
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/clotho-process-dark.svg">
-  <img src="docs/assets/clotho-process-light.svg" width="100%" alt="Prepare features and training targets; inspect the plan; run grouped comparison and target-free prediction; score later outcomes without fitting.">
+  <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="docs/assets/clotho-ritual-process-dark-mobile.svg">
+  <source media="(max-width: 600px)" srcset="docs/assets/clotho-ritual-process-light-mobile.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/clotho-ritual-process-dark.svg">
+  <img src="docs/assets/clotho-ritual-process-light.svg" width="100%" alt="Prepare features and training targets; inspect the plan; run grouped comparison and target-free prediction; score later outcomes without fitting.">
 </picture>
 
 | Step | What happens | What does not happen |
@@ -154,14 +140,7 @@ For your measurements, replace the invented inputs with your own [raw files, par
 
 <a id="evidence"></a>
 
-<h2 id="iii--read-the-evidence">
-<picture>
-  <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="docs/assets/chapter-3-dark-mobile.svg">
-  <source media="(max-width: 600px)" srcset="docs/assets/chapter-3-light-mobile.svg">
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/chapter-3-dark.svg">
-  <img src="docs/assets/chapter-3-light.svg" width="100%" alt="III / Read the evidence">
-</picture>
-</h2>
+<h2 id="iii--read-the-evidence" align="center">III / Read the evidence</h2>
 
 The run is useful only when its evidence is readable and kept together.
 
@@ -331,14 +310,7 @@ The [complete usage reference](docs/USAGE_REFERENCE.md) retains the detailed inp
 
 <a id="horizon"></a>
 
-<h2 id="iv--horizon">
-<picture>
-  <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="docs/assets/chapter-4-dark-mobile.svg">
-  <source media="(max-width: 600px)" srcset="docs/assets/chapter-4-light-mobile.svg">
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/chapter-4-dark.svg">
-  <img src="docs/assets/chapter-4-light.svg" width="100%" alt="IV / Horizon">
-</picture>
-</h2>
+<h2 id="iv--horizon" align="center">IV / Horizon</h2>
 
 **First depth, then breadth.** The direction is a general ML builder: composable domain modules around explicit inputs, controlled fitting and inspectable results. The first deep domain is semiconductor/materials work. Other domains and broader construction/automation are **future work**, not delivered capability.
 

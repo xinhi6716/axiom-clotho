@@ -1,3 +1,13 @@
+# Celestial ritual landing refinement · 2026-10-28
+
+The English and traditional-Chinese landings now use a continuous celestial Clotho thread with the Axiom polar-axis composition and palette. The product title and all four chapter names are native headings, retaining existing anchor destinations. The four-stage illustration has only palette substitutions; its geometry, wording and workflow meaning are unchanged. The existing release, source-only setup disclosures, commands and scientific limits are unchanged.
+
+The new `clotho-ritual-hero-*.svg` files embed the editable Moirai Clotho vector geometry. No generated raster, tracing, external artwork or font is used in those hero files. Geometry is symbolic brand illustration, not a scientific or implementation diagram. The recolored `clotho-ritual-process-*.svg` files retain the existing DejaVu glyph outlines and notices below. Static SVG previews do not establish browser or assistive-technology behavior.
+
+The earlier artwork and chapter assets remain available for rollback and existing links. The notices below describe those earlier versions.
+
+## Preserved historical editorial notices
+
 # Editorial continuity · 2026-10-28
 
 The English landing retains its original hero and working-sequence artwork. Its hero now forms the accessible H1 instead of repeating a separate visible title; four original chapter plates replace the tiny repeated separators. Each chapter remains a semantic H2 with the existing anchor destinations and an exact image alternative. Lower-priority setup context is progressively disclosed; commands, release links, counts and scientific limitations are unchanged. These are original architectural ornaments and outlined DejaVu typography, not logos, measurements or scientific schematics. No external requests, new font assets or dashboards. Candidate browser/screenreader rendering is not certified by static design studies.
