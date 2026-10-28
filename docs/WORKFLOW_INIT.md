@@ -3,8 +3,8 @@
 # Start with your own measurements
 
 **Included in 0.3.0b4. The frozen 0.3.0b3 wheel and tag do not include
-`clotho init`.** For the visual maintenance release, install the matching b5 wheel or source as described in the
-[b5 release guide](RELEASE_NOTES_0.3.0b5.md). Existing RRAM/FET examples and commands
+`clotho init`.** For the numerical-integrity release candidate, install the matching b6 wheel or source as described in the
+[b6 release guide](RELEASE_NOTES_0.3.0b6.md). Existing RRAM/FET examples and commands
 remain unchanged. From the matching checkout, `PYTHONPATH=src python -S -m mlworkflow`
 can replace `clotho`. Do not install a second overlapping distribution or mistake
 a local candidate wheel for proof that a release has been published.
@@ -103,7 +103,7 @@ establish scientific validity, correct units, physical independence or blinding.
 ## 繁體中文快速指南
 
 **0.3.0b4 已包含 `clotho init`；凍結的 0.3.0b3 wheel 與 tag 沒有此功能。**
-視覺維護版本請安裝相符的 b5 wheel 或原始碼；不必另裝重疊套件，也不必啟用雲端運算。
+數值完整性候選版本請安裝相符的 b6 wheel 或原始碼；不必另裝重疊套件，也不必啟用雲端運算。
 
 1. 用 `--workflow rram` 或 `--workflow fet` 明確選擇資料格式，並以 `--out`
    指定尚不存在的目錄；上層目錄須已存在，不接受符號連結路徑。

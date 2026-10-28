@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.0b6 — Regression finite-tree-state hardening
+
+- Package the reviewed guard that rejects non-finite stored threshold, value, impurity or weighted node mass arrays in supported regression ExtraTrees after each inner fit and family refit, before prediction. A failed refit preserves prior completed estimator state.
+- Do not clip, rescale, retry, skip candidates or change model defaults, grids, preprocessing, splits, metrics, schemas or dependencies. This intentionally tightens rejection of invalid fitted state; it is not new scientific capability.
+- Retain b5 artwork, blank-input `init` from b4 and FET from b3. No new Moirai artwork is included; earlier release guides, tags and assets remain unchanged.
+- See the [b6 release guide](docs/RELEASE_NOTES_0.3.0b6.md) for exact source-versus-package verification and coverage limits. Local candidate files do not establish publication.
+
 ## 0.3.0b5 — Report and documentation visual maintenance
 
 - Package the current Clotho coil emblems in regression and binary HTML reports, matching the celestial-thread documentation identity.

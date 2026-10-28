@@ -4,10 +4,10 @@
 
 **Moirai family · local regression beta · RRAM v1 contract.**
 
-Version: **0.3.0b5**. Blank-input setup is available through [clotho init](WORKFLOW_INIT.md); frozen b3 lacks init. The distribution remains `ml-super-calculator` so existing
+Version: **0.3.0b6**. Blank-input setup is available through [clotho init](WORKFLOW_INIT.md); frozen b3 lacks init. The distribution remains `ml-super-calculator` so existing
 imports and scripts have one owner. See the [version/upgrade boundary](CLOTHO_BETA_MIGRATION.md).
 
-> **FET transfer data:** b5 retains [FET device regression](FET_DEVICE_REGRESSION.md)
+> **FET transfer data:** b6 retains [FET device regression](FET_DEVICE_REGRESSION.md)
 > with the explicit v2 composite-device contract. The remainder of this page
 > describes **RRAM v1**, not FET.
 

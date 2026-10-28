@@ -7,7 +7,7 @@
 | Product | **Axiom Clotho** (Moirai family) |
 | Canonical repository | [`axiom-clotho`](https://github.com/xinhi6716/axiom-clotho), renamed in place from the calculator repository |
 | Distribution name for this beta | **`ml-super-calculator`**, intentionally retained |
-| Current beta version | **`0.3.0b5`** |
+| Current beta version | **`0.3.0b6`** |
 | Primary additive CLI | `clotho` |
 | Preserved interfaces | `mlcalc`, `groupbench`, `mlcalc-workflow`, `import groupbench` |
 | Release route | GitHub-only prerelease; no PyPI upload |
@@ -38,7 +38,7 @@ python -m pip show ml-super-calculator
 python -m pip check
 
 # Local reviewed beta wheel; no index access or dependency downloads:
-python -m pip install --no-index --no-deps --upgrade ./ml_super_calculator-0.3.0b5-py3-none-any.whl
+python -m pip install --no-index --no-deps --upgrade ./ml_super_calculator-0.3.0b6-py3-none-any.whl
 
 python -m pip check
 clotho --version
@@ -48,7 +48,7 @@ python -c "import groupbench; from importlib.metadata import version; print(grou
 clotho components
 ```
 
-The version checks should agree on `0.3.0b5`. `--no-deps` is intentional only when
+The version checks should agree on `0.3.0b6`. `--no-deps` is intentional only when
 the already-provisioned environment satisfies the unchanged declared requirements;
 it does not install missing dependencies. If checks fail, stop and provision or
 repair a separate environment deliberately rather than allowing an unexpected
@@ -76,7 +76,7 @@ PyPI project, package-index credential or account permission was created here.
 
 ## What was verified, and what was not
 
-For b5, see the [release guide](RELEASE_NOTES_0.3.0b5.md). It packages the report and documentation visual refresh without changing the distribution name or ML model/split/metric contracts. The [historical b4 guide](RELEASE_NOTES_0.3.0b4.md) covers blank-input `init`, which b5 retains. The [historical b3 guide](RELEASE_NOTES_0.3.0b3.md) covers FET v2; frozen b3 has no `init`. The [historical b2 guide](RELEASE_NOTES_0.3.0b2.md) describes its portable inventory fix. Native Windows, Python 3.10 and a minimum-dependency matrix remain unverified.
+For b6, see the [release guide](RELEASE_NOTES_0.3.0b6.md). It packages the regression ExtraTrees finite-tree-state guard without changing the distribution name, model defaults, splits or metric formulas. Frozen [b5](RELEASE_NOTES_0.3.0b5.md) contains the visual refresh but not this guard. The [historical b4 guide](RELEASE_NOTES_0.3.0b4.md) covers blank-input `init`, which b6 retains. The [historical b3 guide](RELEASE_NOTES_0.3.0b3.md) covers FET v2; frozen b3 has no `init`. The [historical b2 guide](RELEASE_NOTES_0.3.0b2.md) describes its portable inventory fix. Native Windows, Python 3.10 and a minimum-dependency matrix remain unverified.
 
 ### Historical b1 verification
 
