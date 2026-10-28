@@ -280,7 +280,7 @@ class FetAdapterTests(unittest.TestCase):
         manifest = verify_components()
         semiconductor = next(c for c in manifest["components"] if c["component"] == "semiconductor")
         self.assertEqual(semiconductor["commit"], "4c0ec2ae3eaa4e0b7afc9aaf8f9bada544e7c0de")
-        self.assertEqual(len(semiconductor["files"]), 13)
+        self.assertEqual(len(semiconductor["files"]), 16)
         code = "import sys; from mlworkflow import regression; from mlworkflow.adapters import fet_transfer; assert not any(n in sys.modules for n in ['numpy','pandas','sklearn','groupbench'])"
         result = subprocess.run([sys.executable, "-S", "-c", code], cwd=self.root, env=dict(os.environ, PYTHONPATH=str(ROOT / "src")), capture_output=True, timeout=10)
         self.assertEqual(result.returncode, 0, result.stderr)

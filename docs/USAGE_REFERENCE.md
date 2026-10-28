@@ -318,7 +318,7 @@ and must not be treated as having zero flags. See the
 
 Both `run` and `predict` accept `--features-file PATH` instead of `--features`.
 It reads the version-1 `feature_schema.json` emitted by Semiconductor Toolbox's
-[synthetic RRAM measurement-to-features example](https://github.com/xinhi6716/semiconductor-machine-learning-toolbox/blob/b485b68021160cd0eb1124084464b355c24a7b23/examples/measurement-to-features/README.md). Only the names in
+[bundled synthetic RRAM measurement-to-features example](../src/mlworkflow/_vendor/semiconductor/examples/measurement-to-features/README.md#outputs-and-failure-behavior). Only the names in
 `model_feature_allowlist`, in their declared order, become predictors. IDs,
 counts, conditions, row keys, units and other metadata are **not** added as
 features. An explicit `--target` and `--group` are still required; the JSON does

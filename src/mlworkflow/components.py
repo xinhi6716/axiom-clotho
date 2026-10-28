@@ -18,6 +18,8 @@ EXPECTED_COMPONENTS = {
         "examples/measurement-to-features/build_features.py",
         "examples/measurement-to-features/generate_synthetic.py",
         "tools/iv-readpoint/iv_readpoint.py", "tools/rram-window/rram_window.py",
+        "tools/iv-readpoint/README.md", "tools/rram-window/README.md",
+        "docs/RRAM_DEVICE_CONDITION.md",
         "tools/physical-holdout-audit/physical_holdout_audit.py",
         "examples/fet-measurement-to-features/build_features.py",
         "examples/fet-measurement-to-features/README.md",
