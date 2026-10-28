@@ -1,3 +1,13 @@
+# Celestial fate-instrument refinement · 2026-10-28
+
+The four responsive Clotho heroes now frame the authored spindle and unbroken thread in a shared ivory/gold/midnight celestial field. The exact central path geometry is preserved from the fate-instrument proof; new open orbital engraving is ornamental, not a scientific diagram, enclosing seal or software promise. The product name remains native README text. All original licenses and historical notices below remain intact.
+
+Offline report headers reuse the same spindle geometry without orbital decoration at the existing 38/30 px display sizes. Their brand CSS uses the shared ivory/midnight surfaces and gold hierarchy; a darker light-theme text-gold token preserves small-text contrast. Report data, calculation/model logic, semantics, inputs, controls, CSP, language behavior and print structure are unchanged. No network font, external art, script, URL paint server or telemetry is introduced in reports. Hero SVGs use only internal vector masks; no raster dependencies.
+
+The four existing ritual-process diagrams use palette-only token substitutions to the same surfaces and hierarchy; every outlined word, path, dimension and semantic stage is preserved. Functional light-theme text gold is #7e5c22 for at least4.5:1 text contrast; ornamental gold remains #8d6b2d. Legacy workflow figures and the unit-equivalence scientific comparison plot are unchanged.
+
+## Preserved historical notices
+
 # Flat Clotho hero synchronization · 2026-10-28
 
 The four `clotho-ritual-hero-*.svg` files now embed the selected flat Clotho thread geometry: a continuous axial inlet, smoothed winding and a restrained orbital reference. The hero canvas, palette, polar datum and accessible title/description are unchanged. This is symbolic identity artwork, not a software or scientific diagram.

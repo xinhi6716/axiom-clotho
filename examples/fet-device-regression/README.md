@@ -1,15 +1,12 @@
-# Invented FET device regression — explicit v2 interface
+# FET: transfer curves to device predictions
 
-> **Included in Clotho 0.3.0b6.** Install the b6 wheel and extract its matching
-> source archive for these input files. See the [integration guide](../../docs/FET_DEVICE_REGRESSION.md)
-> and [installation instructions](../../docs/RELEASE_NOTES_0.3.0b6.md).
+[Clotho home](../../README.md) · [All examples](../README.md) · [繁體中文總覽](../../README.zh-TW.md)
 
-This example connects a **declared, canonical transfer table** to the existing
-Clotho prepare → plan → run → score workflow. It is original invented arithmetic,
-not an instrument export, physical simulator, real-device measurement, or evidence
-that these two features predict a scientifically useful endpoint.
+Extract two measurement features, compare grouped regression models, and predict outcomes for three devices from a separate lot. This example uses the **Clotho b7** prepare → plan → run → score workflow. Install the [matching release](../../docs/RELEASE_NOTES_0.3.0b7.md) and extract its source archive for the fixtures.
 
-## Row unit and arithmetic
+The transfer curves and endpoints are invented. They demonstrate the file format and workflow; they do not establish physical accuracy or the usefulness of these features for a real endpoint. [FET input guide](../../docs/FET_DEVICE_REGRESSION.md).
+
+## The sample data
 
 There are **15 physical device keys and 105 transfer observations**: four training
 lots with three devices each, and a separate prediction lot with three devices.
@@ -34,15 +31,9 @@ the existing extractors; they are **not recommended measurement settings**.
 All current and gate-voltage points are retained. No branch, repeat, or device is
 selected because an endpoint or a model result is attractive.
 
-`training_targets.csv` and `heldout_outcomes.csv` contain separate handwritten
-invented constants in arbitrary units. They are not computed from criterion VGS,
-log slope, their reciprocal, or another extraction. They demonstrate separate
-input timing and exact identity joins only, not an experimental endpoint,
-verified chronology, measured independence, or a guaranteed model improvement.
-The generator contains both vectors so the example can be reproduced; this is
-not a historical blinding claim. Prepare/run do not accept the later-outcome file.
+`training_targets.csv` and `heldout_outcomes.csv` contain separate handwritten constants in arbitrary units. Neither is calculated from criterion VGS, log slope or another extracted feature. They demonstrate exact device joins and separate training/scoring inputs. Both vectors are public in the generator, so this is not a blinded experiment. Prepare and run do not accept the later-outcome file.
 
-## Files
+## Input files
 
 - `fixtures/raw/transfer.csv`: the exact canonical eleven-column transfer schema.
 - `fixtures/partitions.csv`: all fifteen composite device keys and train/predict.
@@ -65,9 +56,9 @@ network, external files, extracted endpoint, or model fit. It never overwrites a
 existing path. An I/O failure can leave incomplete new output; discard that output
 and use a new destination rather than repairing it silently.
 
-## Four stages
+## Run the four stages
 
-After installing b6, run from the matching extracted source archive or tagged
+After installing b7, run from the matching extracted source archive or tagged
 checkout, with the existing ML dependencies available. These commands do not
 fetch dependencies. Choose fresh output directories outside the input directory:
 
@@ -91,14 +82,9 @@ clotho score --run-dir fet-run \
 For an uninstalled source checkout, replace `clotho` with
 `PYTHONPATH=src python -m mlworkflow`.
 
-The first stage performs measurement extraction and **zero ML model fits**;
-windowed log-slope extraction does descriptive least squares. Plan performs zero
-ML fits and reports the budget. Run uses the same grouped ML core as the RRAM and
-tabular routes. Score evaluates exact saved predictions without training,
-selecting, or refitting a model. Its errors are descriptive for this invented
-cohort, not real-device accuracy, uncertainty intervals, or a population claim.
+**Prepare** extracts the measurements without fitting an ML model; log-slope extraction uses descriptive least squares. **Plan** reports the fit budget without training. **Run** uses the grouped regression core. **Score** evaluates the complete saved prediction cohort without refitting. Read the resulting errors as a description of this invented cohort.
 
-## Supported boundary
+## Use with your own measurements
 
 This first device-endpoint adapter accepts **one complete declared branch per
 composite physical device**. Additional conditions, repeats or branches reject;
@@ -124,8 +110,4 @@ upstream context, not an assertion that all those companion files ship with
 Clotho.** This example's commands and generator are the supported Clotho route.
 No private toolbox checkout, network fetch, account, or credential is needed.
 
-Real prepared bundles retain exact input transfer bytes, physical/acquisition
-IDs, targets and predictions. Keep them private unless separately authorized for
-sharing. Hashes and identity checks detect inconsistencies, not authenticity,
-historical blinding, physical independence, or scientific validity. Existing
-RRAM `measurement-regression-v1` files remain a separate unchanged contract.
+Prepared bundles retain input transfer files, physical/acquisition IDs, targets and predictions. Review them before sharing. Hashes and identity checks detect inconsistencies but cannot verify physical independence, experimental history or scientific validity. RRAM `measurement-regression-v1` remains a separate input contract.

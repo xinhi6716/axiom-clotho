@@ -1,28 +1,20 @@
-# Simulation-only causal-design rehearsal
+# Rehearse a causal design with invented data
 
-An executable **analysis-design smoke test**, not a real-data causal estimator,
-physical simulator, calibrated semiconductor model or RRAM/PINN result. It makes
-three distinctions executable before private research work:
+[Clotho home](../../README.md) · [All examples](../README.md) · [繁體中文總覽](../../README.zh-TW.md)
+
+Use a small invented causal model to see how adjustment choices change the question you answer. This simulation-only companion illustrates three distinctions:
 
 1. A pre-setting batch context is not a post-setting intermediary.
 2. A total intervention effect is not a mediator-adjusted coefficient.
 3. A simulator can know intervention truth when observational adjustment fails.
 
-The command generates invented observations, runs three prespecified OLS plans,
-recomputes paired interventions, and writes readable results. A total-effect
-request that includes the intermediary in its adjustment list is rejected. A
-rank-deficient adjustment returns no coefficient, rather than disguising a
-pseudoinverse or ridge solution as an effect. Estimators receive neither latent
-draws nor simulator truth. This is a numerical rehearsal of a declared design,
-not automatic causal discovery or verification of a real experiment's assumptions.
+The command generates observations, runs three fixed OLS plans, computes paired interventions and writes a readable comparison. It rejects an intermediary-adjusted request for a total effect, and returns no coefficient for a rank-deficient design. Estimators never receive latent variables or simulator truth.
+
+This is not a real-data causal estimator, physical simulator or calibrated semiconductor model. It rehearses a design whose equations are already known.
 
 ## Run locally
 
-Use an already provisioned Calculator development environment with its existing
-NumPy and threadpoolctl dependencies. No install, account, remote API, network
-request, model download, paid service or real CSV input is used. Python 3.12.14,
-NumPy 2.3.5 and threadpoolctl 3.6.0 were executed in development; no broader runtime
-matrix is claimed. From the repository root:
+Use an existing development environment with NumPy and threadpoolctl. The command accepts no real CSV and downloads nothing. Development checks used Python 3.12.14, NumPy 2.3.5 and threadpoolctl 3.6.0; other runtime combinations have not been verified. From the repository root:
 
 ```bash
 mkdir -p runs
@@ -53,7 +45,7 @@ successful causal identification. No overwrite or resume mode is provided.
 Use trusted local storage and do not edit sources during execution. This is not
 an atomic directory transaction or a hostile concurrent-filesystem sandbox.
 
-## Fixed invented structure
+## The invented model
 
 Every numeric variable is a **dimensionless illustrative index**:
 
@@ -154,7 +146,7 @@ Likewise, full rank does not establish positivity, exchangeability, adequate
 sample size or stable precision. Conditional Gaussian support is a premise of
 the noisy SCM, not an empirical certification.
 
-## Inspect and test
+## Read the outputs and run checks
 
 Each run saves:
 
@@ -186,7 +178,7 @@ The existing cross-repository walkthrough tests additionally require the exporte
 `SEMICONDUCTOR_TOOLBOX_SOURCE` variable described in that example; they explicitly
 skip without it. The new causal-design tests require no other repository.
 
-## Before applying causal ideas to research
+## Before using these ideas in research
 
 This tool supplies invented ground truth so design mistakes can be caught locally.
 It cannot supply the real intervention definition, causal graph, exposure timing,

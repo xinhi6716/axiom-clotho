@@ -1,19 +1,12 @@
-# Fixed environment-heldout feature comparison
+# Compare feature sets in a held-out environment
 
-A small **runnable local ML workflow**, separate from the Calculator's existing
-nested-CV commands: fit five predeclared pipelines, predict devices from one
-held-out environment without accepting their outcomes, then score a separately
-provided exact cohort. Compare two fixed feature sets and a training-label-
-shuffle diagnostic without calling either feature set causal.
+[Clotho home](../../README.md) · [All examples](../README.md) · [繁體中文總覽](../../README.zh-TW.md)
 
-This is a source-checkout Python companion. It reuses the Calculator's existing
-numeric preprocessing/model builder and already-declared NumPy, pandas,
-scikit-learn and threadpoolctl dependencies. It installs or downloads nothing,
-uses one CPU thread per fit, saves no executable model, and sends no data
-anywhere. Existing package APIs, schemas, nested selection and default commands
-remain unchanged. No new package or binary release is implied.
+Compare two fixed feature sets on devices from one held-out environment. The companion fits five predeclared pipelines, saves predictions without reading future outcomes, then scores the complete cohort in a separate command. A shared training-label shuffle provides a diagnostic, not a causal test.
 
-## Try the invented example
+Run this Python companion from a source checkout with Clotho’s NumPy, pandas, scikit-learn and threadpoolctl dependencies installed. It uses the existing numeric preprocessing/model builder and one CPU thread per fit. It downloads nothing, sends no data, and saves no executable model. This fixed comparison is separate from the tabular calculator’s nested-CV commands.
+
+## Run the example
 
 From the repository root in an already provisioned environment:
 
@@ -30,13 +23,9 @@ PYTHONPATH=src python examples/environment-heldout-comparison/probe.py score \
   examples/environment-heldout-comparison/fixtures/outcomes.csv \
   --output /tmp/invented-environment-scores.json
 
-PYTHONPATH=src python -m unittest discover -s tests -p test_environment_feature_probe.py -v
-PYTHONPATH=src python -m unittest discover -s tests -v
 ```
 
-Use new output paths; there is no overwrite or implicit stdout-data mode. Both
-commands exit 0 for these fixtures. Their values are invented software examples,
-not measured semiconductor data, physical simulations or research findings.
+Choose new output paths. Both commands exit 0 for the supplied invented fixtures; neither overwrites an existing file. These are teaching data, not measured semiconductor results.
 
 The fixture gives two training environments with eight distinct device IDs
 each and one held-out environment with four devices. Invented response obeys
@@ -52,6 +41,9 @@ alpha 1. Its held-out MAE is about 0.02353 V; the dummy MAE is 0.4 V. Tests also
 compare both feature sets and shuffle fits against independent ridge equations.
 The actual report retains all five results, including adverse shuffle results.
 These fixture numbers are not model-performance claims.
+
+<details>
+<summary><strong>Input specification and supported boundaries</strong></summary>
 
 ## Freeze the declared question before looking at test outcomes
 
@@ -128,6 +120,8 @@ input is capped at 8 MiB and 10,000 rows, with a union of at most 32 predictors.
 The parser's field-size limit also applies. These are input/work bounds, not a
 hard RAM guarantee. Complete reports must also fit the 8 MiB output/read limit.
 
+</details>
+
 ## What the five fits do
 
 The existing numeric pipeline median-imputes and standardizes using training
@@ -139,14 +133,9 @@ rows only. It then fits:
 4. `shuffle_a`: the same A model with shuffled training labels.
 5. `shuffle_b`: the same B model with the **same** shuffled labels.
 
-For this dense numeric-only companion, Ridge uses a fixed `svd` solver and the
-declared alpha. The shared pipeline builder supplies preprocessing; only this
-companion changes its new estimator to `svd`, without editing the core model
-builder or its existing `lsqr` behavior. This avoids the tiny-target stopping
-arithmetic observed with iterative `lsqr` in boundary tests. There is no hyperparameter selection, inner CV, feature search, refitting
-on test rows or outcome-guided retry. All five pipelines include train-only
-preprocessing; the dummy's preprocessing does not make its mean feature-dependent.
-Expected work is five pipeline-fit attempts, not five cross-validation folds.
+This numeric-only companion uses Ridge with the fixed `svd` solver and declared alpha. The shared builder supplies training-only preprocessing; the core calculator keeps its existing `lsqr` behavior. The companion’s solver avoids the tiny-target stopping issue seen with iterative `lsqr` in boundary tests.
+
+There are **five pipeline-fit attempts**, not five cross-validation folds. There is no hyperparameter or feature search, inner CV, test-row refit or outcome-guided retry. The dummy remains a training-target mean, regardless of its preprocessing.
 
 For each training environment, device IDs are sorted exactly and the declared
 seed permutes its donor positions once. A and B receive that identical mapping.
@@ -221,7 +210,7 @@ Only literal Boolean `True` accepts the prediction contract. Scoring performs
 no fit and cannot alter the prediction artifact. These example APIs are source
 companions, not new exported `groupbench` package interfaces.
 
-## Causal interpretation and safeguards
+## Interpretation and privacy
 
 An environment label, date, device ID, predictive improvement or lower error
 after restricting features does not identify a treatment effect. Real causal
@@ -248,3 +237,14 @@ do not hang. Caller-selected input symlinks to regular files are followed.
 Diagnostics are categorical and omit raw values and paths. This is not a hostile
 concurrent-filesystem sandbox. Windows ACL/runtime behavior and other dependency
 versions have not been verified by this addition.
+
+## Check the implementation
+
+From the repository root:
+
+```sh
+PYTHONPATH=src python -m unittest discover -s tests -p test_environment_feature_probe.py -v
+PYTHONPATH=src python -m unittest discover -s tests -v
+```
+
+These are software checks, not independent experimental observations.

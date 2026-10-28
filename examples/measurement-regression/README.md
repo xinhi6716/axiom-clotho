@@ -1,12 +1,12 @@
-# Complete invented CSV reproduction
+# RRAM: measurements to predictions
 
-All fixture bytes are synthetic. The raw I-V files and literal endpoint values
-are reused from the earlier semiconductor walkthrough; labels are not calculated
-from resistance features. Three environments repeat six numerical templates, so
-these rows do not establish independent sampling, transportability or usefulness.
+[Clotho home](../../README.md) · [All examples](../README.md) · [繁體中文總覽](../../README.zh-TW.md)
 
-Run from the repository root with the calculator's existing dependencies. Nothing
-is installed or downloaded by these commands. All outputs must be fresh siblings.
+Run the complete **prepare → plan → run → score** workflow on invented I–V measurements. You will get device-level resistance features, a grouped model comparison, six device predictions and a separate evaluation against later outcomes.
+
+## Run the example
+
+Use the tagged checkout or matching source archive with the existing Clotho dependencies. Run from the repository root and choose fresh output directories outside the inputs. These commands install and download nothing.
 
 ```bash
 PYTHONPATH=src python -S -m mlworkflow prepare \
@@ -24,25 +24,21 @@ PYTHONPATH=src python -S -m mlworkflow score --run-dir clotho-run \
   --output-dir clotho-evaluation
 ```
 
-For an installed distribution built from this source, use `clotho` in place of
-`PYTHONPATH=src python -m mlworkflow` with locally supplied fixture/input paths.
-The current source tree supplies this example; it is not a separate download
-performed by the command. The older `clotho demo` remains bundled independently.
+With the matching distribution installed, `clotho prepare`, `clotho plan`, `clotho run` and `clotho score` are the equivalent commands. Supply the same local fixture paths; the CLI does not download them. The older `clotho demo` remains a separate bundled example.
 
-Expected structural results:
+## What to expect
 
-- 18 declared devices → 12 training devices in four batches, six prediction
-  devices in two disjoint batches. Repeated cycles aggregate within each device.
-- Three outer folds, two inner folds, dummy/ridge comparison and target-free
-  refit: **40 planned pipeline fits** in this configuration.
-- A complete run with comparison report, predictions and matching device keys.
-- A separate six-device score, **zero additional fits**, row and equal-group
-  metrics, plus explicit undefined-R² status where appropriate.
+| Stage | Expected result |
+| --- | --- |
+| Prepare | 18 devices: 12 training devices in four batches, plus six prediction devices in two disjoint batches. Repeated cycles are aggregated within each device. |
+| Plan | Three outer folds, two inner folds and a Dummy/Ridge comparison: **40 planned pipeline fits**, including refit for prediction. Planning itself does not fit. |
+| Run | A comparison report and predictions with the complete device-key set. |
+| Score | All six later outcomes, row and equal-group metrics, and **zero additional fits**. Undefined R² is reported explicitly. |
 
-Open `clotho-run/report.html`, then `clotho-evaluation/report.html`. Do not compare
-these invented errors to real scientific results. Timestamps and elapsed times
-can differ; test contracts compare substantive row identities, predictions,
-source hashes, leakage boundaries and numerical scores.
+Open **`clotho-run/report.html`**, then **`clotho-evaluation/report.html`**. Timestamps and elapsed times can vary; the meaningful checks are device identities, predictions, input hashes and scores.
 
-The [real-input guide](../../docs/CLOTHO_CSV_BETA.md) explains declarations, units,
-joining, group isolation, failure receipts, and the beta's deliberate boundaries.
+## What the fixture represents
+
+Every value is invented. The raw files and handwritten endpoints are reused from the earlier semiconductor walkthrough; the labels are not calculated from resistance features. Three environments repeat six numeric device templates. The example demonstrates the software workflow, not independent sampling, transfer performance or real-device accuracy.
+
+For your own measurements, use the [input guide](../../docs/CLOTHO_CSV_BETA.md) for units, declarations, identity joins, groups and failure handling. Keep private inputs and results out of public example folders.

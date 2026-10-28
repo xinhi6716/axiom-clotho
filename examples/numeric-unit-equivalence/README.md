@@ -1,20 +1,16 @@
 # Same current, different units
 
-A value written in amperes or nanoamperes contains the same information. A model's
-numerical implementation may not treat the two representations identically.
-This example makes that distinction visible—and checks the preprocessing that
-ML Super Calculator already uses.
+[Clotho home](../../README.md) · [All examples](../README.md) · [繁體中文總覽](../../README.zh-TW.md)
 
-**This is an invented, already-exposed toy fixture.** It is a runnable teaching
-example, not a fresh held-out experiment, semiconductor benchmark, new method,
-or evidence of causal or real-device generalization. The raw models are deliberate
-ablations; they are not the Calculator's production pipeline.
+Run the same invented current values in amperes and nanoamperes, then compare predictions. The physical information is unchanged, but the numerical representation can affect the model. This example checks how Clotho’s existing training-only scaling behaves.
+
+The fixture and its results are public teaching material, not a fresh held-out experiment or evidence of real-device generalization. Raw estimators are deliberate comparison arms; they are not the calculator’s production pipeline.
 
 ![Raw versus train-only-scaled models on the same synthetic A and nA inputs. Error and prediction equivalence are separate quantities.](assets/unit-equivalence.svg)
 
 ## Run it locally
 
-From a source checkout containing this example, with the Calculator's dependencies
+From a source checkout containing this example, with Clotho's dependencies
 already installed:
 
 ```sh
@@ -22,7 +18,7 @@ PYTHONPATH=src python examples/numeric-unit-equivalence/run.py --output unit-dem
 ```
 
 These are Unix-like shell commands. This reference example requires **scikit-learn
-1.8.0** and the recorded `groupbench/model.py` source hash. The Calculator itself
+1.8.0** and the recorded `groupbench/model.py` source hash. Clotho itself
 supports a broader dependency range. A different version/source is rejected before
 fitting rather than silently presented as the same validation. No packages,
 datasets, models, or credentials are downloaded by the runner.
@@ -61,7 +57,7 @@ node. These are software diagnostics, not significance tests or effect-size clai
 A failed criterion produces exit code 1 and retained results; it is not a reason
 to adjust this exposed fixture.
 
-## Read the result, not just the bars
+## Read the results
 
 The figure compares **group MAE**: calculate MAE within each evaluation group, then
 average the four groups equally. Here all groups have the same size, so row MAE
@@ -88,8 +84,7 @@ no seed, split, model, unit or threshold was changed to improve these results.
 Errors and gaps are in arbitrary response units. The fixed training-derived
 prediction tolerance was `5.085524854499148e-10`.
 All 64 raw-A trees were stumps; every scaled A/nA pair met that tolerance.
-This is a positive check of the existing preprocessing on this fixture, not a
-new product fix or a general recommendation to rank these model families.
+The result supports this preprocessing check on the fixed fixture. It does not rank model families in general or introduce a new product fix.
 
 Inspect the [full-precision summary](reference/summary.json),
 [all predictions](reference/predictions.csv), [synthetic fixture](reference/synthetic_fixture.csv),
@@ -116,7 +111,7 @@ floating-point ablation. Dummy is the unit-independent control. The example does
 not establish that standardization is sufficient for all numerical ranges, large
 offsets, nearly constant features, or future library versions.
 
-The existing [Calculator preprocessing source](https://github.com/xinhi6716/ml-super-calculator/blob/26b6eb8f6a149d760aec0aff1fbd680f0f32dbb6/src/groupbench/model.py)
+The existing [Calculator preprocessing source](https://github.com/xinhi6716/axiom-clotho/blob/26b6eb8f6a149d760aec0aff1fbd680f0f32dbb6/src/groupbench/model.py)
 already keeps learned transformations inside the fitted pipeline. This companion
 does not change that pipeline or claim to fix a newly discovered product defect.
 
@@ -136,7 +131,7 @@ outputs rather than clipping a bar or overwriting evidence. The mapping JSON bin
 the input summary hash, numeric values, and output figure. This source reference
 identifies the product baseline, not a new scientific dataset.
 
-## Files and completion checks
+## Output files and completion
 
 A run creates:
 

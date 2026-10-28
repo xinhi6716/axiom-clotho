@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.0b7 — Clotho celestial visual maintenance
+
+- Refresh the spindle artwork, light/dark/mobile heroes, report emblem and report presentation; align README process diagrams by palette only. Preserve diagram words, geometry and data meaning.
+- Package the English-first / Traditional Chinese documentation refresh and the three original upstream tool guides restored in source commit `8f9a7e1a91d30bca2cd566ab73d48d69a8d77faa`, with their pinned provenance and licenses.
+- Retain the b6 regression finite-tree-state guard unchanged. No new ML capability, scientific validation, model, split, metric, schema or dependency change.
+- Preserve all previous release guides, tags and assets, including b6. See the [b7 release guide](docs/RELEASE_NOTES_0.3.0b7.md) for inherited-source versus focused-package checks. Candidate files alone do not establish publication.
+
 ## 0.3.0b6 — Regression finite-tree-state hardening
 
 - Package the reviewed guard that rejects non-finite stored threshold, value, impurity or weighted node mass arrays in supported regression ExtraTrees after each inner fit and family refit, before prediction. A failed refit preserves prior completed estimator state.

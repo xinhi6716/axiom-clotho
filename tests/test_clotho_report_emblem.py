@@ -1,4 +1,4 @@
-"""Decorative coil contract; static checks, not browser or screen-reader QA."""
+"""Decorative fate-spindle contract; static checks, not browser or screen-reader QA."""
 
 import copy
 import html
@@ -28,20 +28,24 @@ class ClothoReportEmblemTests(unittest.TestCase):
         self.assertEqual(emblem(render_html(regression_fixture())),
                          emblem(render_binary_html(binary_fixture())))
 
-    def test_coil_geometry_matches_all_current_hero_variants(self):
+    def test_spindle_geometry_matches_all_current_hero_variants(self):
         assets = Path(__file__).resolve().parents[1] / "docs" / "assets"
-        ns = {"svg": "http://www.w3.org/2000/svg"}
+        def art(root):
+            return next(node for node in root.iter()
+                        if node.get("id", "").endswith("clotho-fate-instrument"))
+        def geometry(root):
+            return [{k: v for k, v in node.attrib.items()
+                     if k not in ("id", "fill", "stroke")}
+                    for node in art(root).iter() if node.tag.endswith("path")]
         for render, fixture in self.renderers:
-            actual = ET.fromstring(emblem(render(fixture()))).find("g/path")
-            self.assertIsNotNone(actual)
+            actual = geometry(ET.fromstring(emblem(render(fixture()))))
+            self.assertGreater(len(actual), 10)
             for suffix in ("light", "dark", "light-mobile", "dark-mobile"):
                 with self.subTest(renderer=render.__name__, hero=suffix):
-                    hero = ET.parse(assets / f"clotho-ritual-hero-{suffix}.svg")
-                    coil = hero.find('.//svg:g[@id="continuous-axial-thread"]/svg:path', ns)
-                    self.assertIsNotNone(coil)
-                    self.assertEqual(actual.attrib["d"], coil.attrib["d"])
+                    hero = ET.parse(assets / f"clotho-ritual-hero-{suffix}.svg").getroot()
+                    self.assertEqual(actual, geometry(hero))
 
-    def test_mark_is_only_a_noninteractive_coil_in_the_existing_canvas(self):
+    def test_mark_is_only_a_noninteractive_vector_in_the_existing_canvas(self):
         for render, fixture in self.renderers:
             with self.subTest(renderer=render.__name__):
                 svg = ET.fromstring(emblem(render(fixture())))
@@ -49,12 +53,17 @@ class ClothoReportEmblemTests(unittest.TestCase):
                     "class": "clotho-mark", "viewBox": "0 0 32 32",
                     "aria-hidden": "true", "focusable": "false",
                 })
-                self.assertEqual([node.tag for node in svg.iter()], ["svg", "g", "path"])
-                self.assertEqual(svg[0].attrib, {
-                    "transform": "translate(-1.92 -.59) scale(.07)",
-                })
-                self.assertEqual(set(svg[0][0].attrib), {"d", "fill"})
-                self.assertEqual(svg[0][0].attrib["fill"], "var(--accent)")
+                self.assertEqual(svg[0].attrib, {"transform": "scale(.0625)"})
+                self.assertLessEqual({n.tag for n in svg.iter()},
+                                     {"svg", "g", "path"})
+                ids = [n.get("id") for n in svg.iter() if n.get("id")]
+                self.assertEqual(len(ids), len(set(ids)))
+                self.assertTrue(all(i.startswith("report-clotho-") for i in ids))
+                self.assertFalse(any(k.lower().startswith("on") or "href" in k
+                                     for n in svg.iter() for k in n.attrib))
+                self.assertIn('fill="var(--ink)"', emblem(render(fixture())))
+                self.assertIn('fill="var(--accent)"', emblem(render(fixture())))
+                self.assertNotIn('url(', emblem(render(fixture())))
                 self.assertFalse(any((node.text or "").strip() for node in svg.iter()))
                 self.assertFalse(any((node.tail or "").strip() for node in svg.iter()))
 
@@ -67,7 +76,8 @@ class ClothoReportEmblemTests(unittest.TestCase):
                               'margin:0 14px 3px 0;overflow:visible}', text)
                 self.assertIn('.clotho-mark{width:30px;height:30px;margin-right:9px}', text)
                 self.assertIn('@media(prefers-color-scheme:dark)', text)
-                self.assertIn('--accent:#D4B77B', text)
+                self.assertIn('--accent:#d7bd82', text)
+                self.assertIn('--accent-text:#7e5c22', text)
                 self.assertIn('@media print', text)
                 self.assertIn("default-src 'none'; style-src 'unsafe-inline'; img-src data:; "
                               "base-uri 'none'; form-action 'none'", text)

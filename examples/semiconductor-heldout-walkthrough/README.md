@@ -1,25 +1,23 @@
-# Invented semiconductor measurements → held-out predictions
+# A semiconductor measurement walkthrough
 
-This local, source-only walkthrough connects existing tools instead of adding a
-new estimator or inventing a semiconductor benchmark. It runs:
+[Clotho home](../../README.md) · [All examples](../README.md) · [繁體中文總覽](../../README.zh-TW.md)
+
+Follow invented I–V measurements through feature extraction, a lot-level holdout check, model fitting and separate scoring. This source-only walkthrough connects Clotho to a trusted local Semiconductor Toolbox checkout. It runs:
 
 1. The Semiconductor Toolbox's synthetic I–V generator.
 2. Its measurement-to-features exporter, including read-point interpolation,
    paired HRS/LRS resistance summaries, units and lineage.
 3. Its **actual lot-level holdout audit** on the exact device assignments used
    downstream. A failed audit stops before model fitting.
-4. Calculator's fixed environment probe: dummy, feature sets A and B, and two
+4. Clotho's fixed environment probe: dummy, feature sets A and B, and two
    fits sharing one within-training-environment label shuffle.
 5. Separate exact-device scoring, followed by a readable `INTERPRETATION.txt`.
 
-No account, network request, package installation, download, serialized-model
-loading or remote upload occurs. Only use trusted local source checkouts: this
-wrapper executes their Python scripts. Source hashes identify selected component
-bytes; they are not signatures, authentication or a complete dependency lock.
+The walkthrough runs locally and downloads nothing. Use trusted source checkouts: the wrapper executes their Python scripts. Recorded source hashes identify selected files, not authenticated software or a complete dependency lock.
 
-## Requirements and exact command
+## Requirements and run command
 
-Use an already provisioned Python environment with Calculator's declared
+Use an existing Python environment with Clotho's declared
 NumPy, pandas, scikit-learn and threadpoolctl dependencies. The tested environment
 is Python 3.12.14, NumPy 2.3.5, pandas 2.2.3 and scikit-learn 1.8.0. This source
 example is not included in the installed `mlcalc` command.
@@ -31,13 +29,13 @@ You need a trusted local Semiconductor Toolbox checkout containing:
 - `tools/physical-holdout-audit/physical_holdout_audit.py`
 - `tools/iv-readpoint/iv_readpoint.py` and `tools/rram-window/rram_window.py`
 
-You also need this Calculator checkout's
+You also need this Clotho checkout's
 `examples/environment-heldout-comparison/probe.py` and `src/groupbench/`.
 No assumption is made that these source companions are published or installed.
 Supply the matching reviewed source versions available to you; missing companions
 fail without downloading a replacement.
 
-From the Calculator repository root, **export** `SEMICONDUCTOR_TOOLBOX_SOURCE`
+From the Clotho repository root, **export** `SEMICONDUCTOR_TOOLBOX_SOURCE`
 with your existing trusted local Toolbox directory as its value, then run the
 following exact commands. It must be an exported environment variable, not only
 an unexported shell variable, so the later tests can see it too.
@@ -92,7 +90,7 @@ scoring is the held-out fixture copied, with its bytes checked against the score
 input hash. This order demonstrates an API boundary, not historical blinding of
 these public fixtures or proof that a researcher did not previously see outcomes.
 
-## Fixed comparison and interpretation
+## Read the comparison
 
 The feature lists, held-out environment, seed 7 and Ridge alpha 1 are fixed before
 the scoring command. Feature set A uses HRS median resistance (ohm), LRS median
@@ -108,13 +106,7 @@ six scored devices. A negative contrast means lower B absolute error on these
 invented rows only. A shuffled-label arm can outperform an unshuffled arm here;
 the wrapper neither conceals this nor redraws the shuffle to force degradation.
 
-**Environment holdout is not causal-effect estimation.** The invented environment
-label coincides with the lot. No randomized intervention, causal identification,
-exchangeability argument or measured-confounder adjustment is supplied. The one
-within-environment shuffle is a diagnostic, **not a formal permutation test or a
-causal negative-control analysis**; it can leave labels unchanged and does not
-preserve every wafer-level dependence. There are no p-values, confidence intervals,
-null distribution, causal-feature claims or scientific performance claims.
+The environment label here is the lot, and the comparison measures prediction error, not a causal effect. The within-environment shuffle can leave labels unchanged and may break wafer-level dependence. Treat it as a diagnostic, not a permutation test or causal negative control. The report supplies no p-values, confidence intervals or null distribution.
 
 For real research, separately justify the endpoint, pre-outcome predictor timing,
 units, dependence boundary, identity accuracy, cohort completeness, sampling,
@@ -122,7 +114,7 @@ source rights and analysis freeze. Do not create the target from the same
 resistance summaries used as predictors and call that independent prediction.
 This fixed example is not a license to substitute private data into public files.
 
-## Output guide and tests
+## Outputs and checks
 
 - `raw/`, `features/`: invented measurements and unchanged exporter outputs.
 - `cohort.csv`, `assignments.csv`, `holdout.json`: explicit identities and the
@@ -138,7 +130,7 @@ This fixed example is not a license to substitute private data into public files
   Do not change sources or inputs during a run; no filesystem lock is taken.
 
 With the same `SEMICONDUCTOR_TOOLBOX_SOURCE` variable set, run both the focused
-cross-repository tests and the full Calculator suite:
+cross-repository tests and the full Clotho suite:
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python -m unittest discover -s tests -p 'test_semiconductor_walkthrough.py' -v
