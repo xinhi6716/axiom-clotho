@@ -1,20 +1,22 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="400" height="450" viewBox="0 0 400 450" role="img" aria-labelledby="title desc">
-<title id="title">GroupBench</title><desc id="desc">群組資料，本機建模。</desc>
-<rect width="400" height="450" rx="16" fill="#101d2c"/>
-<path d="M16 0H384" stroke="#54cab0" stroke-width="5"/>
-<g font-family="DejaVu Sans, Noto Sans CJK TC, sans-serif">
-<text x="24" y="39" fill="#66d8bd" font-size="16" letter-spacing="2">GROUPBENCH</text>
-<text x="24" y="76" fill="#f4f5f7" font-size="23" font-weight="600">群組資料，本機建模。</text>
-<rect x="24" y="102" width="352" height="94" rx="10" fill="#1b2d40" stroke="#3a5068"/>
-<text x="42" y="137" fill="#66d8bd" font-size="16">01</text>
-<text x="80" y="138" fill="#fff" font-size="24" font-weight="600">準備資料</text>
-<text x="42" y="172" fill="#c7d3e0" font-size="17">CSV、目標值與群組</text>
-<rect x="24" y="212" width="352" height="94" rx="10" fill="#1b2d40" stroke="#3a5068"/>
-<text x="42" y="247" fill="#66d8bd" font-size="16">02</text>
-<text x="80" y="248" fill="#fff" font-size="24" font-weight="600">比較模型</text>
-<text x="42" y="282" fill="#c7d3e0" font-size="17">保留測試群組，不混入訓練</text>
-<rect x="24" y="322" width="352" height="94" rx="10" fill="#1b2d40" stroke="#3a5068"/>
-<text x="42" y="357" fill="#66d8bd" font-size="16">03</text>
-<text x="80" y="358" fill="#fff" font-size="24" font-weight="600">檢查結果</text>
-<text x="42" y="392" fill="#c7d3e0" font-size="17">報告與逐列預測</text>
-</g></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="460" viewBox="0 0 400 460" role="img" aria-labelledby="title desc" xml:lang="zh-TW">
+<title id="title">Clotho 表格教學流程 — GroupBench 引擎</title>
+<desc id="desc">準備資料：CSV、目標值與群組。比較模型：保留測試群組，不混入訓練。檢查結果：報告與逐列預測。</desc>
+<rect width="400" height="460" fill="#F5F1E7"/>
+<path d="M24 1H376M24 459H376" fill="none" stroke="#C8BDA7" stroke-width="1"/>
+<text x="24" y="43" fill="#856021" font-family="DejaVu Serif, Noto Serif CJK TC, serif" font-size="21">AXIOM / CLOTHO</text>
+<g aria-hidden="true" transform="translate(352 38)" fill="none" stroke="#856021" stroke-width="1.2"><circle r="15"/><path d="M0-23V23M-23 0H23M0-13 4-4 13 0 4 4 0 13-4 4-13 0-4-4Z"/></g>
+<text x="24" y="82" fill="#29271F" font-family="DejaVu Serif, Noto Serif CJK TC, serif" font-size="25">群組資料，本機建模。</text>
+<text x="24" y="111" fill="#625D4E" font-family="DejaVu Sans, Noto Sans CJK TC, sans-serif" font-size="16">表格引擎：GroupBench</text>
+<path d="M24 129H376" fill="none" stroke="#C8BDA7" stroke-width="1"/>
+<circle cx="48" cy="166" r="19" fill="#F5F1E7" stroke="#856021" stroke-width="1.5"/><text x="48" y="172" fill="#856021" font-family="DejaVu Sans, Noto Sans CJK TC, sans-serif" font-size="16" text-anchor="middle">01</text>
+<text x="84" y="175" fill="#29271F" font-family="DejaVu Serif, Noto Serif CJK TC, serif" font-size="27">準備資料</text>
+<text x="30" y="209" fill="#29271F" font-family="DejaVu Sans, Noto Sans CJK TC, sans-serif" font-size="19">CSV、目標值與群組</text>
+<path d="M200 222v19m-5-5 5 5 5-5" fill="none" stroke="#856021" stroke-width="1.5"/>
+<circle cx="48" cy="276" r="19" fill="#F5F1E7" stroke="#856021" stroke-width="1.5"/><text x="48" y="282" fill="#856021" font-family="DejaVu Sans, Noto Sans CJK TC, sans-serif" font-size="16" text-anchor="middle">02</text>
+<text x="84" y="285" fill="#29271F" font-family="DejaVu Serif, Noto Serif CJK TC, serif" font-size="27">比較模型</text>
+<text x="30" y="319" fill="#29271F" font-family="DejaVu Sans, Noto Sans CJK TC, sans-serif" font-size="19">保留測試群組，不混入訓練</text>
+<path d="M200 332v19m-5-5 5 5 5-5" fill="none" stroke="#856021" stroke-width="1.5"/>
+<circle cx="48" cy="386" r="19" fill="#F5F1E7" stroke="#856021" stroke-width="1.5"/><text x="48" y="392" fill="#856021" font-family="DejaVu Sans, Noto Sans CJK TC, sans-serif" font-size="16" text-anchor="middle">03</text>
+<text x="84" y="395" fill="#29271F" font-family="DejaVu Serif, Noto Serif CJK TC, serif" font-size="27">檢查結果</text>
+<text x="30" y="429" fill="#29271F" font-family="DejaVu Sans, Noto Sans CJK TC, sans-serif" font-size="19">報告與逐列預測</text>
+</svg>

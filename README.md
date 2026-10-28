@@ -173,7 +173,7 @@ Open `runs/demo/report.html`. The original instructional figure remains below; i
 
 <picture>
   <source media="(max-width: 600px)" srcset="docs/assets/readme-workflow.mobile.svg">
-  <img src="docs/assets/readme-workflow.svg" alt="GroupBench instructional workflow: prepare a table, compare on held-out groups, inspect the report">
+  <img src="docs/assets/readme-workflow.svg" alt="Clotho instructional workflow, powered by the GroupBench engine: prepare a table, compare on held-out groups, inspect the report">
 </picture>
 
 The bundled `clotho demo` is a **different, older fixed semiconductor rehearsal**. It no longer needs a second toolbox checkout, but is not the caller-CSV route above. [Single-distribution bridge and pinned components](docs/INTEGRATED_MEASUREMENT_WORKFLOW.md).

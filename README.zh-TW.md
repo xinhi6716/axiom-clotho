@@ -160,7 +160,7 @@ clotho tabular demo --out runs/demo
 
 <picture>
   <source media="(max-width: 600px)" srcset="docs/assets/readme-workflow.zh-TW.mobile.svg">
-  <img src="docs/assets/readme-workflow.zh-TW.svg" alt="GroupBench 教學流程：準備資料表、以保留群組比較模型、檢查報告">
+  <img src="docs/assets/readme-workflow.zh-TW.svg" alt="Clotho 教學流程（GroupBench 引擎）：準備資料表、以保留群組比較模型、檢查報告">
 </picture>
 
 套件內的 `clotho demo` 是**另一個較早的固定半導體演練**，已不需第二份工具箱 checkout，但不是上方接受使用者 CSV 的路線。[單一套件橋接與固定來源組件](docs/INTEGRATED_MEASUREMENT_WORKFLOW.md)。

@@ -1,22 +1,23 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="330" viewBox="0 0 1200 330" role="img" aria-labelledby="title desc">
-<title id="title">GroupBench</title><desc id="desc">為群組資料設計的本機流程: 準備資料 → 比較模型 → 檢查結果</desc>
-<rect width="1200" height="330" rx="20" fill="#101d2c"/>
-<path d="M32 0H1168" stroke="#54cab0" stroke-width="5"/>
-<g font-family="DejaVu Sans, Noto Sans CJK TC, sans-serif">
-<text x="42" y="57" fill="#66d8bd" font-size="17" letter-spacing="2">GROUPBENCH / ML SUPER CALCULATOR</text>
-<text x="42" y="105" fill="#f4f5f7" font-size="30" font-weight="600">為群組資料設計的本機流程</text>
-<rect x="42" y="143" width="348" height="141" rx="12" fill="#1b2d40" stroke="#3a5068"/>
-<text x="64" y="179" fill="#66d8bd" font-size="16">01</text>
-<text x="64" y="215" fill="#ffffff" font-size="26" font-weight="600">準備資料</text>
-<text x="64" y="252" fill="#c7d3e0" font-size="17">CSV、目標值與群組</text>
-<path d="M401 207h14m-6-6 6 6-6 6" fill="none" stroke="#66d8bd" stroke-width="2"/>
-<rect x="426" y="143" width="348" height="141" rx="12" fill="#1b2d40" stroke="#3a5068"/>
-<text x="448" y="179" fill="#66d8bd" font-size="16">02</text>
-<text x="448" y="215" fill="#ffffff" font-size="26" font-weight="600">比較模型</text>
-<text x="448" y="252" fill="#c7d3e0" font-size="17">保留測試群組，不混入訓練</text>
-<path d="M785 207h14m-6-6 6 6-6 6" fill="none" stroke="#66d8bd" stroke-width="2"/>
-<rect x="810" y="143" width="348" height="141" rx="12" fill="#1b2d40" stroke="#3a5068"/>
-<text x="832" y="179" fill="#66d8bd" font-size="16">03</text>
-<text x="832" y="215" fill="#ffffff" font-size="26" font-weight="600">檢查結果</text>
-<text x="832" y="252" fill="#c7d3e0" font-size="17">報告與逐列預測</text>
-</g></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="330" viewBox="0 0 1200 330" role="img" aria-labelledby="title desc" xml:lang="zh-TW">
+<title id="title">Clotho 表格教學流程 — GroupBench 引擎</title>
+<desc id="desc">準備資料：CSV、目標值與群組。比較模型：保留測試群組，不混入訓練。檢查結果：報告與逐列預測。</desc>
+<rect width="1200" height="330" fill="#F5F1E7"/>
+<path d="M42 1H1158M42 329H1158" fill="none" stroke="#C8BDA7" stroke-width="1"/>
+<text x="42" y="44" fill="#856021" font-family="DejaVu Serif, Noto Serif CJK TC, serif" font-size="22">AXIOM / CLOTHO</text>
+<g aria-hidden="true" transform="translate(1118 51)" fill="none" stroke="#856021" stroke-width="1.2"><circle r="15"/><path d="M0-23V23M-23 0H23M0-13 4-4 13 0 4 4 0 13-4 4-13 0-4-4Z"/></g>
+<text x="42" y="97" fill="#29271F" font-family="DejaVu Serif, Noto Serif CJK TC, serif" font-size="31">為群組資料設計的本機流程</text>
+<path d="M42 126H1158" fill="none" stroke="#C8BDA7" stroke-width="1"/>
+<path d="M70 164H1107" fill="none" stroke="#C8BDA7" stroke-width="1.5"/>
+<circle cx="70" cy="164" r="19" fill="#F5F1E7" stroke="#856021" stroke-width="1.5"/><text x="70" y="170" fill="#856021" font-family="DejaVu Sans, Noto Sans CJK TC, sans-serif" font-size="16" text-anchor="middle">01</text>
+<text x="48" y="221" fill="#29271F" font-family="DejaVu Serif, Noto Serif CJK TC, serif" font-size="30">準備資料</text>
+<text x="48" y="257" fill="#29271F" font-family="DejaVu Sans, Noto Sans CJK TC, sans-serif" font-size="22">CSV、目標值與群組</text>
+<path d="M376 164h24m-6-6 6 6-6 6" fill="none" stroke="#856021" stroke-width="1.5"/>
+<circle cx="454" cy="164" r="19" fill="#F5F1E7" stroke="#856021" stroke-width="1.5"/><text x="454" y="170" fill="#856021" font-family="DejaVu Sans, Noto Sans CJK TC, sans-serif" font-size="16" text-anchor="middle">02</text>
+<text x="432" y="221" fill="#29271F" font-family="DejaVu Serif, Noto Serif CJK TC, serif" font-size="30">比較模型</text>
+<text x="432" y="257" fill="#29271F" font-family="DejaVu Sans, Noto Sans CJK TC, sans-serif" font-size="22">保留測試群組，不混入訓練</text>
+<path d="M760 164h24m-6-6 6 6-6 6" fill="none" stroke="#856021" stroke-width="1.5"/>
+<circle cx="838" cy="164" r="19" fill="#F5F1E7" stroke="#856021" stroke-width="1.5"/><text x="838" y="170" fill="#856021" font-family="DejaVu Sans, Noto Sans CJK TC, sans-serif" font-size="16" text-anchor="middle">03</text>
+<text x="816" y="221" fill="#29271F" font-family="DejaVu Serif, Noto Serif CJK TC, serif" font-size="30">檢查結果</text>
+<text x="816" y="257" fill="#29271F" font-family="DejaVu Sans, Noto Sans CJK TC, sans-serif" font-size="22">報告與逐列預測</text>
+<text x="48" y="307" fill="#625D4E" font-family="DejaVu Sans, Noto Sans CJK TC, sans-serif" font-size="17">表格引擎：GroupBench</text>
+</svg>
