@@ -1,3 +1,11 @@
+# Flat Clotho hero synchronization · 2026-10-28
+
+The four `clotho-ritual-hero-*.svg` files now embed the selected flat Clotho thread geometry: a continuous axial inlet, smoothed winding and a restrained orbital reference. The hero canvas, palette, polar datum and accessible title/description are unchanged. This is symbolic identity artwork, not a software or scientific diagram.
+
+This artwork-only change does not alter the English or traditional-Chinese README text, commands, b4 version/runtime, process diagrams, release guides, frozen tags or release assets. The editable vector was synchronized from the Axiom flat celestial identity study; no generated raster, tracing, external artwork or added font is used.
+
+## Preserved earlier notices
+
 # Celestial ritual landing refinement · 2026-10-28
 
 The English and traditional-Chinese landings now use a continuous celestial Clotho thread with the Axiom polar-axis composition and palette. The product title and all four chapter names are native headings, retaining existing anchor destinations. The four-stage illustration has only palette substitutions; its geometry, wording and workflow meaning are unchanged. The existing release, source-only setup disclosures, commands and scientific limits are unchanged.
