@@ -89,7 +89,7 @@ def main(argv=None):
             return run_demo(arguments[1:])
         parser = Parser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter,
                         epilog="""Commands (each supports --help):
-  init        Create blank RRAM/FET inputs; no fitting (current source, not b3 wheel).
+  init        Create blank RRAM/FET inputs; no fitting (0.3.0b4; not in frozen b3).
   prepare     Validate measurements, partitions and training-only targets.
   plan        Preview grouped splits and fit counts; do not fit.
   run         Fit the existing grouped models and save future predictions.
@@ -122,7 +122,7 @@ def init_main(arguments):
     from .scaffold import initialize
     parser = Parser(prog="clotho init", allow_abbrev=False,
                     description="Create blank RRAM or FET input files, not invented measurements. "
-                                "Current-source/unreleased; not in the frozen 0.3.0b3 wheel. "
+                                "Included in 0.3.0b4; not in the frozen 0.3.0b3 wheel. "
                                 "No fitting, extraction, download or upload.")
     parser.add_argument("--workflow", required=True, choices=("rram", "fet"),
                         help="choose the existing measurement contract explicitly")

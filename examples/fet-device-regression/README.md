@@ -1,8 +1,8 @@
 # Invented FET device regression — explicit v2 interface
 
-> **Included in Clotho 0.3.0b3.** Install the b3 wheel and extract its matching
+> **Included in Clotho 0.3.0b4.** Install the b4 wheel and extract its matching
 > source archive for these input files. See the [integration guide](../../docs/FET_DEVICE_REGRESSION.md)
-> and [installation instructions](../../docs/RELEASE_NOTES_0.3.0b3.md).
+> and [installation instructions](../../docs/RELEASE_NOTES_0.3.0b4.md).
 
 This example connects a **declared, canonical transfer table** to the existing
 Clotho prepare → plan → run → score workflow. It is original invented arithmetic,
@@ -67,7 +67,7 @@ and use a new destination rather than repairing it silently.
 
 ## Four stages
 
-After installing b3, run from the matching extracted source archive or tagged
+After installing b4, run from the matching extracted source archive or tagged
 checkout, with the existing ML dependencies available. These commands do not
 fetch dependencies. Choose fresh output directories outside the input directory:
 

@@ -70,7 +70,7 @@ class WorkflowInitTests(unittest.TestCase):
                     header = next(csv.reader(io.StringIO(source.read_text())))
                     self.assertEqual(list(csv.reader(io.StringIO((destination / name).read_text()))), [header])
                 text = (destination / "README.md").read_text()
-                for required in ("No measurement rows", "0.3.0b3", "繁體中文", "only `score`", "NOT scientifically verified"):
+                for required in ("No measurement rows", "0.3.0b4", "0.3.0b3", "繁體中文", "only `score`", "NOT scientifically verified"):
                     self.assertIn(required, text)
                 self.assertEqual(json.loads((destination / scaffold.STATUS_FILE).read_bytes()), {
                     "schema_version": "clotho-input-scaffold-v1", "workflow": workflow,
@@ -319,7 +319,8 @@ class WorkflowInitTests(unittest.TestCase):
             result = self.command(*args)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("--workflow", result.stdout)
-            self.assertIn("0.3.0b3" if args and args[0] == "init" else "b3 wheel", result.stdout)
+            self.assertIn("0.3.0b4", result.stdout)
+            self.assertIn("0.3.0b3" if args and args[0] == "init" else "frozen b3", result.stdout)
             if args != ("init", "--help"):
                 for command in ("init", "prepare", "plan", "run", "score", "tabular", "features", "demo", "components"):
                     self.assertIn(command, result.stdout)

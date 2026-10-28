@@ -88,7 +88,7 @@ Full contract: https://github.com/xinhi6716/axiom-clotho/blob/main/docs/FET_DEVI
 **Not ready to prepare. No measurement rows or invented results were generated.**
 This is an editable input directory, NOT a prepared/run/score bundle. Nothing was
 fitted, extracted, downloaded or uploaded. Existing invented demos are separate.
-The init command is current-source/unreleased; the frozen 0.3.0b3 wheel lacks it.
+The init command is included in 0.3.0b4; the frozen 0.3.0b3 wheel lacks it.
 
 ## 1. Supply measurements and exact joins
 
@@ -173,7 +173,7 @@ COMPLETE.json. A failed command is a failure even if a status file appears ready
 科學聲明預設 false，只有真實流程支持時才能改成 true，不可只為通過檢查。
 later_outcomes.csv 留到預測完成且後續結果可用時才填寫，僅供 score 使用。
 先 prepare、再 plan 檢查，確認後才 run；輸出請使用全新相鄰目錄。
-init 僅限目前原始碼／尚未發布功能；凍結的 0.3.0b3 wheel 不含此指令。
+0.3.0b4 已包含 init；凍結的 0.3.0b3 wheel 不含此指令。
 """).encode("utf-8")
 
 

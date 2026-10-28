@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.0b4 — Blank-input setup
+
+- Package the existing reviewed `clotho init --workflow rram|fet --out ...` route: header-only CSVs, intentionally unfinished configuration and an English/Traditional Chinese local checklist. No observations, units, endpoints or scientific declarations are invented or accepted.
+- Preserve the existing prepare → plan → run → score routes, algorithms, schemas, dependencies and synthetic fixtures. Untouched scaffolds fail prepare without a prepared output.
+- Keep the trusted, idle local-directory boundary explicit: observed replacement fails, but hostile concurrent ancestor replacement can still create outside files before detection. This is not a transaction or full TOCTOU defense.
+- Advance package/help/current-install guidance to b4; frozen b3 remains unchanged and lacks init. All b3/b2 and older tags/assets stay frozen.
+- See the [b4 release guide](docs/RELEASE_NOTES_0.3.0b4.md) for precise verification attribution, installation and platform/privacy limits.
+
 ## 0.3.0b3 — FET device regression
 
 - Package the accepted FET v2 adapter: signed-current criterion VGS and descriptive windowed log-current slope, one declared acquisition per composite physical device, and exact external endpoint joins.

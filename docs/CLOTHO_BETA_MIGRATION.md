@@ -7,7 +7,7 @@
 | Product | **Axiom Clotho** (Moirai family) |
 | Canonical repository | [`axiom-clotho`](https://github.com/xinhi6716/axiom-clotho), renamed in place from the calculator repository |
 | Distribution name for this beta | **`ml-super-calculator`**, intentionally retained |
-| Current beta version | **`0.3.0b3`** |
+| Current beta version | **`0.3.0b4`** |
 | Primary additive CLI | `clotho` |
 | Preserved interfaces | `mlcalc`, `groupbench`, `mlcalc-workflow`, `import groupbench` |
 | Release route | GitHub-only prerelease; no PyPI upload |
@@ -38,7 +38,7 @@ python -m pip show ml-super-calculator
 python -m pip check
 
 # Local reviewed beta wheel; no index access or dependency downloads:
-python -m pip install --no-index --no-deps --upgrade ./ml_super_calculator-0.3.0b3-py3-none-any.whl
+python -m pip install --no-index --no-deps --upgrade ./ml_super_calculator-0.3.0b4-py3-none-any.whl
 
 python -m pip check
 clotho --version
@@ -48,7 +48,7 @@ python -c "import groupbench; from importlib.metadata import version; print(grou
 clotho components
 ```
 
-The version checks should agree on `0.3.0b3`. `--no-deps` is intentional only when
+The version checks should agree on `0.3.0b4`. `--no-deps` is intentional only when
 the already-provisioned environment satisfies the unchanged declared requirements;
 it does not install missing dependencies. If checks fail, stop and provision or
 repair a separate environment deliberately rather than allowing an unexpected
@@ -76,7 +76,7 @@ PyPI project, package-index credential or account permission was created here.
 
 ## What was verified, and what was not
 
-For b3, see the [release guide](RELEASE_NOTES_0.3.0b3.md). It adds the FET v2 measurement adapter without changing the distribution name or ML model/split/metric contracts. The [historical b2 guide](RELEASE_NOTES_0.3.0b2.md) describes its portable inventory fix. Native Windows, Python 3.10 and a minimum-dependency matrix remain unverified.
+For b4, see the [release guide](RELEASE_NOTES_0.3.0b4.md). It packages blank-input `init` without changing the distribution name or ML model/split/metric contracts. The [historical b3 guide](RELEASE_NOTES_0.3.0b3.md) covers FET v2; frozen b3 has no `init`. The [historical b2 guide](RELEASE_NOTES_0.3.0b2.md) describes its portable inventory fix. Native Windows, Python 3.10 and a minimum-dependency matrix remain unverified.
 
 ### Historical b1 verification
 

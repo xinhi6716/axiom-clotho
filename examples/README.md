@@ -24,7 +24,8 @@ be selected explicitly. Start with fresh output paths.
 ## Follow a semiconductor workflow
 
 - **FET transfer curves → composite-device endpoints:**
-  [FET device regression](fet-device-regression/README.md), included in b3.
+  [FET device regression](fet-device-regression/README.md), included since b3 and retained in b4. Blank caller inputs are available via
+  [clotho init](../docs/WORKFLOW_INIT.md); init is separate from invented examples.
   One declared acquisition per physical device; signed criterion VGS and
   descriptive windowed log slope feed the existing grouped ML core. Runtime
   code is in the wheel; invented fixture files are in its matching source archive.
