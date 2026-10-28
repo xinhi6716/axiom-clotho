@@ -1,15 +1,13 @@
 <p align="right"><strong>English</strong> · <a href="README.zh-TW.md">繁體中文</a></p>
 
-# Axiom Clotho
-
+<h1 id="axiom-clotho">
 <picture>
   <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="docs/assets/clotho-hero-dark-mobile.svg">
   <source media="(max-width: 600px)" srcset="docs/assets/clotho-hero-light-mobile.svg">
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/clotho-hero-dark.svg">
-  <img src="docs/assets/clotho-hero-light.svg" width="100%" alt="Axiom Clotho — the Moirai machine-learning workbench, beneath a spindle and architectural halo.">
+  <img src="docs/assets/clotho-hero-light.svg" width="100%" alt="Axiom Clotho">
 </picture>
-
-**From measurements to models.**
+</h1>
 
 Prepare device measurements, compare models without mixing declared batches, and predict new samples locally. Clotho is the **Moirai** machine-learning workbench: today, fixed-condition device regression and grouped tabular learning; broader domain modules are future work.
 
@@ -17,14 +15,17 @@ Prepare device measurements, compare models without mixing declared batches, and
 
 > **[Download 0.3.0b3 beta](https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.3.0b3)** · local computation · explicit user-supplied endpoints. This release includes FET device regression alongside the existing RRAM and tabular workflows. [Changes and verification scope](docs/RELEASE_NOTES_0.3.0b3.md).
 
-> **FET transfer data?** Start with the [FET device-regression guide](docs/FET_DEVICE_REGRESSION.md): one declared acquisition per `(lot, wafer, device)`, two explicit measurement descriptors and the same grouped ML core. Frozen b2 and earlier releases remain available for rollback.
-
-<picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/threshold-1-dark.svg"><img src="docs/assets/threshold-1-light.svg" width="100%" alt=""></picture>
-
 <a id="begin"></a>
 <a id="get-the-reviewed-beta-core"></a>
 
-## I / Begin
+<h2 id="i--begin">
+<picture>
+  <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="docs/assets/chapter-1-dark-mobile.svg">
+  <source media="(max-width: 600px)" srcset="docs/assets/chapter-1-light-mobile.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/chapter-1-dark.svg">
+  <img src="docs/assets/chapter-1-light.svg" width="100%" alt="I / Begin">
+</picture>
+</h2>
 
 Choose the route that matches your data—not a different product.
 
@@ -35,13 +36,30 @@ Choose the route that matches your data—not a different product.
 | A numeric/categorical table for grouped regression or explicit binary classification | The existing **[tabular calculator](#tabular-start)**, via `clotho tabular`, `mlcalc` or `groupbench`. |
 | Saved predictions and later observed outcomes | **`clotho score`** for a complete Clotho cohort; other saved analyses remain in the tabular calculator. |
 
+<details>
+<summary>FET transfer data · scope and rollback</summary>
+
+**FET transfer data?** Start with the [FET device-regression guide](docs/FET_DEVICE_REGRESSION.md): one declared acquisition per `(lot, wafer, device)`, two explicit measurement descriptors and the same grouped ML core. Frozen b2 and earlier releases remain available for rollback.
+
+</details>
+
+<details>
+<summary>Start with your own files · current source only, not frozen b3</summary>
+
 **Starting with your own measurement files?** Current-source / unreleased
 `clotho init --workflow rram --out my-measurements` (or `--workflow fet`) creates
 header-only CSVs, an intentionally unfinished configuration and a local checklist.
 No invented rows, inferred units or accepted scientific declarations.
 **Not available in the frozen b3 wheel or tag.** [Blank-input setup guide](docs/WORKFLOW_INIT.md).
 
+</details>
+
+<details>
+<summary>Package identity and compatibility</summary>
+
 The repository is now **`axiom-clotho`**. The distribution deliberately remains **`ml-super-calculator`**; existing imports and CLI names keep one owner. Do not co-install a second overlapping distribution. [Compatibility and migration](docs/CLOTHO_BETA_MIGRATION.md).
+
+</details>
 
 ### Install the beta
 
@@ -77,13 +95,18 @@ The b3 wheel and tagged source checkout above both report `0.3.0b3`. See the [b3
 
 Python 3.10+ is declared; verification used Linux/Python 3.12.14 and existing dependencies. Computation stays local: no account, hosted ML API, model-weight download or telemetry.
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/threshold-2-dark.svg"><img src="docs/assets/threshold-2-light.svg" width="100%" alt=""></picture>
-
 <a id="thread"></a>
 <a id="what-this-beta-completes"></a>
 <a id="four-stage-quickstart"></a>
 
-## II / The thread
+<h2 id="ii--the-thread">
+<picture>
+  <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="docs/assets/chapter-2-dark-mobile.svg">
+  <source media="(max-width: 600px)" srcset="docs/assets/chapter-2-light-mobile.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/chapter-2-dark.svg">
+  <img src="docs/assets/chapter-2-light.svg" width="100%" alt="II / The thread">
+</picture>
+</h2>
 
 **Prepare → Plan → Run → Score.** Each stage has one responsibility; later outcomes enter only at scoring.
 
@@ -129,11 +152,16 @@ Expected structure: **18 devices → 12 training + 6 prediction**; four training
 
 For your measurements, replace the invented inputs with your own [raw files, partitions, training targets and explicit configuration](docs/CLOTHO_CSV_BETA.md). This b3 RRAM route is **one row per device at a fixed declared condition**, batch/wafer/device grouping, and selected resistance predictors. Scientific endpoint meaning and feature timing remain your responsibility.
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/threshold-3-dark.svg"><img src="docs/assets/threshold-3-light.svg" width="100%" alt=""></picture>
-
 <a id="evidence"></a>
 
-## III / Read the evidence
+<h2 id="iii--read-the-evidence">
+<picture>
+  <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="docs/assets/chapter-3-dark-mobile.svg">
+  <source media="(max-width: 600px)" srcset="docs/assets/chapter-3-light-mobile.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/chapter-3-dark.svg">
+  <img src="docs/assets/chapter-3-light.svg" width="100%" alt="III / Read the evidence">
+</picture>
+</h2>
 
 The run is useful only when its evidence is readable and kept together.
 
@@ -301,11 +329,16 @@ The [complete usage reference](docs/USAGE_REFERENCE.md) retains the detailed inp
 
 </details>
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/threshold-4-dark.svg"><img src="docs/assets/threshold-4-light.svg" width="100%" alt=""></picture>
-
 <a id="horizon"></a>
 
-## IV / Horizon
+<h2 id="iv--horizon">
+<picture>
+  <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="docs/assets/chapter-4-dark-mobile.svg">
+  <source media="(max-width: 600px)" srcset="docs/assets/chapter-4-light-mobile.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/chapter-4-dark.svg">
+  <img src="docs/assets/chapter-4-light.svg" width="100%" alt="IV / Horizon">
+</picture>
+</h2>
 
 **First depth, then breadth.** The direction is a general ML builder: composable domain modules around explicit inputs, controlled fitting and inspectable results. The first deep domain is semiconductor/materials work. Other domains and broader construction/automation are **future work**, not delivered capability.
 

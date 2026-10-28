@@ -1,3 +1,9 @@
+# Editorial continuity · 2026-10-28
+
+The English landing retains its original hero and working-sequence artwork. Its hero now forms the accessible H1 instead of repeating a separate visible title; four original chapter plates replace the tiny repeated separators. Each chapter remains a semantic H2 with the existing anchor destinations and an exact image alternative. Lower-priority setup context is progressively disclosed; commands, release links, counts and scientific limitations are unchanged. These are original architectural ornaments and outlined DejaVu typography, not logos, measurements or scientific schematics. No external requests, new font assets or dashboards. Candidate browser/screenreader rendering is not certified by static design studies.
+
+## Preserved earlier notices
+
 Axiom — Celestial Order editorial refinement, 2026-10-27
 
 Original editable vector geometry created for xinhi6716. The selected design uses luminous ivory, antique gold and ceremonial construction. Temple/keystone, hourglass/meridian, spindle/thread, measured balance, ritual shears, seed/light, tree/root and serpent-return shapes are original constructions, not traced religious artifacts or external brand artwork. No bitmap artwork, remote image, animation or external font is required. Original construction is not a claim of historical authenticity or trademark clearance.
