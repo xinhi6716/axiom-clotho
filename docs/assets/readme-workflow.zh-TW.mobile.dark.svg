@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="460" viewBox="0 0 400 460" role="img" aria-labelledby="title desc" xml:lang="zh-TW">
+<title id="title">Clotho 表格教學流程 — GroupBench 引擎</title>
+<desc id="desc">準備資料：CSV、目標值與群組。比較模型：保留測試群組，不混入訓練。檢查結果：報告與逐列預測。</desc>
+<rect width="400" height="460" fill="#0d1117"/>
+<path d="M24 1H376M24 459H376" fill="none" stroke="#425366" stroke-width="1"/>
+<text x="24" y="43" fill="#c7b27d" font-family="DejaVu Serif, Noto Serif CJK TC, serif" font-size="21">AXIOM / CLOTHO</text>
+<g aria-hidden="true" transform="translate(352 38)" fill="none" stroke="#c7b27d" stroke-width="1.2"><circle r="15"/><path d="M0-23V23M-23 0H23M0-13 4-4 13 0 4 4 0 13-4 4-13 0-4-4Z"/></g>
+<text x="24" y="82" fill="#f1ead6" font-family="DejaVu Serif, Noto Serif CJK TC, serif" font-size="25">群組資料，本機建模。</text>
+<text x="24" y="111" fill="#9faebd" font-family="DejaVu Sans, Noto Sans CJK TC, sans-serif" font-size="16">表格引擎：GroupBench</text>
+<path d="M24 129H376" fill="none" stroke="#425366" stroke-width="1"/>
+<circle cx="48" cy="166" r="19" fill="#0d1117" stroke="#c7b27d" stroke-width="1.5"/><text x="48" y="172" fill="#c7b27d" font-family="DejaVu Sans, Noto Sans CJK TC, sans-serif" font-size="16" text-anchor="middle">01</text>
+<text x="84" y="175" fill="#f1ead6" font-family="DejaVu Serif, Noto Serif CJK TC, serif" font-size="27">準備資料</text>
+<text x="30" y="209" fill="#f1ead6" font-family="DejaVu Sans, Noto Sans CJK TC, sans-serif" font-size="19">CSV、目標值與群組</text>
+<path d="M200 222v19m-5-5 5 5 5-5" fill="none" stroke="#c7b27d" stroke-width="1.5"/>
+<circle cx="48" cy="276" r="19" fill="#0d1117" stroke="#c7b27d" stroke-width="1.5"/><text x="48" y="282" fill="#c7b27d" font-family="DejaVu Sans, Noto Sans CJK TC, sans-serif" font-size="16" text-anchor="middle">02</text>
+<text x="84" y="285" fill="#f1ead6" font-family="DejaVu Serif, Noto Serif CJK TC, serif" font-size="27">比較模型</text>
+<text x="30" y="319" fill="#f1ead6" font-family="DejaVu Sans, Noto Sans CJK TC, sans-serif" font-size="19">保留測試群組，不混入訓練</text>
+<path d="M200 332v19m-5-5 5 5 5-5" fill="none" stroke="#c7b27d" stroke-width="1.5"/>
+<circle cx="48" cy="386" r="19" fill="#0d1117" stroke="#c7b27d" stroke-width="1.5"/><text x="48" y="392" fill="#c7b27d" font-family="DejaVu Sans, Noto Sans CJK TC, sans-serif" font-size="16" text-anchor="middle">03</text>
+<text x="84" y="395" fill="#f1ead6" font-family="DejaVu Serif, Noto Serif CJK TC, serif" font-size="27">檢查結果</text>
+<text x="30" y="429" fill="#f1ead6" font-family="DejaVu Sans, Noto Sans CJK TC, sans-serif" font-size="19">報告與逐列預測</text>
+</svg>

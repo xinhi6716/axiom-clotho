@@ -172,7 +172,9 @@ clotho tabular demo --out runs/demo
 Open `runs/demo/report.html`. The original instructional figure remains below; it describes the calculator's table workflow, not the new measurement contract.
 
 <picture>
+  <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="docs/assets/readme-workflow.mobile.dark.svg">
   <source media="(max-width: 600px)" srcset="docs/assets/readme-workflow.mobile.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme-workflow.dark.svg">
   <img src="docs/assets/readme-workflow.svg" alt="Clotho instructional workflow, powered by the GroupBench engine: prepare a table, compare on held-out groups, inspect the report">
 </picture>
 

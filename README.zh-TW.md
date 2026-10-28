@@ -6,7 +6,7 @@
   <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="docs/assets/clotho-ritual-hero-dark-mobile.svg">
   <source media="(max-width: 600px)" srcset="docs/assets/clotho-ritual-hero-light-mobile.svg">
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/clotho-ritual-hero-dark.svg">
-  <img src="docs/assets/clotho-ritual-hero-light.svg" width="100%" alt="A continuous celestial thread converging on a stellar origin.">
+  <img src="docs/assets/clotho-ritual-hero-light.svg" width="100%" alt="一條連續的天穹絲線，匯聚於星辰起點。">
 </picture>
 
 **從量測走向模型。**
@@ -87,7 +87,7 @@ clotho --version
   <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="docs/assets/clotho-ritual-process-dark-mobile.svg">
   <source media="(max-width: 600px)" srcset="docs/assets/clotho-ritual-process-light-mobile.svg">
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/clotho-ritual-process-dark.svg">
-  <img src="docs/assets/clotho-ritual-process-light.svg" width="100%" alt="Prepare features and training targets; inspect the plan; run grouped comparison and target-free prediction; score later outcomes without fitting.">
+  <img src="docs/assets/clotho-ritual-process-light.svg" width="100%" alt="準備特徵與訓練目標；檢查計畫；執行群組比較，並對不含目標值的新資料進行預測；評分後續結果，不進行擬合。">
 </picture>
 
 | 步驟 | 做什麼 | 不做什麼 |
@@ -159,7 +159,9 @@ clotho tabular demo --out runs/demo
 開啟 `runs/demo/report.html`。原本教學圖保留如下；它說明計算器的表格流程，不是新的量測輸入契約。
 
 <picture>
+  <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="docs/assets/readme-workflow.zh-TW.mobile.dark.svg">
   <source media="(max-width: 600px)" srcset="docs/assets/readme-workflow.zh-TW.mobile.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme-workflow.zh-TW.dark.svg">
   <img src="docs/assets/readme-workflow.zh-TW.svg" alt="Clotho 教學流程（GroupBench 引擎）：準備資料表、以保留群組比較模型、檢查報告">
 </picture>
 

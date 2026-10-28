@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="330" viewBox="0 0 1200 330" role="img" aria-labelledby="title desc" xml:lang="en">
+<title id="title">Clotho tabular workflow — GroupBench engine</title>
+<desc id="desc">Prepare: CSV + target + groups. Compare: Keep test groups separate. Inspect: Report + saved predictions.</desc>
+<rect width="1200" height="330" fill="#0d1117"/>
+<path d="M42 1H1158M42 329H1158" fill="none" stroke="#425366" stroke-width="1"/>
+<text x="42" y="44" fill="#c7b27d" font-family="DejaVu Serif, Noto Serif CJK TC, serif" font-size="22">AXIOM / CLOTHO</text>
+<g aria-hidden="true" transform="translate(1118 51)" fill="none" stroke="#c7b27d" stroke-width="1.2"><circle r="15"/><path d="M0-23V23M-23 0H23M0-13 4-4 13 0 4 4 0 13-4 4-13 0-4-4Z"/></g>
+<text x="42" y="97" fill="#f1ead6" font-family="DejaVu Serif, Noto Serif CJK TC, serif" font-size="31">A local workflow for grouped data</text>
+<path d="M42 126H1158" fill="none" stroke="#425366" stroke-width="1"/>
+<path d="M70 164H1107" fill="none" stroke="#425366" stroke-width="1.5"/>
+<circle cx="70" cy="164" r="19" fill="#0d1117" stroke="#c7b27d" stroke-width="1.5"/><text x="70" y="170" fill="#c7b27d" font-family="DejaVu Sans, Noto Sans CJK TC, sans-serif" font-size="16" text-anchor="middle">01</text>
+<text x="48" y="221" fill="#f1ead6" font-family="DejaVu Serif, Noto Serif CJK TC, serif" font-size="30">Prepare</text>
+<text x="48" y="257" fill="#f1ead6" font-family="DejaVu Sans, Noto Sans CJK TC, sans-serif" font-size="22">CSV + target + groups</text>
+<path d="M376 164h24m-6-6 6 6-6 6" fill="none" stroke="#c7b27d" stroke-width="1.5"/>
+<circle cx="454" cy="164" r="19" fill="#0d1117" stroke="#c7b27d" stroke-width="1.5"/><text x="454" y="170" fill="#c7b27d" font-family="DejaVu Sans, Noto Sans CJK TC, sans-serif" font-size="16" text-anchor="middle">02</text>
+<text x="432" y="221" fill="#f1ead6" font-family="DejaVu Serif, Noto Serif CJK TC, serif" font-size="30">Compare</text>
+<text x="432" y="257" fill="#f1ead6" font-family="DejaVu Sans, Noto Sans CJK TC, sans-serif" font-size="22">Keep test groups separate</text>
+<path d="M760 164h24m-6-6 6 6-6 6" fill="none" stroke="#c7b27d" stroke-width="1.5"/>
+<circle cx="838" cy="164" r="19" fill="#0d1117" stroke="#c7b27d" stroke-width="1.5"/><text x="838" y="170" fill="#c7b27d" font-family="DejaVu Sans, Noto Sans CJK TC, sans-serif" font-size="16" text-anchor="middle">03</text>
+<text x="816" y="221" fill="#f1ead6" font-family="DejaVu Serif, Noto Serif CJK TC, serif" font-size="30">Inspect</text>
+<text x="816" y="257" fill="#f1ead6" font-family="DejaVu Sans, Noto Sans CJK TC, sans-serif" font-size="22">Report + saved predictions</text>
+<text x="48" y="307" fill="#9faebd" font-family="DejaVu Sans, Noto Sans CJK TC, sans-serif" font-size="17">Tabular engine: GroupBench</text>
+</svg>

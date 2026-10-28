@@ -1,3 +1,5 @@
+[Axiom Clotho](../README.md) / Blank-input setup
+
 # Start with your own measurements
 
 **Included in 0.3.0b4. The frozen 0.3.0b3 wheel and tag do not include
@@ -117,3 +119,5 @@ establish scientific validity, correct units, physical independence or blinding.
 
 這是空白設定工具，不是完整示範，也不代表科學驗證。若初始化中斷，請保留失敗
 狀態並換新目錄重試，不要刪除標記來假裝成功。真實輸入與結果請保持私密。
+
+[← Clotho overview](../README.md) · [返回 Clotho 總覽（繁體中文）](../README.zh-TW.md)
