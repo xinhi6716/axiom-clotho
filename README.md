@@ -35,6 +35,12 @@ Choose the route that matches your data—not a different product.
 | A numeric/categorical table for grouped regression or explicit binary classification | The existing **[tabular calculator](#tabular-start)**, via `clotho tabular`, `mlcalc` or `groupbench`. |
 | Saved predictions and later observed outcomes | **`clotho score`** for a complete Clotho cohort; other saved analyses remain in the tabular calculator. |
 
+**Starting with your own measurement files?** Current-source / unreleased
+`clotho init --workflow rram --out my-measurements` (or `--workflow fet`) creates
+header-only CSVs, an intentionally unfinished configuration and a local checklist.
+No invented rows, inferred units or accepted scientific declarations.
+**Not available in the frozen b3 wheel or tag.** [Blank-input setup guide](docs/WORKFLOW_INIT.md).
+
 The repository is now **`axiom-clotho`**. The distribution deliberately remains **`ml-super-calculator`**; existing imports and CLI names keep one owner. Do not co-install a second overlapping distribution. [Compatibility and migration](docs/CLOTHO_BETA_MIGRATION.md).
 
 ### Install the beta

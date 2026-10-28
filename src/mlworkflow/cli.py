@@ -77,6 +77,8 @@ def main(argv=None):
         if arguments and arguments[0] == "tabular":
             from groupbench.cli import main as calculator_main
             return calculator_main(arguments[1:])
+        if arguments and arguments[0] == "init":
+            return init_main(arguments[1:])
         if arguments and arguments[0] in ("prepare", "plan", "run", "score"):
             return regression_main(arguments)
         # Delegate feature parsing to its existing contract, rather than maintaining
@@ -85,7 +87,22 @@ def main(argv=None):
             return run_features(arguments[1:])
         if arguments and arguments[0] == "demo":
             return run_demo(arguments[1:])
-        parser = Parser(description=__doc__)
+        parser = Parser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter,
+                        epilog="""Commands (each supports --help):
+  init        Create blank RRAM/FET inputs; no fitting (current source, not b3 wheel).
+  prepare     Validate measurements, partitions and training-only targets.
+  plan        Preview grouped splits and fit counts; do not fit.
+  run         Fit the existing grouped models and save future predictions.
+  score       Evaluate saved predictions against later outcomes; no new fits.
+  tabular     Use the existing grouped tabular calculator.
+  features    Use the existing standalone RRAM feature extractor.
+  demo        Run a separate, wholly invented semiconductor example.
+  components  Verify and print pinned component identities.
+
+For your measurements: clotho init --workflow rram --out my-measurements
+For FET:               clotho init --workflow fet --out my-transfer-data
+Init writes header-only CSVs and an intentionally incomplete configuration.
+Read the generated README.md before filling your own measurements and choices.""")
         parser.add_argument("--version", action="version", version=f"Axiom Clotho {__version__}; RRAM measurement-regression-v1; FET measurement-regression-v2")
         parser.add_argument("command", nargs="?", choices=("components",),
                             help="verify and print pinned component identities")
@@ -94,11 +111,37 @@ def main(argv=None):
             print(json.dumps(verify_components(), indent=2, sort_keys=True))
         else:
             parser.print_help()
-            print("\nCommands: prepare | plan | run | score | tabular | features | demo | components (each supports --help)")
         return 0
     except (ComponentError, OSError):
         print("error: workflow arguments, local resources or output are unavailable; use --help and a complete distribution", file=sys.stderr)
         return 2
+
+
+def init_main(arguments):
+    from .contracts import WorkflowError
+    from .scaffold import initialize
+    parser = Parser(prog="clotho init", allow_abbrev=False,
+                    description="Create blank RRAM or FET input files, not invented measurements. "
+                                "Current-source/unreleased; not in the frozen 0.3.0b3 wheel. "
+                                "No fitting, extraction, download or upload.")
+    parser.add_argument("--workflow", required=True, choices=("rram", "fet"),
+                        help="choose the existing measurement contract explicitly")
+    parser.add_argument("--out", required=True,
+                        help="fresh directory with an existing parent; rejects pre-existing outputs and symlink path components")
+    args = parser.parse_args(arguments)
+    try:
+        initialize(args.workflow, args.out)
+    except WorkflowError as error:
+        print("error: " + str(error), file=sys.stderr)
+        return 2
+    except OSError:
+        print("error: init could not finish local writes; a partial directory may remain. "
+              "Do not use it; retry with a fresh output directory.", file=sys.stderr)
+        return 2
+    print("Blank " + args.workflow.upper() + " input scaffold created, not ready to prepare. "
+          "Open README.md in the new directory; fill your measurements and explicit choices. "
+          "No models were fitted.")
+    return 0
 
 
 def regression_main(arguments):

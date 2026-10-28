@@ -35,6 +35,12 @@
 | 用於群組迴歸或明確二元分類的數值／類別表格 | 既有[表格計算器](#tabular-start)：`clotho tabular`、`mlcalc` 或 `groupbench`。 |
 | 已存預測與後來觀察到的結果 | 完整 Clotho 群體用 **`clotho score`**；其他保存資料分析仍由表格計算器提供。 |
 
+**準備使用自己的量測檔？** 目前原始碼／尚未發布的
+`clotho init --workflow rram --out my-measurements`（或 `--workflow fet`）可建立
+只有標頭的 CSV、刻意未完成的設定與本機操作指南；不產生虛構資料、不猜單位，
+也不代替你接受科學聲明。**凍結的 b3 wheel 與 tag 沒有此功能。**
+[空白輸入設定指南與繁體中文說明](docs/WORKFLOW_INIT.md#繁體中文快速指南)。
+
 倉庫已更名為 **`axiom-clotho`**。發行套件刻意保留 **`ml-super-calculator`**，讓既有匯入與 CLI 名稱維持單一擁有者。不要同時安裝另一個擁有重疊檔案的套件。[相容性與遷移](docs/CLOTHO_BETA_MIGRATION.md)。
 
 ### 安裝 beta
