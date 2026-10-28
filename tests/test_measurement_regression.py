@@ -89,13 +89,13 @@ class MeasurementRegressionTests(unittest.TestCase):
         from groupbench import __version__ as core_version
         from mlworkflow import __version__ as workflow_version
         self.assertEqual(core_version, workflow_version)
-        self.assertEqual(core_version, "0.3.0b4")
+        self.assertEqual(core_version, "0.3.0b5")
         result = self.command("--version", no_site=True)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("Axiom Clotho 0.3.0b4", result.stdout)
+        self.assertIn("Axiom Clotho 0.3.0b5", result.stdout)
         result = self.command("tabular", "--version")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("0.3.0b4", result.stdout)
+        self.assertIn("0.3.0b5", result.stdout)
 
     def test_exact_target_and_partition_joins_reject_missing_extra_duplicate(self):
         for name, columns in (("partitions.csv", ("device", "partition")), ("training_targets.csv", ("device", "target"))):

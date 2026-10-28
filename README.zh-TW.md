@@ -15,9 +15,9 @@
 
 [**I / 開始**](#begin) · [**II / 絲線**](#thread) · [**III / 閱讀證據**](#evidence) · [**IV / 遠景**](#horizon)
 
-> **[下載 0.3.0b4 beta](https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.3.0b4)** · 本機運算 · 使用者明確提供目標。這個版本將空白輸入設定與既有 FET、RRAM、表格流程一同提供。[變更與驗證範圍](docs/RELEASE_NOTES_0.3.0b4.md)。
+> **[0.3.0b5 視覺維護 beta](docs/RELEASE_NOTES_0.3.0b5.md)** · 本機運算 · 使用者明確提供目標。這個版本統一報告徽記與 Clotho 文件視覺；既有空白輸入設定、FET、RRAM 及表格流程保持不變。發布須有相符的固定 tag 與資產。[變更與驗證範圍](docs/RELEASE_NOTES_0.3.0b5.md)。
 
-> **你有 FET 轉移曲線？** 請從 [FET 裝置迴歸指南](docs/FET_DEVICE_REGRESSION.md)開始：每個 `(lot, wafer, device)` 接受一段宣告量測，以兩項明確特徵接上相同的群組 ML 核心。凍結的 b3 包含 FET、但沒有 `init`；b2 沒有 FET。所有舊版本維持不變，保留供回復使用。
+> **你有 FET 轉移曲線？** 請從 [FET 裝置迴歸指南](docs/FET_DEVICE_REGRESSION.md)開始：每個 `(lot, wafer, device)` 接受一段宣告量測，以兩項明確特徵接上相同的群組 ML 核心。凍結的 [b4](docs/RELEASE_NOTES_0.3.0b4.md) 包含 `init`，但早於這次封裝的視覺更新。凍結的 b3 包含 FET、但沒有 `init`；b2 沒有 FET。所有舊版本維持不變，保留供回復使用。
 
 <a id="begin"></a>
 <a id="取得已審核的-beta-核心"></a>
@@ -33,7 +33,7 @@
 | 用於群組迴歸或明確二元分類的數值／類別表格 | 既有[表格計算器](#tabular-start)：`clotho tabular`、`mlcalc` 或 `groupbench`。 |
 | 已存預測與後來觀察到的結果 | 完整 Clotho 群體用 **`clotho score`**；其他保存資料分析仍由表格計算器提供。 |
 
-**準備使用自己的量測檔？** 0.3.0b4 已包含
+**準備使用自己的量測檔？** 自 0.3.0b4 起提供、b5 保留的
 `clotho init --workflow rram --out my-measurements`（或 `--workflow fet`）可建立
 只有標頭的 CSV、刻意未完成的設定與本機操作指南；不產生虛構資料、不猜單位，
 也不代替你接受科學聲明。**凍結的 b3 wheel 與 tag 沒有此功能。**
@@ -43,24 +43,24 @@
 
 ### 安裝 beta
 
-從 **[0.3.0b4 發布頁](https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.3.0b4)** 下載 wheel、相符的原始碼封存檔與 `SHA256SUMS.txt`。核對校驗碼，再於獨立且相容的環境安裝：
+安裝 b5 前，請先確認 **[0.3.0b5 發布頁](https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.3.0b5)** 已提供相符的 wheel、原始碼封存檔與 `SHA256SUMS.txt`。核對校驗碼，再於獨立且相容的環境安裝：
 
 ```bash
-python -m pip install --no-index --no-deps ./ml_super_calculator-0.3.0b4-py3-none-any.whl
+python -m pip install --no-index --no-deps ./ml_super_calculator-0.3.0b5-py3-none-any.whl
 clotho --version
 ```
 
-需 Python ≥3.10，以及既有的 `numpy>=1.24,<3`、`pandas>=2,<3`、`scikit-learn>=1.4,<2`、`threadpoolctl>=3,<4`。宣告範圍不代表每個版本組合都已測試。這個指令不會下載缺少的相依套件；詳見[安裝指南](docs/RELEASE_NOTES_0.3.0b4.md#installation-and-reproducible-example)。解壓相符的原始碼封存檔，才能取得下方「絲線」範例需要的資料；CLI 不會自行下載。若偏好原始碼 checkout，可使用下方替代路線。
+需 Python ≥3.10，以及既有的 `numpy>=1.24,<3`、`pandas>=2,<3`、`scikit-learn>=1.4,<2`、`threadpoolctl>=3,<4`。宣告範圍不代表每個版本組合都已測試。這個指令不會下載缺少的相依套件；詳見[安裝指南](docs/RELEASE_NOTES_0.3.0b5.md#installation-and-reproducible-example)。解壓相符的原始碼封存檔，才能取得下方「絲線」範例需要的資料；CLI 不會自行下載。若偏好原始碼 checkout，可使用下方替代路線。
 
 <details>
 <summary><strong>從原始碼安裝已審核的 beta 核心</strong> · 全新 checkout 與虛擬環境</summary>
 
-固定的 `v0.3.0b4` tag 對應同時包含 RRAM v1、FET v2 流程與空白輸入 `init` 的 beta 原始碼。使用此原始碼安裝路線前，請先核對發布收據與相符的 wheel／原始碼資產。
+發布後，固定的 `v0.3.0b5` tag 對應同時包含 RRAM v1、FET v2 流程與空白輸入 `init` 的 beta 原始碼。使用此原始碼安裝路線前，請先核對發布收據與相符的 wheel／原始碼資產。
 
 ```bash
 git clone https://github.com/xinhi6716/axiom-clotho.git clotho-source
 cd clotho-source
-git checkout --detach v0.3.0b4
+git checkout --detach v0.3.0b5
 python -m venv .venv
 # POSIX 啟用；Windows 改用 .venv\Scripts\activate。
 . .venv/bin/activate
@@ -69,7 +69,7 @@ clotho --version
 ```
 
 
-上方 b4 wheel 與固定 tag 的原始碼 checkout 都回報 `0.3.0b4`。詳見 [b4 發行指南](docs/RELEASE_NOTES_0.3.0b4.md)。安裝可能從設定索引取得建置／執行相依套件；離線使用需事先備妥相容環境。這不是 PyPI 發布聲明。wheel 安裝與校驗碼核對方式請見[安裝指南](docs/RELEASE_NOTES_0.3.0b4.md#installation-and-reproducible-example)。
+上方 b5 wheel 與固定 tag 的原始碼 checkout 都回報 `0.3.0b5`。詳見 [b5 發行指南](docs/RELEASE_NOTES_0.3.0b5.md)。安裝可能從設定索引取得建置／執行相依套件；離線使用需事先備妥相容環境。這不是 PyPI 發布聲明。wheel 安裝與校驗碼核對方式請見[安裝指南](docs/RELEASE_NOTES_0.3.0b5.md#installation-and-reproducible-example)。
 
 </details>
 
@@ -307,7 +307,7 @@ mlcalc binary predict examples/synthetic_binary_process.csv examples/new_binary_
 
 報告外觀不改動選模、切分或指標。跨瀏覽器與行動裝置的呈現檢查仍待完成。
 
-[輸入契約](docs/CLOTHO_CSV_BETA.md) · [評估協定](docs/PROTOCOL.md) · [Beta 發行指南](docs/RELEASE_NOTES_0.3.0b4.md) · [路線圖](ROADMAP.md) · [安全說明](SECURITY.md)
+[輸入契約](docs/CLOTHO_CSV_BETA.md) · [評估協定](docs/PROTOCOL.md) · [Beta 發行指南](docs/RELEASE_NOTES_0.3.0b5.md) · [路線圖](ROADMAP.md) · [安全說明](SECURITY.md)
 
 <details>
 <summary><strong>舊版發行與回退</strong> · 凍結的 b1、a4、a3 與更早檔案</summary>
@@ -324,7 +324,7 @@ mlcalc binary predict examples/synthetic_binary_process.csv examples/new_binary_
 
 [v0.3.0b1](https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.3.0b1)
 固定於 `aec0c6a56730df8159ecf4922c2e1215d467b3f5`，**不含**量測封包清單的
-跨平台路徑修正。新安裝請使用 b4；以下獨立舊版路線僅供重現凍結的 b1。
+跨平台路徑修正。新安裝請使用 b5；以下獨立舊版路線僅供重現凍結的 b1。
 原有資產、tag 與校驗碼都保持不變。[歷史 b1 指南](docs/RELEASE_NOTES_0.3.0b1.md)。
 
 若已備妥相容相依套件，先核對原始 b1 wheel 自己的發布校驗碼，再於獨立環境安裝：
@@ -347,7 +347,7 @@ python -m pip install -e .
 clotho --version
 ```
 
-兩條舊版路線都回報 `0.3.0b1`，不是 b4。原始碼安裝可能取得建置或執行相依套件；
+兩條舊版路線都回報 `0.3.0b1`，不是 b5。原始碼安裝可能取得建置或執行相依套件；
 計算器不會自行進行這類下載。
 
 

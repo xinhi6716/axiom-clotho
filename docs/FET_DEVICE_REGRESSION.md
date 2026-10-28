@@ -1,10 +1,10 @@
 [Axiom Clotho](../README.md) / FET device regression
 
-# FET device regression — Clotho 0.3.0b4
+# FET device regression — Clotho 0.3.0b5
 
-The b4 wheel retains the FET v2 adapter and pinned extractors. Use its matching
+The b5 wheel retains the FET v2 adapter and pinned extractors. Use its matching
 source archive for the invented input files below. Frozen b2 and earlier assets
-do not include this route. [Installation and release scope](RELEASE_NOTES_0.3.0b4.md).
+do not include this route. [Installation and release scope](RELEASE_NOTES_0.3.0b5.md).
 
 This bounded route connects a declared transfer table to the existing
 **prepare → plan → run → score** workflow. It reuses the pinned signed-current
@@ -162,7 +162,7 @@ caller assertions: do not set them true merely to make validation pass.
 
 ## 3. Same four stages
 
-After installing b4, run these commands from its matching extracted source
+After installing b5, run these commands from its matching extracted source
 archive or tagged checkout. Plan/run require the existing ML dependencies. The
 commands do not fetch a private repository or download data. Choose fresh output directories
 outside the input/prepared/run directories; never modify completed bundles.

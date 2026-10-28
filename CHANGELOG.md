@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.0b5 — Report and documentation visual maintenance
+
+- Package the current Clotho coil emblems in regression and binary HTML reports, matching the celestial-thread documentation identity.
+- Include coordinated workflow illustrations, English/Traditional Chinese dark and mobile variants, and guide navigation in the source archive.
+- Preserve models, schemas, splits, metrics, dependencies, measurement behavior and existing invented fixtures; this is not a new ML capability or a scientific-validation release.
+- Retain blank-input `init` introduced in b4 and FET introduced in b3. All older release guides, tags and assets remain unchanged.
+- See the [b5 release guide](docs/RELEASE_NOTES_0.3.0b5.md) for installation, exact verification scope and limitations.
+
 ## 0.3.0b4 — Blank-input setup
 
 - Package the existing reviewed `clotho init --workflow rram|fet --out ...` route: header-only CSVs, intentionally unfinished configuration and an English/Traditional Chinese local checklist. No observations, units, endpoints or scientific declarations are invented or accepted.
