@@ -105,6 +105,20 @@ def make_pipeline(X: pd.DataFrame, candidate: Candidate, random_state: int, cate
     return Pipeline([("preprocess", preprocessing), ("model", model)])
 
 
+def _validate_fitted_tree_state(pipeline):
+    """Reject non-finite floating-point tree arrays, even if predictions are finite."""
+    model = pipeline.named_steps["model"]
+    if isinstance(model, ExtraTreesRegressor):
+        for estimator in model.estimators_:
+            tree = estimator.tree_
+            for name in ("threshold", "value", "impurity", "weighted_n_node_samples"):
+                if not np.isfinite(getattr(tree, name)).all():
+                    raise ValueError(
+                        f"Model produced non-finite fitted tree state ({name}). "
+                        "Rescale numeric inputs or target units before fitting."
+                    )
+
+
 class GroupBenchRegressor(RegressorMixin, BaseEstimator):
     """Select a local baseline with group-disjoint inner cross-validation.
 
@@ -147,6 +161,7 @@ class GroupBenchRegressor(RegressorMixin, BaseEstimator):
                 for train, test in splits:
                     pipeline = make_pipeline(X.iloc[train], candidate, seed, **encoding_options(plan.categorical_encoding))
                     pipeline.fit(X.iloc[train], y[train])
+                    _validate_fitted_tree_state(pipeline)
                     prediction = pipeline.predict(X.iloc[test])
                     oof[test] = prediction
                     scores, _ = grouped_metrics(y[test], prediction, groups[test])
@@ -165,6 +180,7 @@ class GroupBenchRegressor(RegressorMixin, BaseEstimator):
                 chosen = candidates[best]
                 pipeline = make_pipeline(X, chosen, seed, **encoding_options(plan.categorical_encoding))
                 pipeline.fit(X, y)
+                _validate_fitted_tree_state(pipeline)
                 family_models[family] = pipeline
                 family_candidates[family] = chosen.name
         # Publish state only after selection and every family refit succeeds.
