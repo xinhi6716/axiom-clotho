@@ -15,6 +15,15 @@ Clotho turns supported RRAM and FET measurement tables into device-level feature
 
 **[Beta 0.3.0b7](https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.3.0b7)** · [Quick start](#begin) · [Measurements](#thread) · [Your table](#tabular-start) · [Reports](#evidence) · [Limits](#limits)
 
+### Choose your starting point
+
+| I have… | Start with… |
+| --- | --- |
+| No dataset yet | [A small synthetic demo](#try-the-demo) |
+| RRAM or FET measurements | [The measurement workflow](#thread) |
+| A feature table | [Grouped tabular modelling](#tabular-start) |
+| Saved predictions | [Reports and evaluation](#evidence) |
+
 <a id="begin"></a>
 <a id="get-the-reviewed-beta-core"></a>
 <a id="choose-the-version-you-mean"></a>
@@ -270,3 +279,4 @@ For rollback, use the matching release guide in a separate environment. Historic
 Original code and synthetic generators: [MIT](LICENSE). Dependencies retain their own licenses. [References](docs/REFERENCES.md) · [Artwork and font notices](docs/assets/CLOTHO_EDITORIAL_NOTICES.md).
 
 Part of **Moirai** · [Axiom](https://github.com/xinhi6716) · [Chronos](https://github.com/xinhi6716/axiom-chronos) · [Atropos](https://github.com/xinhi6716/axiom-atropos)
+

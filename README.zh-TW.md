@@ -15,6 +15,15 @@ Clotho 將支援的 RRAM、FET 量測表整理成元件特徵，依你宣告的�
 
 **[Beta 0.3.0b7](https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.3.0b7)** · [開始使用](#begin) · [量測流程](#thread) · [自己的表格](#tabular-start) · [報告](#evidence) · [使用限制](#limits)
 
+### 選擇你的起點
+
+| 手上有什麼 | 從這裡開始 |
+| --- | --- |
+| 還沒有資料 | [小型合成範例](#try-the-demo) |
+| RRAM 或 FET 量測 | [量測工作流程](#thread) |
+| 特徵資料表 | [分組建模](#tabular-start) |
+| 已保存的預測 | [報告與評估](#evidence) |
+
 <a id="begin"></a>
 <a id="get-the-reviewed-beta-core"></a>
 <a id="先選擇要使用的版本"></a>
@@ -182,3 +191,4 @@ b7 更新 Clotho 圖像、報告呈現與文件；保留 b6 拒絕已擬合迴�
 原創程式與合成資料產生器採 [MIT](LICENSE) 授權；相依套件保留各自授權。[參考來源](docs/REFERENCES.md) · [美術與字體聲明](docs/assets/CLOTHO_EDITORIAL_NOTICES.md)。
 
 **Moirai** 系列 · [Axiom](https://github.com/xinhi6716) · [Chronos](https://github.com/xinhi6716/axiom-chronos) · [Atropos](https://github.com/xinhi6716/axiom-atropos)
+
