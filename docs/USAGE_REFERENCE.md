@@ -420,6 +420,13 @@ print(model.best_candidate_, model.selection_results_)
 
 `X` must be a named pandas DataFrame. All arrays are aligned **positionally**, not by pandas index labels. `predict` accepts reordered columns but rejects missing/extra columns and incompatible numeric/categorical types. This is a sklearn-like estimator with `get_params`, `set_params`, and `clone`; it is not claimed to pass every general-purpose sklearn estimator check or metadata-routing workflow.
 
+When using `groupbench.GroupKFold.split(X, y, groups)` directly, each supplied
+`X` or `y` must have the same number of rows as `groups`. A target-length
+mismatch raises `ValueError` when the split iterator is consumed, before fold
+assignment. The splitter checks only the length of `y`, never its values or
+pandas index labels; `y=None` remains supported. This alignment guard does not
+validate target values or make the split stratified.
+
 ## How the evaluation is split and scored
 
 1. **Outer folds hold out whole groups.** Every row receives exactly one held-out prediction per model entry. Folds balance row counts approximately, using group sizes but never target values.
