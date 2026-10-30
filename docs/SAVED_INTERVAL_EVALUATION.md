@@ -203,3 +203,29 @@ No grouping rule proves exchangeability or independence. This utility is not a
 conformal predictor or calibration algorithm, and supplies no new confidence
 intervals, population inference, future coverage guarantees or automatic
 physical/process decisions.
+
+## Inspect which side is missed (current source)
+
+The additive `tail_misses` report section describes observations strictly below
+`lower` or strictly above `upper`. Endpoints, including point intervals, remain
+covered. Each observation now also records boolean `below_lower` and
+`above_upper`; exactly one of these or `covered` is true. Existing coverage,
+width and interval-score fields and the version-1 input contract are unchanged.
+Consumers that reject unknown output fields must explicitly accept these new
+fields before using this source revision; frozen releases are not changed.
+
+`tail_misses.row_weighted` and each `tail_misses.groups` entry include
+`n_rows`, integer `below_lower` / `above_upper` counts and corresponding
+`below_lower_rate_approx` / `above_upper_rate_approx` rates. Counts plus covered
+counts equal the cohort/group row count. `tail_misses.equal_group` averages
+exact within-group rates, not rounded displayed rates, and reports `n_groups`.
+There is no equal-group pseudo-count: groups of different sizes have equal
+weight only in those rates. Values are computed even when `alpha` is null.
+
+For three invented device-A rows (-1, 0, 1) and one device-B row (2), all
+with bounds [0,1], pooled below/above rates are both 1/4. Equal-group rates
+are instead 1/6 below and 1/2 above. This can reveal a one-sided miss pattern
+hidden by overall coverage. It is **not** a calibration test, evidence of
+exchangeability, a cause-of-bias diagnosis, an extrapolation detector, a model
+selection rule or a guarantee for new devices. Do not tune on the evaluated
+cohort to make these descriptive rates look better.

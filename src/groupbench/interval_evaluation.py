@@ -166,6 +166,31 @@ def _summary(rows, alpha):
     }
 
 
+def _tail_misses(rows, by_group):
+    """Describe direction of misses, without testing equal-tail calibration."""
+    def summarize(items):
+        return {"n_rows": len(items), **{
+            key: sum(row[key] for row in items)
+            for key in ("below_lower", "above_upper")
+        }, **{
+            key + "_rate_approx": _approx(Fraction(sum(row[key] for row in items), len(items)))
+            for key in ("below_lower", "above_upper")
+        }}
+
+    return {
+        "rule": "below_lower: observed < lower; above_upper: observed > upper; endpoints are covered",
+        "interpretation": "Descriptive tail misses only; no calibration test, independence claim or future-coverage guarantee.",
+        "row_weighted": summarize(rows),
+        "groups": [{"group": group, **summarize(items)} for group, items in sorted(by_group.items())],
+        "equal_group": {"n_groups": len(by_group), **{
+            key + "_rate_approx": _approx(_mean([
+                Fraction(sum(row[key] for row in items), len(items))
+                for items in by_group.values()]))
+            for key in ("below_lower", "above_upper")
+        }},
+    }
+
+
 def evaluate_saved_intervals(document):
     """Evaluate every declared row, or reject the entire document with ValueError.
 
@@ -213,7 +238,9 @@ def evaluate_saved_intervals(document):
             _approx(score)
         evaluated.append({"row_id": row["row_id"], "group": str(group),
                           "observed_exact": str(y), "lower_exact": str(lower), "upper_exact": str(upper),
-                          "covered": lower <= y <= upper, "width": width, "score": score})
+                          "covered": lower <= y <= upper,
+                          "below_lower": y < lower, "above_upper": y > upper,
+                          "width": width, "score": score})
     evaluated.sort(key=lambda row: row["row_id"])
     by_group = {}
     for row in evaluated:
@@ -238,7 +265,9 @@ def evaluate_saved_intervals(document):
         "nominal_coverage_approx": None if alpha is None else _approx(1 - alpha),
         "cohort": {"expected_rows": len(expected), "input_rows": len(source), "scored_rows": len(evaluated), "omitted_rows": 0},
         "row_weighted": _summary(evaluated, alpha), "equal_group": equal,
-        "groups": group_rows, "observations": observations, "limitations": list(LIMITATIONS),
+        "groups": group_rows, "observations": observations,
+        "tail_misses": _tail_misses(evaluated, by_group),
+        "limitations": list(LIMITATIONS),
     }
 
 
