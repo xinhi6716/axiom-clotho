@@ -2,12 +2,7 @@
 
 <h1 id="axiom-clotho" align="center">Axiom Clotho</h1>
 
-<picture>
-  <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="docs/assets/clotho-ritual-hero-dark-mobile.svg">
-  <source media="(max-width: 600px)" srcset="docs/assets/clotho-ritual-hero-light-mobile.svg">
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/clotho-ritual-hero-dark.svg">
-  <img src="docs/assets/clotho-ritual-hero-light.svg" width="100%" alt="Clotho's spindle gathering a continuous thread beneath a celestial frame.">
-</picture>
+<p align="center"><img src="https://raw.githubusercontent.com/xinhi6716/xinhi6716/95b148368534587e5393bc9ef610b99c01ca8e92/assets/identity-v8/clotho.png" width="360" alt="Axiom Clotho — approved Moirai identity artwork"></p>
 
 <p align="center"><strong>Device measurements. Grouped models. Local reports.</strong></p>
 
