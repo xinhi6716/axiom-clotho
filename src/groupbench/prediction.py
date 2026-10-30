@@ -13,6 +13,7 @@ import pandas as pd
 import sklearn
 
 from . import __version__
+from .data import validate_source_sha256
 from .package_source import observe_package_source
 from .categorical import LEGACY, DISTINCT, encoding_options, preprocessing_description
 from .data import (_prediction_column_details, data_fingerprint, duplicate_diagnostics, prepare_data,
@@ -75,6 +76,8 @@ def fit_predict(frame: pd.DataFrame, new_rows: pd.DataFrame, *, target: str, gro
     column. Use ``benchmark`` on training data before trusting this prediction.
     No executable model file is loaded or saved.
     """
+    validate_source_sha256(source_sha256)
+    validate_source_sha256(prediction_source_sha256, "prediction_source_sha256")
     X, y, groups, incoming, plan = _prepare_prediction(
         frame, new_rows, target=target, group=group, features=features,
         inner_splits=inner_splits, random_state=random_state, baselines=baselines, objective=objective, categorical_encoding=categorical_encoding)

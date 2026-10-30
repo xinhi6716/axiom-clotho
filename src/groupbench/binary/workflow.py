@@ -11,6 +11,7 @@ import pandas as pd
 import sklearn
 
 from .. import __version__
+from ..data import validate_source_sha256
 from ..package_source import observe_package_source
 from ..categorical import LEGACY, DISTINCT, encoding_options, preprocessing_description
 from ..data import data_fingerprint, duplicate_diagnostics, validate_prediction_features, validate_seed
@@ -134,6 +135,7 @@ def _plan_base(X, y, groups, plan, target, group, source_sha256, mode):
 
 def plan_binary_benchmark(frame, *, target, group, features=None, outer_splits=5, inner_splits=3,
                           random_state=0, baselines=DEFAULT_BASELINES, source_sha256=None, categorical_encoding=LEGACY):
+    validate_source_sha256(source_sha256)
     X, y, groups, seed, schedule = _prepare_evaluation(
         frame, target=target, group=group, features=features, outer_splits=outer_splits,
         inner_splits=inner_splits, random_state=random_state, baselines=baselines, categorical_encoding=categorical_encoding)
@@ -151,6 +153,8 @@ def plan_binary_benchmark(frame, *, target, group, features=None, outer_splits=5
 def plan_binary_prediction(frame, new_rows, *, target, group, features=None, inner_splits=3,
                            random_state=0, baselines=DEFAULT_BASELINES, source_sha256=None,
                            prediction_source_sha256=None, categorical_encoding=LEGACY):
+    validate_source_sha256(source_sha256)
+    validate_source_sha256(prediction_source_sha256, "prediction_source_sha256")
     X, y, groups, incoming, plan = _prepare_prediction(
         frame, new_rows, target=target, group=group, features=features,
         inner_splits=inner_splits, random_state=random_state, baselines=baselines, categorical_encoding=categorical_encoding)
@@ -207,6 +211,7 @@ def _adverse(models):
 
 def benchmark_binary(frame, *, target, group, features=None, outer_splits=5, inner_splits=3,
                      random_state=0, baselines=DEFAULT_BASELINES, source_sha256=None, categorical_encoding=LEGACY):
+    validate_source_sha256(source_sha256)
     started = time.perf_counter()
     X, y, groups, seed, schedule = _prepare_evaluation(
         frame, target=target, group=group, features=features, outer_splits=outer_splits,
@@ -272,6 +277,8 @@ def benchmark_binary(frame, *, target, group, features=None, outer_splits=5, inn
 def fit_predict_binary(frame, new_rows, *, target, group, features=None, inner_splits=3,
                        random_state=0, baselines=DEFAULT_BASELINES, source_sha256=None,
                        prediction_source_sha256=None, categorical_encoding=LEGACY):
+    validate_source_sha256(source_sha256)
+    validate_source_sha256(prediction_source_sha256, "prediction_source_sha256")
     X, y, groups, incoming, plan = _prepare_prediction(
         frame, new_rows, target=target, group=group, features=features,
         inner_splits=inner_splits, random_state=random_state, baselines=baselines, categorical_encoding=categorical_encoding)

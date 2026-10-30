@@ -7,6 +7,7 @@ import json
 from numbers import Integral
 from pathlib import Path
 import reprlib
+import re
 
 import numpy as np
 import pandas as pd
@@ -183,6 +184,14 @@ def data_fingerprint(X: pd.DataFrame, y: np.ndarray, groups: np.ndarray) -> str:
     for part in (payload, pd.Series(y), pd.Series(groups)):
         h.update(pd.util.hash_pandas_object(part, index=False).values.tobytes())
     return h.hexdigest()
+
+
+def validate_source_sha256(value, name="source_sha256"):
+    """Validate optional caller-declared digest syntax, not source authenticity."""
+    if value is not None and (not isinstance(value, str)
+                              or re.fullmatch(r"[0-9a-fA-F]{64}", value) is None):
+        raise ValueError(f"{name} must be None or exactly 64 hexadecimal SHA-256 characters.")
+    return value
 
 
 def file_sha256(path: str | Path) -> str:

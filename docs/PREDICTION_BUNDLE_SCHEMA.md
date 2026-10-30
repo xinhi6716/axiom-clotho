@@ -54,6 +54,23 @@ validated or authenticated; see [observed package-source metadata](PACKAGE_SOURC
 `PredictionSchemaResult.checked_scope` and `.unchecked_metadata` state the scope;
 `.contract_version` is `1.0` for this consumer, not a new writer schema.
 
+## Caller-declared source digests at creation
+
+Current-source regression and binary benchmark, prediction, and corresponding
+planning APIs reject malformed `source_sha256` and `prediction_source_sha256`
+arguments before preparing data, scheduling or fitting. Each argument must be
+`None` (not supplied) or exactly 64 ASCII hexadecimal characters. Uppercase and
+lowercase are accepted and retained; whitespace, prefixes, non-text values and
+wrong lengths are rejected rather than repaired. Signatures and writer schemas
+are unchanged; this source change is not a new packaged release.
+
+This is **syntax validation only**. The API does not read or hash a source file,
+compare the declaration to input bytes, or authenticate provenance. Even a
+well-formed digest may be wrong. CLI-computed file digests and independently
+observed normalized-data fingerprints retain their existing meanings. This
+creation-time guard does not expand the saved-bundle consumer's checked subset
+above or retroactively validate historical source hashes.
+
 ## Bounds and filesystem safety
 
 The parser accepts checksums up to 16 KiB, manifest up to 1 MiB, and prediction CSV

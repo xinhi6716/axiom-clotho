@@ -5,6 +5,7 @@ from __future__ import annotations
 import pandas as pd
 
 from . import __version__
+from .data import validate_source_sha256
 from .categorical import LEGACY, DISTINCT, encoding_options
 from .evaluation import _prepare_benchmark
 from .prediction import _prepare_prediction
@@ -60,6 +61,7 @@ def plan_benchmark(frame: pd.DataFrame, *, target: str, group: str, features=Non
                    baselines=("dummy", "ridge", "extra_trees"), objective="group_mae",
 source_sha256: str | None = None, categorical_encoding: str = LEGACY) -> dict:
     """Validate a nested evaluation and return its exact no-fit work schedule."""
+    validate_source_sha256(source_sha256)
     X, _, groups, seed, schedule = _prepare_benchmark(
         frame, target=target, group=group, features=features, outer_splits=outer_splits,
         inner_splits=inner_splits, random_state=random_state, baselines=baselines, objective=objective, categorical_encoding=categorical_encoding)
@@ -90,6 +92,8 @@ def plan_prediction(frame: pd.DataFrame, new_rows: pd.DataFrame, *, target: str,
                     source_sha256: str | None = None,
                     prediction_source_sha256: str | None = None, categorical_encoding: str = LEGACY) -> dict:
     """Validate a full-data selection/refit and new-row schema without fitting."""
+    validate_source_sha256(source_sha256)
+    validate_source_sha256(prediction_source_sha256, "prediction_source_sha256")
     X, _, groups, incoming, plan = _prepare_prediction(
         frame, new_rows, target=target, group=group, features=features,
         inner_splits=inner_splits, random_state=random_state, baselines=baselines, objective=objective, categorical_encoding=categorical_encoding)

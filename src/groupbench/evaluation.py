@@ -14,6 +14,7 @@ import pandas as pd
 import sklearn
 
 from . import __version__
+from .data import validate_source_sha256
 from .package_source import observe_package_source
 from .categorical import LEGACY, DISTINCT, encoding_options, preprocessing_description
 from .data import data_fingerprint, duplicate_diagnostics, prepare_data, validate_seed
@@ -70,6 +71,7 @@ def benchmark(frame: pd.DataFrame, *, target: str, group: str, features=None,
     The outer leaderboard is descriptive, not an extra model-selection layer.
     Every observation receives exactly one held-out prediction per entry.
     """
+    validate_source_sha256(source_sha256)
     started = time.perf_counter()
     X, y, groups, seed, schedule = _prepare_benchmark(
         frame, target=target, group=group, features=features, outer_splits=outer_splits,
