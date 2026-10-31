@@ -24,7 +24,7 @@ Checks cover:
 - Group counts, complete fold coverage, one held-out fold per group, and each
   outer audit's train/test group lists, row counts, group counts and zero overlap.
 - Summary schema, selection objective and primary entry consistency.
-- All overall, per-group and per-fold metrics, recomputed with unchanged
+- All overall, per-group and per-fold metrics, recomputed with the current shared
   `regression_metrics` arithmetic and group aggregation parity-tested against the
   writer's `grouped_metrics`. Group ordering follows first occurrence;
   folds follow writer order. Counts, identities, field sets and null R² are exact.
@@ -41,7 +41,7 @@ POSIX no-follow/directory-relative access is required. Limits are 16 KiB checksu
 tokens are at most 100. JSON duplicate keys and nonfinite values are rejected.
 These are input bounds, not a latency guarantee. The consumer builds stable
 row/group/fold partitions once, retaining within-partition input order. It calls
-the unchanged regression metric arithmetic for each group and fold, reusing group
+the current shared regression metric arithmetic for each group and fold, reusing group
 scores across their single held-out fold. Group-weighted reductions retain the
 writer's first-occurrence order, metric definitions and float64 arithmetic.
 This removes repeated full-row scans per group/fold without changing writers.
@@ -68,3 +68,20 @@ source digests, environment metadata, model parameters and inner-selection recor
 are not reconstructed or validated. No models are loaded/refit, no network calls
 are made and no artifacts are written. Inner-validation predictions are not
 recovered. Synthetic tests establish plumbing, not real-data performance.
+
+## R² centering and older bundles
+
+Current source computes nonconstant-target variance after subtracting an observed
+anchor, then the mean in those centered coordinates. This prevents a large
+common offset from rounding the direct mean enough to corrupt otherwise finite
+R². Singleton/constant-target R² stays null; MAE, RMSE and bias formulas and
+overflow/underflow rejection are unchanged. This is not an arbitrary-precision
+or all-scale guarantee, nor a promise of bit parity with another library.
+
+Older bundles keep their original bytes. Byte-integrity `verify` is unchanged.
+The optional numerical validator may reject an older bundle whose R² used the
+less stable direct mean and differs beyond its existing tolerance; it never
+rewrites that bundle or silently substitutes corrected values. Ordinary small
+last-bit R² changes remain subject to the same documented tolerance. No schema
+version is changed: the metric definition is still R², not a new estimand. Keep
+the producer source version and original outputs when auditing historical runs.

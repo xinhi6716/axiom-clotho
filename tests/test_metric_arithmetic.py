@@ -30,7 +30,14 @@ def original_metrics(y, pred):
 
 
 class MetricArithmeticTests(unittest.TestCase):
-    def test_ordinary_values_keep_exact_scores_and_group_weighting(self):
+    def assert_non_r2_exact(self, actual, expected):
+        # R² now uses stable anchor centering rather than the old direct mean;
+        # ordinary last-bit changes are allowed, not changes to other metrics.
+        self.assertAlmostEqual(actual["r2"], expected["r2"], delta=1e-14)
+        self.assertEqual({k: v for k, v in actual.items() if k != "r2"},
+                         {k: v for k, v in expected.items() if k != "r2"})
+
+    def test_ordinary_values_keep_exact_non_r2_scores_and_group_weighting(self):
         rng = np.random.default_rng(107)
         groups = np.array(["a"] * 7 + ["b"] * 3 + ["c"] * 2)
         for scale in (1e-100, 1.0, 1e100):
@@ -39,20 +46,21 @@ class MetricArithmeticTests(unittest.TestCase):
                 pred = y + rng.normal(size=len(groups)) * scale
                 expected = original_metrics(y, pred)
                 with self.subTest(scale=scale):
-                    self.assertEqual(regression_metrics(y, pred), expected)
+                    self.assert_non_r2_exact(regression_metrics(y, pred), expected)
                     scores, rows = grouped_metrics(y, pred, groups)
                     expected_rows = [
                         {"group": group, **original_metrics(y[groups == group], pred[groups == group])}
                         for group in ("a", "b", "c")
                     ]
-                    self.assertEqual(rows, expected_rows)
+                    for actual_row, expected_row in zip(rows, expected_rows):
+                        self.assert_non_r2_exact(actual_row, expected_row)
                     expected.update({
                         "n_groups": 3,
                         "group_mae": float(np.mean([row["mae"] for row in expected_rows])),
                         "group_rmse": float(np.mean([row["rmse"] for row in expected_rows])),
                         "worst_group_mae": max(row["mae"] for row in expected_rows),
                     })
-                    self.assertEqual(scores, expected)
+                    self.assert_non_r2_exact(scores, expected)
                     json.dumps([scores, rows], allow_nan=False)
 
     def test_huge_finite_values_fail_before_nonfinite_scores_escape(self):

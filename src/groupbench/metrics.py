@@ -34,7 +34,14 @@ def regression_metrics(y_true, y_pred) -> dict:
         # Detect genuinely undefined R² without a potentially overflowing mean
         # or a roundoff-created variance for identical floating-point targets.
         constant = bool(np.all(y == y[0]))
-        total = float(np.sum((y - y.mean()) ** 2)) if not constant else 0.0
+        # Center in coordinates relative to a representable observed value.
+        # Computing the mean at a large shared offset can round away half an
+        # ULP and materially corrupt SST even when all final scores are finite.
+        if constant:
+            total = 0.0
+        else:
+            anchored = y - y[0]
+            total = float(np.sum((anchored - anchored.mean()) ** 2))
         return {
             "n_rows": len(y),
             "mae": float(np.mean(np.abs(residual))),
