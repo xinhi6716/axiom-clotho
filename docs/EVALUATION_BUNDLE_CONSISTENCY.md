@@ -24,8 +24,9 @@ Checks cover:
 - Group counts, complete fold coverage, one held-out fold per group, and each
   outer audit's train/test group lists, row counts, group counts and zero overlap.
 - Summary schema, selection objective and primary entry consistency.
-- All overall, per-group and per-fold metrics, recomputed with the product's
-  actual `grouped_metrics` implementation. Group ordering follows first occurrence;
+- All overall, per-group and per-fold metrics, recomputed with unchanged
+  `regression_metrics` arithmetic and group aggregation parity-tested against the
+  writer's `grouped_metrics`. Group ordering follows first occurrence;
   folds follow writer order. Counts, identities, field sets and null R² are exact.
   Float scores use `math.isclose(rel_tol=1e-10, abs_tol=1e-12)` to accommodate CSV
   float round trips. This tolerance is not a scientific error bound, unit inference
@@ -38,10 +39,15 @@ POSIX no-follow/directory-relative access is required. Limits are 16 KiB checksu
 16 MiB each for manifest, summary and CSV, 64 MiB HTML, 20,000 rows and at most
 20,000 groups/folds. CSV numeric tokens are at most 64 characters; JSON numeric
 tokens are at most 100. JSON duplicate keys and nonfinite values are rejected.
-These are input bounds, not a latency guarantee. Grouped metric recomputation
-can scale quadratically in the worst case (rows times groups/folds); a maximum
-20,000-row/20,000-group bundle has not been performance-qualified. Use smaller
-bundles for interactive checks.
+These are input bounds, not a latency guarantee. The consumer builds stable
+row/group/fold partitions once, retaining within-partition input order. It calls
+the unchanged regression metric arithmetic for each group and fold, reusing group
+scores across their single held-out fold. Group-weighted reductions retain the
+writer's first-occurrence order, metric definitions and float64 arithmetic.
+This removes repeated full-row scans per group/fold without changing writers.
+The explicit train-group lists in every fold audit still require work proportional
+to their saved size, potentially groups times folds; this is not a claim of
+universally linear runtime or qualification of every maximum-size bundle.
 The bounded JSON parser is shared with the prediction checker, so its parse
 errors may carry the `Prediction bundle schema` prefix. No source paths are read.
 

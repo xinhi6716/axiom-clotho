@@ -5,7 +5,10 @@ import io
 import math
 import os
 
-from .metrics import grouped_metrics
+import numpy as np
+
+from .data import validate_groups
+from .metrics import regression_metrics, _checked_arithmetic
 from .prediction_schema import _manifest, _DECIMAL
 from .verification import (EVALUATION_FILES, MAX_CHECKSUM_BYTES, MAX_PAYLOAD_BYTES,
                            _checksum_records, _open_run_directory, _read_file, _signature)
@@ -57,6 +60,32 @@ def _compare(actual, expected):
         _fail("count, identity, or null metric differs.")
 
 
+def _aggregate_saved(y, pred, per_group):
+    """Same arithmetic/order as grouped_metrics; only partition discovery differs."""
+    overall = regression_metrics(y, pred)
+    with _checked_arithmetic():
+        overall.update({
+            "n_groups": len(per_group),
+            "group_mae": float(np.mean([row["mae"] for row in per_group])),
+            "group_rmse": float(np.mean([row["rmse"] for row in per_group])),
+            "worst_group_mae": float(max(row["mae"] for row in per_group)),
+        })
+    return overall
+
+
+def _partitioned_metrics(observed, predicted, group_rows, fold_rows, fold_groups):
+    """Stable positional slices preserve reference float64 reduction order."""
+    y, pred = np.asarray(observed, dtype=float), np.asarray(predicted, dtype=float)
+    per_group = [{"group": group, **regression_metrics(y[indexes], pred[indexes])}
+                 for group, indexes in group_rows.items()]
+    by_group = {row["group"]: row for row in per_group}
+    overall = _aggregate_saved(y, pred, per_group)
+    per_fold = [{"fold": fold, **_aggregate_saved(y[indexes], pred[indexes],
+                 [by_group[group] for group in fold_groups[fold]])}
+                for fold, indexes in enumerate(fold_rows)]
+    return dict(overall=overall, per_group=per_group, per_fold=per_fold)
+
+
 def _check(manifest, summary, raw):
     version = manifest.get("schema_version")
     protocols = {"1.0": "nested-group-kfold-v1", "1.1": "nested-group-kfold-distinct-v2"}
@@ -106,18 +135,29 @@ def _check(manifest, summary, raw):
         raise ValueError("Evaluation bundle consistency: invalid UTF-8 CSV.") from exc
     if len(groups) != n or len(set(groups)) != ng or set(folds) != set(range(nf)):
         _fail("row/group/fold coverage differs.")
-    membership = {}
-    for group, fold in zip(groups, folds):
+    # Validate literal text identities before reusing group scores across folds.
+    validate_groups(groups, n)
+    membership, group_rows = {}, {}
+    fold_rows = [[] for _ in range(nf)]
+    fold_groups = [[] for _ in range(nf)]
+    for position, (group, fold) in enumerate(zip(groups, folds)):
         if group in membership and membership[group] != fold:
             _fail("one group spans multiple held-out folds.")
+        if group not in membership:
+            group_rows[group] = []
+            fold_groups[fold].append(group)
         membership[group] = fold
+        group_rows[group].append(position)
+        fold_rows[fold].append(position)
     audits = manifest.get("outer_folds")
     if not isinstance(audits, list) or len(audits) != nf:
         _fail("outer fold audit coverage differs.")
+    sorted_groups = sorted(membership)
     for fold, audit in enumerate(audits):
-        test_groups = sorted(g for g, f in membership.items() if f == fold)
-        train_groups = sorted(set(groups) - set(test_groups))
-        test_rows = folds.count(fold)
+        test_groups = sorted(fold_groups[fold])
+        # These explicit lists are part of the saved format, not row rescans.
+        train_groups = [group for group in sorted_groups if membership[group] != fold]
+        test_rows = len(fold_rows[fold])
         expected = dict(fold=fold, train_rows=n-test_rows, test_rows=test_rows,
                         train_group_count=len(train_groups), test_group_count=len(test_groups),
                         overlap_count=0, train_groups=train_groups, test_groups=test_groups)
@@ -125,13 +165,8 @@ def _check(manifest, summary, raw):
             _fail("invalid fold audit.")
         _compare({key: audit.get(key) for key in expected}, expected)
     for name in names:
-        overall, per_group = grouped_metrics(observed, predictions[name], groups)
-        per_fold = []
-        for fold in range(nf):
-            indexes = [i for i, f in enumerate(folds) if f == fold]
-            scores, _ = grouped_metrics([observed[i] for i in indexes], [predictions[name][i] for i in indexes], [groups[i] for i in indexes])
-            per_fold.append({"fold": fold, **scores})
-        _compare(summary["models"][name], dict(overall=overall, per_group=per_group, per_fold=per_fold))
+        _compare(summary["models"][name], _partitioned_metrics(
+            observed, predictions[name], group_rows, fold_rows, fold_groups))
     return version, n, ng, len(names)
 
 
