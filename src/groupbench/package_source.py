@@ -17,7 +17,7 @@ SOURCE_FILES = (
     "__init__.py", "__main__.py", "binary/__init__.py", "binary/cli.py",
     "binary/data.py", "binary/metrics.py", "binary/model.py", "binary/report.py",
     "binary/workflow.py", "budget_comparison.py", "categorical.py", "cli.py",
-    "data.py", "evaluation.py", "feature_manifest.py", "input_support.py",
+    "data.py", "evaluation.py", "evaluation_schema.py", "feature_manifest.py", "input_support.py",
     "interval_evaluation.py", "metrics.py", "model.py", "package_source.py",
     "planning.py", "prediction.py", "prediction_schema.py", "report.py",
     "splitting.py", "verification.py",

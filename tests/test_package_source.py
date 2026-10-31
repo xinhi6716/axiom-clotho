@@ -47,7 +47,7 @@ class PackageSourceTests(unittest.TestCase):
         installed = Path(source.__file__).parent
         self.assertEqual(tuple(sorted(source.SOURCE_FILES)), source.SOURCE_FILES)
         self.assertEqual(set(source.SOURCE_FILES), {p.relative_to(installed).as_posix() for p in installed.rglob("*.py")})
-        self.assertEqual(len(set(source.SOURCE_FILES)), 26)
+        self.assertEqual(len(set(source.SOURCE_FILES)), 27)
 
     def test_canonical_digest_is_explicit_and_stable(self):
         observed = source.observe_package_source()

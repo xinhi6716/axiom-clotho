@@ -23,6 +23,7 @@ from .feature_manifest import read_feature_manifest
 from .prediction import ensure_prediction_output, fit_predict
 from .planning import plan_benchmark, plan_prediction
 from .verification import verify_bundle
+from .evaluation_schema import validate_evaluation_bundle
 from .prediction_schema import validate_prediction_bundle_schema
 
 MAX_CSV_BYTES = 64 * 1024 * 1024
@@ -294,6 +295,8 @@ The groupbench command is an alias for the same CLI.""",
                             description="Read-only checksum and bounded structural consistency, not scientific/model validation.",
                             epilog="POSIX only. Limits: 16 KiB checksums, 1 MiB manifest, 4 MiB CSV. Exit 0 checked, 2 failed.")
     schema.add_argument("run_dir", type=Path)
+    evaluation_schema = sub.add_parser("validate-evaluation-bundle", allow_abbrev=False, help="Check saved regression evaluation rows, folds and metrics without fitting")
+    evaluation_schema.add_argument("run_dir", type=Path)
     fixture = sub.add_parser("fixture", help="Write a wholly synthetic materials-process CSV")
     fixture.add_argument("--out", type=Path, required=True)
     fixture.add_argument("--groups", type=int, default=24)
@@ -317,6 +320,12 @@ The groupbench command is an alias for the same CLI.""",
             print(f"Input support: {result.input_support}.")
             print("Checked metadata subset and exact CSV bytes only; not scientific correctness, authenticity, model execution, or an atomic snapshot.")
             print("Additional manifest fields and unlisted files are not validated.")
+            return 0
+        if args.command == "validate-evaluation-bundle":
+            result = validate_evaluation_bundle(args.run_dir)
+            print(f"Evaluation contract {result.contract_version} checked: schema {result.schema_version}, {result.n_rows} rows, {result.n_groups} groups, {result.n_models} models.")
+            print("Saved regression metric consistency only; not scientific validity, source authenticity, model execution or an atomic snapshot.")
+            print("Inner selection, features, other metadata and unlisted files are not validated.")
             return 0
         if args.command == "fixture":
             frame = make_materials_fixture(args.groups, args.rows_per_group, args.seed)

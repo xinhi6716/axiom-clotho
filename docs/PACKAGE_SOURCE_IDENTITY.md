@@ -14,7 +14,7 @@ safety. No commit, release or trusted origin is inferred from the digest.
 ## What is observed
 
 The helper anchors reads to its own imported module's package directory, not the
-current working directory. It reads a fixed allowlist of 26 owned `.py` files,
+current working directory. It reads a fixed allowlist of 27 owned `.py` files,
 including itself and both report renderers, once when assembling each result
 manifest after fitting. No directory scan, Git command, `.git`, dependency file,
 user dataset, model file, bytecode or network access is involved. No absolute
@@ -44,7 +44,7 @@ do not contribute. This is not a whole-repository or wheel fingerprint.
 ## Availability and limits
 
 Source access reuses the byte verifier's POSIX descriptor-relative, no-follow
-regular-file reader. Each file is capped at 256 KiB (26 files, at most 6.5 MiB
+regular-file reader. Each file is capped at 256 KiB (27 files, at most 6.75 MiB
 total); data is streamed and only digests are retained. Detected file changes,
 symlinks in the source path, missing or oversized files and I/O errors return
 `status: "unavailable"` with a fixed reason, no partial digest or local path.

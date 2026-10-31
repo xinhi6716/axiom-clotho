@@ -22,3 +22,6 @@ __all__ += ["GroupBenchClassifier", "BinaryBenchmarkResult", "BinaryPredictionRe
 # Explicit optional saved-prediction metadata consistency, separate from byte verification.
 from .prediction_schema import PredictionSchemaResult, validate_prediction_bundle_schema
 __all__ += ["PredictionSchemaResult", "validate_prediction_bundle_schema"]
+
+from .evaluation_schema import EvaluationSchemaResult, validate_evaluation_bundle
+__all__ += ["EvaluationSchemaResult", "validate_evaluation_bundle"]

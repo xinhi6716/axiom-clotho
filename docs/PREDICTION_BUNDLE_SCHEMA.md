@@ -101,3 +101,7 @@ zero flags. Do not rewrite historical bundles just to obtain a newer schema.
 
 Existing writers, writer schemas, numerical algorithms and `verify` behavior are
 unchanged. Select this additive API/CLI only when the documented subset is useful.
+
+For retained outer-validation rows and metrics, see the separate opt-in
+[saved regression evaluation consistency check](EVALUATION_BUNDLE_CONSISTENCY.md).
+This does not extend the prediction-only consumer described above.
