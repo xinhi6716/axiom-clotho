@@ -166,6 +166,7 @@ manifest、校驗碼與驗證方式見[報告指南](docs/USAGE_REFERENCE.md#out
 - **群組由你宣告。** 隔開批次標籤，無法找出未記錄的相依性，也不證明能推廣至新領域。
 - **量測支援有明確範圍。** RRAM、FET 路線各有指定格式與特徵，並非通用儀器匯入器。量測流程目前只支援迴歸。
 - **預測需要獨立評估。** 不提供因果識別、經校準的不確定性、物理單位驗證或外推保證。虛構範例是教學資料。
+- **數值精度未經稽核。** 數值特徵會轉為浮點數，不同來源值可能合併。float64 輸入不保證模型全程以 float64 計算：[ExtraTrees 在前處理後於內部使用 float32 特徵](https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.ExtraTreesRegressor.html#sklearn.ensemble.ExtraTreesRegressor.fit)。保存指標一致不認證輸入精度或量測解析度。擬合前請確認來源解析度與預期特徵表示法；縮放無法恢復已遺失的區別。迴歸 HTML 報告揭露此限制，但不偵測或修復數值碰撞。
 - **輸入限制不等於運算配額。** 檔案、列數與特徵上限會拒絕不支援的輸入，但不是硬性記憶體或時間限制。[輸入與資源限制](docs/USAGE_REFERENCE.md#limits-to-understand-before-trusting-a-result)。
 
 b7 更新 Clotho 圖像、報告呈現與文件；保留 b6 拒絕已擬合迴歸 ExtraTrees 中非有限數值的檢查。既有流程、模型、切分與指標維持不變。[版本說明](docs/RELEASE_NOTES_0.3.0b7.md)。更多領域模組仍屬[規劃工作](ROADMAP.md)。
