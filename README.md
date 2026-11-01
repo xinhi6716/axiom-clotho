@@ -179,6 +179,9 @@ Version b7 refreshes the Clotho artwork, report presentation and documentation. 
 
 ## Find your next step
 
+[Joint job-or-setting grouping example](examples/joint-dependency-tabular/README.md): validate a supplied component map and exact specimen roster without fitting.
+
+
 [Examples](examples/README.md) · [Measurement inputs](docs/CLOTHO_CSV_BETA.md) · [Evaluation protocol](docs/PROTOCOL.md) · [Full reference](docs/USAGE_REFERENCE.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
 
 <details>

@@ -173,6 +173,9 @@ b7 更新 Clotho 圖像、報告呈現與文件；保留 b6 拒絕已擬合迴�
 
 ## 下一步
 
+[工作批次或重複設定的聯合分組範例（英文）](examples/joint-dependency-tabular/README.md)：檢查明確提供的相依群組與完整列名單，不擬合模型。
+
+
 [範例](examples/README.md) · [量測輸入](docs/CLOTHO_CSV_BETA.md) · [評估協定](docs/PROTOCOL.md) · [完整參考](docs/USAGE_REFERENCE.md) · [參與開發](CONTRIBUTING.md) · [安全說明](SECURITY.md)
 
 上述技術指南目前以英文為主。英文首頁也保留了舊版段落連結。

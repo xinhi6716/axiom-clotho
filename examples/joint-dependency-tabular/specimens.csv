@@ -1,0 +1,9 @@
+specimen_id,job_id,power,speed,hatch,layer,response,post_outcome_note
+s01,01,200,800,0.10,0.04,1.1,inspection_complete
+s02,01,220,900,0.10,0.04,1.2,inspection_complete
+s03,02,220,900,0.10,0.04,1.3,inspection_complete
+s04,02,240,1000,0.10,0.04,1.4,inspection_complete
+s05,03,260,1100,0.10,0.04,1.5,inspection_complete
+s06,03,280,1200,0.10,0.04,1.6,inspection_complete
+s07,1,200.0,800,0.10,0.04,1.7,inspection_complete
+s08,04,300,1300,0.10,0.04,1.8,inspection_complete
