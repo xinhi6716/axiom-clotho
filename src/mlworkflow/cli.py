@@ -26,6 +26,10 @@ class WorkflowArgumentError(ComponentError):
         self.help_command = help_command
 
 
+class DemoOutputError(ComponentError):
+    """Static demo preflight guidance; never include a supplied path or OSError."""
+
+
 class Parser(argparse.ArgumentParser):
     def error(self, message):
         # argparse's message can include supplied values, paths and unknown
@@ -65,12 +69,18 @@ def _snapshot_calculator(destination):
 
 def run_demo(arguments):
     parser = Parser(prog="clotho demo", description="Entirely invented software example, not scientific validation.")
-    parser.add_argument("--output-dir", required=True)
+    parser.add_argument("--output-dir", required=True,
+                        help="Fresh directory with an existing parent; no overwrite or automatic parent creation")
     parser.add_argument("--run-invented-example", action="store_true", required=True)
     args = parser.parse_args(arguments)
     output = Path(args.output_dir).absolute()
-    if os.path.lexists(output) or not output.parent.is_dir():
-        raise ComponentError("output must be a fresh directory with an existing parent")
+    if os.path.lexists(output):
+        raise DemoOutputError("demo output already exists; choose a fresh --output-dir. "
+                              "Existing files and directories are not overwritten.")
+    if not output.parent.is_dir():
+        raise DemoOutputError("demo requires an existing parent directory; check the parent "
+                              "of --output-dir or choose another destination. Missing parents "
+                              "are not created automatically.")
     verify_components()
     with tempfile.TemporaryDirectory(prefix="ml-workflow-") as directory:
         calculator = Path(directory) / "calculator"
@@ -123,6 +133,9 @@ Read the generated README.md before filling your own measurements and choices.""
         else:
             parser.print_help()
         return 0
+    except DemoOutputError as error:
+        print("error: " + str(error), file=sys.stderr)
+        return 2
     except WorkflowArgumentError as error:
         print(error.usage, end="", file=sys.stderr)
         print("error: invalid workflow arguments; use `" + error.help_command +
