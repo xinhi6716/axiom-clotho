@@ -151,7 +151,7 @@ def _prepared(path):
     return config, training, future, payloads, receipt_sha
 
 
-def _plans(prepared_dir):
+def _plans(prepared_dir, *, enforce_budget=True):
     config, train, future, payloads, receipt_sha = _prepared(prepared_dir)
     # This is the sole transition to the existing ML stack.
     import pandas as pd
@@ -167,7 +167,9 @@ def _plans(prepared_dir):
     except ValueError:
         raise WorkflowError("the exact grouped plan is infeasible; inspect group counts, split choices and numeric units") from None
     total = comparison["fit_budget"]["total_fits"] + prediction["fit_budget"]["total_fits"]
-    if total > config["max_fits"]:
+    # Only the explicit read-only summary inspects an over-budget schedule.
+    # Default planning and both execution adapters retain the original guard.
+    if enforce_budget is not False and total > config["max_fits"]:
         raise WorkflowError("planned pipeline fits exceed the explicitly declared max_fits; no fitting was performed")
     plan = {"schema_version": "measurement-execution-plan-v2" if config["schema_version"] == "measurement-regression-v2" else "measurement-execution-plan-v1", "fits_performed": 0,
             "total_planned_fits": total, "max_fits": config["max_fits"], "comparison": comparison,
@@ -177,6 +179,31 @@ def _plans(prepared_dir):
 
 def plan(prepared_dir):
     return _plans(prepared_dir)[-1]
+
+
+def budget_summary(prepared_dir):
+    """Inspect actual scheduled fit counts, without raising the cap or fitting.
+
+    Unlike the default plan, this opt-in report is available above max_fits.
+    It does not relax bundle, configuration, schema or grouped-split validation.
+    """
+    planned = _plans(prepared_dir, enforce_budget=False)[-1]
+    return {
+        "schema_version": "measurement-fit-budget-summary-v1",
+        "unit": "pipeline.fit calls",
+        "fits_performed": 0,
+        "comparison_fits": planned["comparison"]["fit_budget"]["total_fits"],
+        "prediction_fits": planned["prediction"]["fit_budget"]["total_fits"],
+        "total_planned_fits": planned["total_planned_fits"],
+        "max_fits": planned["max_fits"],
+        "within_budget": planned["total_planned_fits"] <= planned["max_fits"],
+        "limitations": [
+            "Counts describe intended pipeline.fit calls if execution succeeds; each includes preprocessing and one estimator. Internal estimator operations and individual trees are not counted separately.",
+            "Counts are not CPU time, elapsed time, memory estimates or a hard resource budget.",
+            "Read-only inspection does not raise max_fits or authorize fitting. Default plan and run still reject a schedule above the declared cap.",
+            "Passing the fit-count limit does not establish training success, leakage absence or scientific validity.",
+        ],
+    }
 
 
 def _report(title, config, paragraphs, links, limitations=None):

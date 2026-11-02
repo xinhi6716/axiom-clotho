@@ -185,6 +185,9 @@ def regression_main(arguments):
         parser.add_argument("--config", required=True)
     elif command in ("plan", "run"):
         parser.add_argument("--prepared", required=True)
+        if command == "plan":
+            parser.add_argument("--budget-summary", action="store_true",
+                                help="Print fit-count JSON only, including above max_fits (exit 2); no fitting, writes or cap changes")
     else:
         parser.add_argument("--run-dir", required=True)
         parser.add_argument("--outcomes", required=True)
@@ -195,6 +198,10 @@ def regression_main(arguments):
         if command == "prepare":
             regression.prepare(args.input_dir, args.partitions, args.training_targets, args.config, args.output_dir)
         elif command == "plan":
+            if args.budget_summary:
+                summary = regression.budget_summary(args.prepared)
+                print(json.dumps(summary, indent=2, sort_keys=True, allow_nan=False))
+                return 0 if summary["within_budget"] else 2
             print(json.dumps(regression.plan(args.prepared), indent=2, sort_keys=True, allow_nan=False))
             return 0
         elif command == "run":
