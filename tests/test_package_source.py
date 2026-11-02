@@ -47,8 +47,9 @@ class PackageSourceTests(unittest.TestCase):
         installed = Path(source.__file__).parent
         self.assertEqual(tuple(sorted(source.SOURCE_FILES)), source.SOURCE_FILES)
         self.assertEqual(set(source.SOURCE_FILES), {p.relative_to(installed).as_posix() for p in installed.rglob("*.py")})
-        self.assertEqual(len(set(source.SOURCE_FILES)), 29)
+        self.assertEqual(len(set(source.SOURCE_FILES)), 30)
         self.assertIn("baselines.py", source.SOURCE_FILES)
+        self.assertIn("kernel.py", source.SOURCE_FILES)
 
     def test_canonical_digest_is_explicit_and_stable(self):
         observed = source.observe_package_source()
@@ -183,9 +184,9 @@ class SourceFallbackAndRenderingTests(unittest.TestCase):
         from test_prediction_schema import manifest, write_bundle
 
         descriptors = [None]
-        for omit_baseline in (True, False):
+        for omitted in ({"baselines.py", "kernel.py"}, {"kernel.py"}, set()):
             names = [name for name in source.SOURCE_FILES
-                     if not (omit_baseline and name == "baselines.py")]
+                     if name not in omitted]
             files = {name: hashlib.sha256(("invented source: " + name).encode()).hexdigest()
                      for name in names}
             body = {"schema_version": "1.0", "algorithm": "sha256",
@@ -193,7 +194,7 @@ class SourceFallbackAndRenderingTests(unittest.TestCase):
             canonical = json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
             descriptors.append({**body, "status": "available",
                                 "sha256": hashlib.sha256(canonical).hexdigest()})
-        self.assertEqual([len(item["files"]) for item in descriptors[1:]], [28, 29])
+        self.assertEqual([len(item["files"]) for item in descriptors[1:]], [28, 29, 30])
         with tempfile.TemporaryDirectory() as temp, patch.object(source, "observe_package_source", side_effect=AssertionError("saved verification must not recapture installed source")):
             for version in ("1.0", "1.1", "1.2"):
                 for index, descriptor in enumerate(descriptors):
@@ -291,7 +292,8 @@ class ResultSourceMetadataTests(unittest.TestCase):
                                 saved.manifest.pop("package_source", None)
                             else:
                                 files = {name: hashlib.sha256(("invented legacy source: " + name).encode()).hexdigest()
-                                         for name in source.SOURCE_FILES if name != "baselines.py"}
+                                         for name in source.SOURCE_FILES if name not in {"baselines.py", "kernel.py"}}
+                                self.assertEqual(len(files), 28)
                                 body = {"schema_version": "1.0", "algorithm": "sha256",
                                         "scope": "fixed_groupbench_python_sources_v1", "files": files}
                                 canonical = json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()

@@ -18,7 +18,7 @@ SOURCE_FILES = (
     "binary/data.py", "binary/metrics.py", "binary/model.py", "binary/report.py",
     "binary/workflow.py", "budget_comparison.py", "categorical.py", "cli.py",
     "data.py", "evaluation.py", "evaluation_schema.py", "feature_manifest.py", "input_support.py",
-    "interval_evaluation.py", "metrics.py", "model.py", "observed_history.py", "package_source.py",
+    "interval_evaluation.py", "kernel.py", "metrics.py", "model.py", "observed_history.py", "package_source.py",
     "planning.py", "prediction.py", "prediction_schema.py", "report.py",
     "splitting.py", "verification.py",
 )
