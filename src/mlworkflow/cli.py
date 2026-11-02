@@ -17,9 +17,20 @@ from . import __version__
 from .components import ComponentError, RESOURCE_ROOT, verify_components
 
 
+class WorkflowArgumentError(ComponentError):
+    """Static parser guidance, never argparse's potentially private message."""
+
+    def __init__(self, usage, help_command):
+        super().__init__("invalid workflow arguments")
+        self.usage = usage
+        self.help_command = help_command
+
+
 class Parser(argparse.ArgumentParser):
     def error(self, message):
-        raise ComponentError("invalid workflow arguments; use --help")
+        # argparse's message can include supplied values, paths and unknown
+        # options. Only show our declared syntax and a static command name.
+        raise WorkflowArgumentError(self.format_usage(), self.prog + " --help")
 
 
 def run_features(arguments):
@@ -53,7 +64,7 @@ def _snapshot_calculator(destination):
 
 
 def run_demo(arguments):
-    parser = Parser(prog="mlcalc-workflow demo", description="Entirely invented software example, not scientific validation.")
+    parser = Parser(prog="clotho demo", description="Entirely invented software example, not scientific validation.")
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--run-invented-example", action="store_true", required=True)
     args = parser.parse_args(arguments)
@@ -87,7 +98,7 @@ def main(argv=None):
             return run_features(arguments[1:])
         if arguments and arguments[0] == "demo":
             return run_demo(arguments[1:])
-        parser = Parser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter,
+        parser = Parser(prog="clotho", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter,
                         epilog="""Commands (each supports --help):
   init        Create blank RRAM/FET inputs; no fitting (0.3.0b4; not in frozen b3).
   prepare     Validate measurements, partitions and training-only targets.
@@ -112,6 +123,11 @@ Read the generated README.md before filling your own measurements and choices.""
         else:
             parser.print_help()
         return 0
+    except WorkflowArgumentError as error:
+        print(error.usage, end="", file=sys.stderr)
+        print("error: invalid workflow arguments; use `" + error.help_command +
+              "` for supported commands and options. Supplied values are not echoed.", file=sys.stderr)
+        return 2
     except (ComponentError, OSError):
         print("error: workflow arguments, local resources or output are unavailable; use --help and a complete distribution", file=sys.stderr)
         return 2
@@ -147,7 +163,7 @@ def init_main(arguments):
 def regression_main(arguments):
     from . import regression
     from .contracts import WorkflowError
-    parser = Parser(prog="mlcalc-workflow " + arguments[0], description="Axiom Clotho: explicit device joins, grouped regression and separate saved scoring.")
+    parser = Parser(prog="clotho " + arguments[0], description="Axiom Clotho: explicit device joins, grouped regression and separate saved scoring.")
     command = arguments[0]
     if command == "prepare":
         parser.add_argument("--input-dir", required=True)
