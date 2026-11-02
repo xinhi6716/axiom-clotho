@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 import pandas as pd
 
-from groupbench import benchmark, benchmark_binary, fit_predict, fit_predict_binary
+from groupbench import benchmark, benchmark_binary, fit_predict, fit_predict_binary, validate_evaluation_bundle
 from groupbench import package_source as source
 from groupbench.prediction_schema import validate_prediction_bundle_schema
 from groupbench.verification import verify_bundle
@@ -47,7 +47,8 @@ class PackageSourceTests(unittest.TestCase):
         installed = Path(source.__file__).parent
         self.assertEqual(tuple(sorted(source.SOURCE_FILES)), source.SOURCE_FILES)
         self.assertEqual(set(source.SOURCE_FILES), {p.relative_to(installed).as_posix() for p in installed.rglob("*.py")})
-        self.assertEqual(len(set(source.SOURCE_FILES)), 28)
+        self.assertEqual(len(set(source.SOURCE_FILES)), 29)
+        self.assertIn("baselines.py", source.SOURCE_FILES)
 
     def test_canonical_digest_is_explicit_and_stable(self):
         observed = source.observe_package_source()
@@ -176,6 +177,40 @@ class PackageSourceTests(unittest.TestCase):
 
 
 class SourceFallbackAndRenderingTests(unittest.TestCase):
+    @unittest.skipUnless(source._SAFE_OPEN_SUPPORTED, "Requires POSIX bundle verification")
+    def test_legacy_inventory_and_absent_metadata_remain_read_only_compatible(self):
+        # Original synthetic saved artifacts: no estimator fit or old-study replay.
+        from test_prediction_schema import manifest, write_bundle
+
+        descriptors = [None]
+        for omit_baseline in (True, False):
+            names = [name for name in source.SOURCE_FILES
+                     if not (omit_baseline and name == "baselines.py")]
+            files = {name: hashlib.sha256(("invented source: " + name).encode()).hexdigest()
+                     for name in names}
+            body = {"schema_version": "1.0", "algorithm": "sha256",
+                    "scope": "fixed_groupbench_python_sources_v1", "files": files}
+            canonical = json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
+            descriptors.append({**body, "status": "available",
+                                "sha256": hashlib.sha256(canonical).hexdigest()})
+        self.assertEqual([len(item["files"]) for item in descriptors[1:]], [28, 29])
+        with tempfile.TemporaryDirectory() as temp, patch.object(source, "observe_package_source", side_effect=AssertionError("saved verification must not recapture installed source")):
+            for version in ("1.0", "1.1", "1.2"):
+                for index, descriptor in enumerate(descriptors):
+                    with self.subTest(schema=version, inventory=index):
+                        root = Path(temp) / (version + "-" + str(index))
+                        root.mkdir()
+                        value = manifest(version)
+                        if descriptor is not None:
+                            value["package_source"] = descriptor
+                        write_bundle(root, value)
+                        before = {p.name: p.read_bytes() for p in root.iterdir()}
+                        self.assertEqual(verify_bundle(root).bundle_type, "prediction")
+                        checked = validate_prediction_bundle_schema(root)
+                        self.assertEqual(checked.schema_version, version)
+                        self.assertEqual(checked.unchecked_metadata, "other_manifest_fields_not_validated")
+                        self.assertEqual(before, {p.name: p.read_bytes() for p in root.iterdir()})
+
     def test_unsupported_and_relative_roots_are_unavailable_without_open(self):
         for changes in ({"_SAFE_OPEN_SUPPORTED": False}, {"_PACKAGE_ROOT": Path("relative-package")}):
             with patch.multiple(source, **changes), patch.object(source, "_open_run_directory") as opening:
@@ -248,6 +283,30 @@ class ResultSourceMetadataTests(unittest.TestCase):
                         if index == 1:
                             checked = validate_prediction_bundle_schema(output)
                             self.assertEqual(checked.unchecked_metadata, "other_manifest_fields_not_validated")
+                        # Reuse the same already-computed tiny software fixture;
+                        # these additional saved-artifact checks perform no fit.
+                        for legacy_mode in ("inventory_28", "no_source_metadata"):
+                            saved = copy.deepcopy(first)
+                            if legacy_mode == "no_source_metadata":
+                                saved.manifest.pop("package_source", None)
+                            else:
+                                files = {name: hashlib.sha256(("invented legacy source: " + name).encode()).hexdigest()
+                                         for name in source.SOURCE_FILES if name != "baselines.py"}
+                                body = {"schema_version": "1.0", "algorithm": "sha256",
+                                        "scope": "fixed_groupbench_python_sources_v1", "files": files}
+                                canonical = json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
+                                saved.manifest["package_source"] = {**body, "status": "available",
+                                                                    "sha256": hashlib.sha256(canonical).hexdigest()}
+                            legacy_output = Path(temp) / f"{index}-{legacy_mode}"
+                            saved.write(legacy_output)
+                            before = {p.name: p.read_bytes() for p in legacy_output.iterdir()}
+                            with patch.object(source, "observe_package_source", side_effect=AssertionError("no installed-source recapture")):
+                                verify_bundle(legacy_output)
+                                if index == 0:
+                                    validate_evaluation_bundle(legacy_output)
+                                elif index == 1:
+                                    validate_prediction_bundle_schema(legacy_output)
+                            self.assertEqual(before, {p.name: p.read_bytes() for p in legacy_output.iterdir()})
 
 
 if __name__ == "__main__":
