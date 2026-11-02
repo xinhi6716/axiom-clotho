@@ -140,6 +140,10 @@ def _numeric_group_identifier(value) -> str:
 
 
 def validate_groups(groups, n_rows: int) -> np.ndarray:
+    # Preserve missing-ID metadata before np.asarray exposes hidden payloads.
+    # A masked identifier cannot establish a physical/source grouping boundary.
+    if np.ma.isMaskedArray(groups) and np.ma.getmaskarray(groups).any():
+        raise ValueError("groups must have one non-missing group identifier per row.")
     a = np.asarray(groups, dtype=object)
     if a.ndim != 1 or len(a) != n_rows or pd.isna(a).any():
         raise ValueError("groups must have one non-missing group identifier per row.")
