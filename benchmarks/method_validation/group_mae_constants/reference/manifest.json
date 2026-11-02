@@ -1,0 +1,14 @@
+{
+  "complete": true,
+  "files": {
+    "constant_audit.json": "904f0d7c8e22aa6130e57c001f973b0a37249ead78b4319c1c2ba205fa2a65fc",
+    "cost.json": "cd9048094f2aa67fa4d276c4a7e6cfd92eac8d8c570ac8be286af332a746f39a",
+    "fixture.csv": "bc8f8fc20e69cd9547b9914397add2b25084d770ea9677cacf0ea35ad0755a82",
+    "predictions.csv": "58cc1df4fe0350fbaf10bfe75864aa44784e5a40f407745bcb87a6bc6c8b6fc2",
+    "product_manifest.json": "a0ce9d074beb6e340f70f6b9aac803a5b2408b74e74a0f0fbebc3443167d8d59",
+    "protocol.json": "97fd230ea28a3c79fa236f82b0a489f2d6bf9954c29372c8bda3233919e448d5",
+    "run-started.json": "bf56b3b63b7b1de396e7412f695ddcffb30fd2d5a19109d9eaf3c9f6c471cf4f",
+    "summary.json": "31ca20d3e98e80a911fea835b901124b7c92b484d2cfd2f211f10630d4125b9e"
+  },
+  "limitations": "Hashes are integrity observations, not proof of chronology or independent replication."
+}

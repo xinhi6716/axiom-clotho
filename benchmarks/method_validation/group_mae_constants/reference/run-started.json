@@ -1,0 +1,20 @@
+{
+  "complete": false,
+  "evidence_kind": "actual author execution of original synthetic fixture",
+  "protocol_sha256": "2adaa0486c43d56fc02c9300d87eb510ca642b0b114d246f6d14ed0812fde8f0",
+  "runner_sha256": "5f602fe32d3dde5e97658f34600ab219679133624906c4d3bb5bbabd9c03d798",
+  "source_sha256": {
+    "evaluation.py": "c4a766634c4afb84f9773d5bb9c941ee83fc1aeab4157c531c1c8fb155aea392",
+    "metrics.py": "fdd1222ad2a32f16367fc9d1901a4e36e34265d3d565c3709f2a3ef71db3db1b",
+    "model.py": "5a433024276af5143787798bc75d74681a9b896063a21278f3a065c506dbbabe",
+    "splitting.py": "df53484c6cdfa71ce3abbe824f77ccaac7fb016af98f16d7f783bfed159bb858"
+  },
+  "started_at_utc": "2026-11-02T22:20:42.744807+00:00",
+  "versions": {
+    "numpy": "2.3.5",
+    "pandas": "2.2.3",
+    "python": "3.12.14",
+    "scikit_learn": "1.8.0",
+    "scipy": "1.17.0"
+  }
+}

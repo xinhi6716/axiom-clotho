@@ -1,0 +1,12 @@
+{
+  "analytic_constants": 9,
+  "cpu_seconds": 0.9260015199999998,
+  "download_bytes": 0,
+  "fit_calls": 45,
+  "max_rss_kib_linux": 129664,
+  "not_billed_platform_cost": true,
+  "rlimit_cpu_soft_seconds": 601,
+  "threads_per_library": 1,
+  "timing_boundary": "after output directory reservation through summary serialization; excludes imports and preflight",
+  "wall_seconds": 0.9391570800216869
+}

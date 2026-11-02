@@ -1,0 +1,26 @@
+{
+  "schema_version": "group-mae-constants-v1",
+  "source_commit": "71c0ebeeedb56ce84cbb801be84aa0baffe05d3f",
+  "question": "On an original constant-feature fixture with unequal group sizes, does the existing mean-only dummy omit an elementary constant aligned with equal-group MAE?",
+  "fixture": "12 groups in index order; groups 0,1,2 each have 40 rows with target 10; groups 3..11 each have 4 rows with target 0; only predictor constant_feature=1; arbitrary response units",
+  "random_state": 20261103,
+  "outer_splits": 3,
+  "inner_splits": 2,
+  "baselines": ["dummy", "ridge", "extra_trees"],
+  "selection_objective": "group_mae",
+  "comparison_constants": ["row_median", "group_mean", "group_median"],
+  "primary_metric": "group_mae",
+  "secondary_metrics": ["mae", "rmse", "group_rmse"],
+  "constant_rule": "Use outer training targets only. Group-mean and lower group-weighted median give each training group equal total weight, then equal weight to its rows. Lower weighted median is first observed target reaching half total weight; ties are not chosen using held-out targets.",
+  "fit_schedule": "One actual benchmark call: 3 outer folds * (6 candidates * 2 inner folds + 3 family refits) = 45 pipeline fits; 9 analytic constants; no additional refit, seed search or result-driven retry",
+  "criterion": "Software diagnostic only: retain all methods and both weighting conventions; check exact outer membership parity, analytic constants, complete finite predictions, and actual fit count. No superiority/significance/generalization gate.",
+  "resource_cap": {"cpu_seconds": 600, "threads": 1, "download_bytes": 0},
+  "interpretation": "Deliberately constructed teaching fixture, not independent scientific N, natural data, a new empirical discovery, or evidence of real-data model superiority. Does not change product defaults.",
+  "required_versions": {"python": "3.12.14", "numpy": "2.3.5", "pandas": "2.2.3", "scikit_learn": "1.8.0", "scipy": "1.17.0"},
+  "required_source_sha256": {
+    "model.py": "5a433024276af5143787798bc75d74681a9b896063a21278f3a065c506dbbabe",
+    "splitting.py": "df53484c6cdfa71ce3abbe824f77ccaac7fb016af98f16d7f783bfed159bb858",
+    "metrics.py": "fdd1222ad2a32f16367fc9d1901a4e36e34265d3d565c3709f2a3ef71db3db1b",
+    "evaluation.py": "c4a766634c4afb84f9773d5bb9c941ee83fc1aeab4157c531c1c8fb155aea392"
+  }
+}

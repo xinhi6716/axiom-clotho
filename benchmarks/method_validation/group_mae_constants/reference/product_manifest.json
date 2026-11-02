@@ -1,0 +1,620 @@
+{
+  "config": {
+    "baselines": [
+      "dummy",
+      "ridge",
+      "extra_trees"
+    ],
+    "candidates": [
+      {
+        "family": "dummy",
+        "name": "dummy_mean",
+        "params": {
+          "strategy": "mean"
+        }
+      },
+      {
+        "family": "ridge",
+        "name": "ridge_alpha_0.1",
+        "params": {
+          "alpha": 0.1
+        }
+      },
+      {
+        "family": "ridge",
+        "name": "ridge_alpha_1",
+        "params": {
+          "alpha": 1.0
+        }
+      },
+      {
+        "family": "ridge",
+        "name": "ridge_alpha_10",
+        "params": {
+          "alpha": 10.0
+        }
+      },
+      {
+        "family": "extra_trees",
+        "name": "extra_trees_depth_6",
+        "params": {
+          "max_depth": 6,
+          "min_samples_leaf": 2,
+          "n_estimators": 64
+        }
+      },
+      {
+        "family": "extra_trees",
+        "name": "extra_trees_depth_none",
+        "params": {
+          "max_depth": null,
+          "min_samples_leaf": 2,
+          "n_estimators": 64
+        }
+      }
+    ],
+    "features": [
+      "constant_feature"
+    ],
+    "group": "group",
+    "inner_splits": 2,
+    "outer_splits": 3,
+    "random_state": 20261103,
+    "selection_objective": "group_mae",
+    "target": "target",
+    "threads": 1
+  },
+  "created_at_utc": "2026-11-02T22:20:43.666786+00:00",
+  "data_diagnostics": {
+    "action": "diagnostic_only_no_rows_removed",
+    "cross_group_duplicate_patterns": 2,
+    "identical_feature_target_rows": 156,
+    "identical_feature_target_rows_across_groups": 156
+  },
+  "data_sha256": "ad0485ba4c179579100dcb7322a361098d5e5d03940927a59b09616c2582cc7e",
+  "elapsed_seconds": 0.9019215820007958,
+  "environment": {
+    "numpy": "2.3.5",
+    "pandas": "2.2.3",
+    "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+    "python": "3.12.14",
+    "scikit_learn": "1.8.0"
+  },
+  "feature_schema": [
+    {
+      "dtype": "float64",
+      "missing_count": 0,
+      "name": "constant_feature"
+    }
+  ],
+  "groupbench_version": "0.3.0b7",
+  "limitations": [
+    "Synthetic examples validate plumbing, not scientific predictive performance.",
+    "Group separation protects only the supplied grouping axis; it does not prove absence of other leakage.",
+    "The outer leaderboard must not be reused for tuning without a new independent evaluation.",
+    "Fold variability is not a confidence interval; no uncertainty calibration is implemented.",
+    "Outputs include group IDs, observed targets, and predictions; review before sharing.",
+    "Found 156 identical feature/target rows spanning different groups. Inspect duplicates before trusting evaluation; no rows were removed."
+  ],
+  "n_groups": 12,
+  "n_rows": 156,
+  "network_required_at_runtime": false,
+  "outer_folds": [
+    {
+      "family_candidates": {
+        "dummy": "dummy_mean",
+        "extra_trees": "extra_trees_depth_6",
+        "ridge": "ridge_alpha_0.1"
+      },
+      "fold": 0,
+      "inner_folds": [
+        {
+          "fold": 0,
+          "overlap_count": 0,
+          "test_group_count": 4,
+          "test_groups": [
+            "g02",
+            "g03",
+            "g07",
+            "g08"
+          ],
+          "test_rows": 52,
+          "train_group_count": 4,
+          "train_groups": [
+            "g00",
+            "g04",
+            "g10",
+            "g11"
+          ],
+          "train_rows": 52
+        },
+        {
+          "fold": 1,
+          "overlap_count": 0,
+          "test_group_count": 4,
+          "test_groups": [
+            "g00",
+            "g04",
+            "g10",
+            "g11"
+          ],
+          "test_rows": 52,
+          "train_group_count": 4,
+          "train_groups": [
+            "g02",
+            "g03",
+            "g07",
+            "g08"
+          ],
+          "train_rows": 52
+        }
+      ],
+      "inner_seed": 20261104,
+      "inner_selection": [
+        {
+          "candidate": "dummy_mean",
+          "family": "dummy",
+          "inner_fold_scores": [
+            6.346153846153847,
+            6.346153846153847
+          ],
+          "objective": "group_mae",
+          "params": {
+            "strategy": "mean"
+          },
+          "selection_score": 6.346153846153847
+        },
+        {
+          "candidate": "ridge_alpha_0.1",
+          "family": "ridge",
+          "inner_fold_scores": [
+            6.346153846153847,
+            6.346153846153847
+          ],
+          "objective": "group_mae",
+          "params": {
+            "alpha": 0.1
+          },
+          "selection_score": 6.346153846153847
+        },
+        {
+          "candidate": "ridge_alpha_1",
+          "family": "ridge",
+          "inner_fold_scores": [
+            6.346153846153847,
+            6.346153846153847
+          ],
+          "objective": "group_mae",
+          "params": {
+            "alpha": 1.0
+          },
+          "selection_score": 6.346153846153847
+        },
+        {
+          "candidate": "ridge_alpha_10",
+          "family": "ridge",
+          "inner_fold_scores": [
+            6.346153846153847,
+            6.346153846153847
+          ],
+          "objective": "group_mae",
+          "params": {
+            "alpha": 10.0
+          },
+          "selection_score": 6.346153846153847
+        },
+        {
+          "candidate": "extra_trees_depth_6",
+          "family": "extra_trees",
+          "inner_fold_scores": [
+            6.346153846153841,
+            6.346153846153841
+          ],
+          "objective": "group_mae",
+          "params": {
+            "max_depth": 6,
+            "min_samples_leaf": 2,
+            "n_estimators": 64
+          },
+          "selection_score": 6.346153846153841
+        },
+        {
+          "candidate": "extra_trees_depth_none",
+          "family": "extra_trees",
+          "inner_fold_scores": [
+            6.346153846153841,
+            6.346153846153841
+          ],
+          "objective": "group_mae",
+          "params": {
+            "max_depth": null,
+            "min_samples_leaf": 2,
+            "n_estimators": 64
+          },
+          "selection_score": 6.346153846153841
+        }
+      ],
+      "overlap_count": 0,
+      "selected_candidate": "extra_trees_depth_6",
+      "selected_family": "extra_trees",
+      "test_group_count": 4,
+      "test_groups": [
+        "g01",
+        "g05",
+        "g06",
+        "g09"
+      ],
+      "test_rows": 52,
+      "train_group_count": 8,
+      "train_groups": [
+        "g00",
+        "g02",
+        "g03",
+        "g04",
+        "g07",
+        "g08",
+        "g10",
+        "g11"
+      ],
+      "train_rows": 104
+    },
+    {
+      "family_candidates": {
+        "dummy": "dummy_mean",
+        "extra_trees": "extra_trees_depth_6",
+        "ridge": "ridge_alpha_0.1"
+      },
+      "fold": 1,
+      "inner_folds": [
+        {
+          "fold": 0,
+          "overlap_count": 0,
+          "test_group_count": 4,
+          "test_groups": [
+            "g01",
+            "g05",
+            "g08",
+            "g09"
+          ],
+          "test_rows": 52,
+          "train_group_count": 4,
+          "train_groups": [
+            "g00",
+            "g04",
+            "g06",
+            "g07"
+          ],
+          "train_rows": 52
+        },
+        {
+          "fold": 1,
+          "overlap_count": 0,
+          "test_group_count": 4,
+          "test_groups": [
+            "g00",
+            "g04",
+            "g06",
+            "g07"
+          ],
+          "test_rows": 52,
+          "train_group_count": 4,
+          "train_groups": [
+            "g01",
+            "g05",
+            "g08",
+            "g09"
+          ],
+          "train_rows": 52
+        }
+      ],
+      "inner_seed": 20261105,
+      "inner_selection": [
+        {
+          "candidate": "dummy_mean",
+          "family": "dummy",
+          "inner_fold_scores": [
+            6.346153846153847,
+            6.346153846153847
+          ],
+          "objective": "group_mae",
+          "params": {
+            "strategy": "mean"
+          },
+          "selection_score": 6.346153846153847
+        },
+        {
+          "candidate": "ridge_alpha_0.1",
+          "family": "ridge",
+          "inner_fold_scores": [
+            6.346153846153847,
+            6.346153846153847
+          ],
+          "objective": "group_mae",
+          "params": {
+            "alpha": 0.1
+          },
+          "selection_score": 6.346153846153847
+        },
+        {
+          "candidate": "ridge_alpha_1",
+          "family": "ridge",
+          "inner_fold_scores": [
+            6.346153846153847,
+            6.346153846153847
+          ],
+          "objective": "group_mae",
+          "params": {
+            "alpha": 1.0
+          },
+          "selection_score": 6.346153846153847
+        },
+        {
+          "candidate": "ridge_alpha_10",
+          "family": "ridge",
+          "inner_fold_scores": [
+            6.346153846153847,
+            6.346153846153847
+          ],
+          "objective": "group_mae",
+          "params": {
+            "alpha": 10.0
+          },
+          "selection_score": 6.346153846153847
+        },
+        {
+          "candidate": "extra_trees_depth_6",
+          "family": "extra_trees",
+          "inner_fold_scores": [
+            6.346153846153841,
+            6.346153846153841
+          ],
+          "objective": "group_mae",
+          "params": {
+            "max_depth": 6,
+            "min_samples_leaf": 2,
+            "n_estimators": 64
+          },
+          "selection_score": 6.346153846153841
+        },
+        {
+          "candidate": "extra_trees_depth_none",
+          "family": "extra_trees",
+          "inner_fold_scores": [
+            6.346153846153841,
+            6.346153846153841
+          ],
+          "objective": "group_mae",
+          "params": {
+            "max_depth": null,
+            "min_samples_leaf": 2,
+            "n_estimators": 64
+          },
+          "selection_score": 6.346153846153841
+        }
+      ],
+      "overlap_count": 0,
+      "selected_candidate": "extra_trees_depth_6",
+      "selected_family": "extra_trees",
+      "test_group_count": 4,
+      "test_groups": [
+        "g02",
+        "g03",
+        "g10",
+        "g11"
+      ],
+      "test_rows": 52,
+      "train_group_count": 8,
+      "train_groups": [
+        "g00",
+        "g01",
+        "g04",
+        "g05",
+        "g06",
+        "g07",
+        "g08",
+        "g09"
+      ],
+      "train_rows": 104
+    },
+    {
+      "family_candidates": {
+        "dummy": "dummy_mean",
+        "extra_trees": "extra_trees_depth_6",
+        "ridge": "ridge_alpha_0.1"
+      },
+      "fold": 2,
+      "inner_folds": [
+        {
+          "fold": 0,
+          "overlap_count": 0,
+          "test_group_count": 4,
+          "test_groups": [
+            "g01",
+            "g03",
+            "g06",
+            "g11"
+          ],
+          "test_rows": 52,
+          "train_group_count": 4,
+          "train_groups": [
+            "g02",
+            "g05",
+            "g09",
+            "g10"
+          ],
+          "train_rows": 52
+        },
+        {
+          "fold": 1,
+          "overlap_count": 0,
+          "test_group_count": 4,
+          "test_groups": [
+            "g02",
+            "g05",
+            "g09",
+            "g10"
+          ],
+          "test_rows": 52,
+          "train_group_count": 4,
+          "train_groups": [
+            "g01",
+            "g03",
+            "g06",
+            "g11"
+          ],
+          "train_rows": 52
+        }
+      ],
+      "inner_seed": 20261106,
+      "inner_selection": [
+        {
+          "candidate": "dummy_mean",
+          "family": "dummy",
+          "inner_fold_scores": [
+            6.346153846153847,
+            6.346153846153847
+          ],
+          "objective": "group_mae",
+          "params": {
+            "strategy": "mean"
+          },
+          "selection_score": 6.346153846153847
+        },
+        {
+          "candidate": "ridge_alpha_0.1",
+          "family": "ridge",
+          "inner_fold_scores": [
+            6.346153846153847,
+            6.346153846153847
+          ],
+          "objective": "group_mae",
+          "params": {
+            "alpha": 0.1
+          },
+          "selection_score": 6.346153846153847
+        },
+        {
+          "candidate": "ridge_alpha_1",
+          "family": "ridge",
+          "inner_fold_scores": [
+            6.346153846153847,
+            6.346153846153847
+          ],
+          "objective": "group_mae",
+          "params": {
+            "alpha": 1.0
+          },
+          "selection_score": 6.346153846153847
+        },
+        {
+          "candidate": "ridge_alpha_10",
+          "family": "ridge",
+          "inner_fold_scores": [
+            6.346153846153847,
+            6.346153846153847
+          ],
+          "objective": "group_mae",
+          "params": {
+            "alpha": 10.0
+          },
+          "selection_score": 6.346153846153847
+        },
+        {
+          "candidate": "extra_trees_depth_6",
+          "family": "extra_trees",
+          "inner_fold_scores": [
+            6.346153846153841,
+            6.346153846153841
+          ],
+          "objective": "group_mae",
+          "params": {
+            "max_depth": 6,
+            "min_samples_leaf": 2,
+            "n_estimators": 64
+          },
+          "selection_score": 6.346153846153841
+        },
+        {
+          "candidate": "extra_trees_depth_none",
+          "family": "extra_trees",
+          "inner_fold_scores": [
+            6.346153846153841,
+            6.346153846153841
+          ],
+          "objective": "group_mae",
+          "params": {
+            "max_depth": null,
+            "min_samples_leaf": 2,
+            "n_estimators": 64
+          },
+          "selection_score": 6.346153846153841
+        }
+      ],
+      "overlap_count": 0,
+      "selected_candidate": "extra_trees_depth_6",
+      "selected_family": "extra_trees",
+      "test_group_count": 4,
+      "test_groups": [
+        "g00",
+        "g04",
+        "g07",
+        "g08"
+      ],
+      "test_rows": 52,
+      "train_group_count": 8,
+      "train_groups": [
+        "g01",
+        "g02",
+        "g03",
+        "g05",
+        "g06",
+        "g09",
+        "g10",
+        "g11"
+      ],
+      "train_rows": 104
+    }
+  ],
+  "package_source": {
+    "algorithm": "sha256",
+    "files": {
+      "__init__.py": "fe2d52504b085622ef2b5cb895af4c895ae213210ed12e637b76652fa8a2ac06",
+      "__main__.py": "935a1c1166b0c1ea35a82256345000bf2c73ded718d77773bc27a71ecce28f7d",
+      "binary/__init__.py": "3ce7b14dead36ef67af0ed9da298186c9951730ef4587e325e0f7a5cfc44fe8a",
+      "binary/cli.py": "5d62b751439aa31e0636daa02d025631440c8eb38caef097dfeb832d4f20e37f",
+      "binary/data.py": "fb48cb55d203db10f1027c98fc1afee6697543d49a2d01890b682da9fe8fdf4b",
+      "binary/metrics.py": "f5e26b9fbd0238fb86e7dae37aeb03e097a10345a9d2308381b274de267518f3",
+      "binary/model.py": "faca1d25b043110e40c69fa3fd6382ef2c8695cd0bda2267541c52cf1575d287",
+      "binary/report.py": "c0dbe53c978d08f35acee799b70b3aeaf2204d9fd87bcf31061273aa81028fe9",
+      "binary/workflow.py": "71cac8a2b42afe05a0ca7a6473190b00b08d00189d6ea6bf48f21bd0180c550e",
+      "budget_comparison.py": "a9acd577c555863caf3983ff19c9beda34695b6cc93b771efa35a0efc18c84ca",
+      "categorical.py": "7cd8295080e9cc4f205c350f1f9446b03eb30986e94020489e03ebbb8ae09aac",
+      "cli.py": "afc8cf78762649dc599d112db255e89e35e07e8c8ec7f838fded26825c73bc2f",
+      "data.py": "e12185f22195ffae76f31cd6409e953823ab14a93f77850e7dce89384d0d4038",
+      "evaluation.py": "c4a766634c4afb84f9773d5bb9c941ee83fc1aeab4157c531c1c8fb155aea392",
+      "evaluation_schema.py": "bef56e7e10bab146b703966fd9d568c49e9a94dd6bdccaa4e545e0126a595fc9",
+      "feature_manifest.py": "6d89e4a28dd97e695e2cbc760bc928ae4315de7dce5f0df01d5162d7df64c8a9",
+      "input_support.py": "b491b790fb22cda718d1a50d71eea9c7b7b2b6f9a29ca27c528d3d8f3a0f5b2f",
+      "interval_evaluation.py": "8424adb1ad9e91f8510667dcafb1ca3abc0e5f1ee1826438e4913aef380892a6",
+      "metrics.py": "fdd1222ad2a32f16367fc9d1901a4e36e34265d3d565c3709f2a3ef71db3db1b",
+      "model.py": "5a433024276af5143787798bc75d74681a9b896063a21278f3a065c506dbbabe",
+      "observed_history.py": "68bbe3e99732714e0a077d72f62115590005ce3b10b067bedd96efa28a007566",
+      "package_source.py": "653701f9b3ea951b7f906ae1213281f28813b3352ce7aec23405145b0bfd5e70",
+      "planning.py": "7cf2aeb12232b9a0b5735bac938340b59600262a1987bb0091516af0403c1a9d",
+      "prediction.py": "e38b8f293fab075d64fca6f13f903d1cc1bdb81abe0b9f0ee2b1e8659e882a7a",
+      "prediction_schema.py": "5ba015d3e4997eb5477f6c8c61654ef2d19f59e7cf9ca691580ae1b100f8ff87",
+      "report.py": "e0129b4fbeab6fb58829077f510cd212d998ffe2d396fdd5479fd9135b6eff58",
+      "splitting.py": "df53484c6cdfa71ce3abbe824f77ccaac7fb016af98f16d7f783bfed159bb858",
+      "verification.py": "280212eb922718d9fc3b249fbbef630d1583b36bee6d47164e82324845a50191"
+    },
+    "schema_version": "1.0",
+    "scope": "fixed_groupbench_python_sources_v1",
+    "sha256": "94145270a7ab9f9edcdffd3cfbf6d6cab218b249cc1277caa1300b3d4d74b600",
+    "status": "available"
+  },
+  "preprocessing": "Within each fit: numeric median imputation + scaling; categorical constant imputation + train-only one-hot encoding (max 64 categories per feature).",
+  "protocol": "nested-group-kfold-v1",
+  "run_key": "73c87ad8a34f1045341f151881ce14145dccd7052afd6988afa1a19eb025d7ae",
+  "schema_version": "1.0",
+  "source_file_sha256": null
+}
