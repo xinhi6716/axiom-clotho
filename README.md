@@ -1,14 +1,16 @@
-<p align="right"><strong>English</strong> · <a href="README.zh-TW.md">繁體中文</a></p>
+<p align="center"><img src="https://raw.githubusercontent.com/xinhi6716/xinhi6716/95b148368534587e5393bc9ef610b99c01ca8e92/assets/identity-v8/clotho.png" width="280" alt="Axiom Clotho: a spindle and continuous celestial thread"></p>
 
-<h1 id="axiom-clotho" align="center">Axiom Clotho</h1>
-
-<p align="center"><img src="https://raw.githubusercontent.com/xinhi6716/xinhi6716/95b148368534587e5393bc9ef610b99c01ca8e92/assets/identity-v8/clotho.png" width="360" alt="Axiom Clotho — approved Moirai identity artwork"></p>
+<h1 id="axiom-clotho" align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/xinhi6716/xinhi6716/443d48c713f27d52656ad8ea3cb4c5bb9c7dd440/assets/brand-marks/v1/clotho-icon-dark.svg"><img src="https://raw.githubusercontent.com/xinhi6716/xinhi6716/443d48c713f27d52656ad8ea3cb4c5bb9c7dd440/assets/brand-marks/v1/clotho-icon-light.svg" width="40" height="40" alt=""></picture> Axiom Clotho</h1>
 
 <p align="center"><strong>Device measurements. Grouped models. Local reports.</strong></p>
 
-Clotho turns supported RRAM and FET measurement tables into device-level features, compares models with your declared groups held apart, and predicts outcomes for new devices. Or start from a table.
+<p align="center"><strong>English</strong> · <a href="README.zh-TW.md">繁體中文</a></p>
 
-**[Beta 0.3.0b7](https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.3.0b7)** · [Quick start](#begin) · [Measurements](#thread) · [Your table](#tabular-start) · [Reports](#evidence) · [Limits](#limits)
+<p align="center"><a href="https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.3.0b7">Beta 0.3.0b7</a></p>
+
+<p align="center"><a href="#begin">Quick start</a> · <a href="#thread">Measurements</a> · <a href="#tabular-start">Your table</a> · <a href="#evidence">Reports</a> · <a href="#limits">Limits</a></p>
+
+Clotho turns supported RRAM and FET measurement tables into device-level features, compares models with your declared groups held apart, and predicts outcomes for new devices. Or start from a table.
 
 ### Choose your starting point
 

@@ -1,14 +1,16 @@
-<p align="right"><a href="README.md">English</a> · <strong>繁體中文</strong></p>
+<p align="center"><img src="https://raw.githubusercontent.com/xinhi6716/xinhi6716/95b148368534587e5393bc9ef610b99c01ca8e92/assets/identity-v8/clotho.png" width="280" alt="Axiom Clotho: a spindle and continuous celestial thread"></p>
 
-<h1 id="axiom-clotho" align="center">Axiom Clotho</h1>
-
-<p align="center"><img src="https://raw.githubusercontent.com/xinhi6716/xinhi6716/95b148368534587e5393bc9ef610b99c01ca8e92/assets/identity-v8/clotho.png" width="360" alt="Axiom Clotho — approved Moirai identity artwork"></p>
+<h1 id="axiom-clotho" align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/xinhi6716/xinhi6716/443d48c713f27d52656ad8ea3cb4c5bb9c7dd440/assets/brand-marks/v1/clotho-icon-dark.svg"><img src="https://raw.githubusercontent.com/xinhi6716/xinhi6716/443d48c713f27d52656ad8ea3cb4c5bb9c7dd440/assets/brand-marks/v1/clotho-icon-light.svg" width="40" height="40" alt=""></picture> Axiom Clotho</h1>
 
 <p align="center"><strong>元件量測、群組模型、本機報告。</strong></p>
 
-Clotho 將支援的 RRAM、FET 量測表整理成元件特徵，依你宣告的群組切分比較模型，再預測新元件的結果。也可直接使用整理好的表格。
+<p align="center"><a href="README.md">English</a> · <strong>繁體中文</strong></p>
 
-**[Beta 0.3.0b7](https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.3.0b7)** · [開始使用](#begin) · [量測流程](#thread) · [自己的表格](#tabular-start) · [報告](#evidence) · [使用限制](#limits)
+<p align="center"><a href="https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.3.0b7">Beta 0.3.0b7</a></p>
+
+<p align="center"><a href="#begin">開始使用</a> · <a href="#thread">量測流程</a> · <a href="#tabular-start">自己的表格</a> · <a href="#evidence">報告</a> · <a href="#limits">使用限制</a></p>
+
+Clotho 將支援的 RRAM、FET 量測表整理成元件特徵，依你宣告的群組切分比較模型，再預測新元件的結果。也可直接使用整理好的表格。
 
 ### 選擇你的起點
 

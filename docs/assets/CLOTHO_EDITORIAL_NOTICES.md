@@ -1,3 +1,28 @@
+# Current README identity · 2026-11-02
+
+The English and Traditional Chinese READMEs display the square `clotho.png` artwork from the public `xinhi6716/xinhi6716` profile repository, pinned to commit `95b148368534587e5393bc9ef610b99c01ca8e92`.
+
+- [Canonical PNG source](https://github.com/xinhi6716/xinhi6716/blob/95b148368534587e5393bc9ef610b99c01ca8e92/assets/identity-v8/clotho.png)
+- Format: 1254 × 1254 PNG.
+- Role: Axiom Clotho, within Moirai. The spindle and continuous thread are symbolic identity artwork, not a scientific diagram.
+
+The artwork appears directly alongside a native-text title and navigation. This source record does not assert a new artwork license, creator attribution or trademark clearance. Existing license and font notices remain unchanged.
+
+## Compact logo companion
+
+The native README title includes light/dark compact Clotho marks from the same public profile repository, pinned to commit `443d48c713f27d52656ad8ea3cb4c5bb9c7dd440`:
+
+- [Light icon](https://github.com/xinhi6716/xinhi6716/blob/443d48c713f27d52656ad8ea3cb4c5bb9c7dd440/assets/brand-marks/v1/clotho-icon-light.svg) · [Dark icon](https://github.com/xinhi6716/xinhi6716/blob/443d48c713f27d52656ad8ea3cb4c5bb9c7dd440/assets/brand-marks/v1/clotho-icon-dark.svg)
+- [Companion asset notices](https://github.com/xinhi6716/xinhi6716/blob/443d48c713f27d52656ad8ea3cb4c5bb9c7dd440/assets/brand-marks/v1/ASSET_NOTICES.txt) · [Font notices](https://github.com/xinhi6716/xinhi6716/blob/443d48c713f27d52656ad8ea3cb4c5bb9c7dd440/assets/brand-marks/v1/FONT_LICENSE.txt)
+
+These small vector companions do not replace or alter the `identity-v8` portrait. The profile's companion notices document the new marks separately from the historical SVG revisions below.
+
+## Historical SVG revisions
+
+The dated entries below describe earlier local vector artwork and report styling. Their statements about no raster dependencies or external artwork apply to those revisions, not to the current PNG README artwork. Report behavior and historical assets are unchanged by this README update.
+
+---
+
 # Celestial fate-instrument refinement · 2026-10-28
 
 The four responsive Clotho heroes now frame the authored spindle and unbroken thread in a shared ivory/gold/midnight celestial field. The exact central path geometry is preserved from the fate-instrument proof; new open orbital engraving is ornamental, not a scientific diagram, enclosing seal or software promise. The product name remains native README text. All original licenses and historical notices below remain intact.
