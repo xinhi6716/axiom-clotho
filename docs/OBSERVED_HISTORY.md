@@ -57,6 +57,32 @@ scores are reported separately, with no claim of independent traces.
 
 ## Interpretation boundary
 
+### Machine-readable statistical scope
+
+The returned Python `result.summary` includes an additive `evaluation_support`
+object. This API has no dedicated CLI or artifact writer; callers may serialize
+the summary themselves. Existing prediction rows, metrics, baseline definitions,
+coverage and provenance fields are unchanged.
+
+- `claim_scope` is `descriptive_observed_history` and
+  `statistical_interpretation` is `descriptive_only`.
+- `n_scored_traces` counts distinct `trace_id` values in the scored origin roster,
+  not observation rows, origins, or unscored traces. `counting_unit` states this.
+- `source_group_count` is JSON `null` and `source_group_status` is `not_declared`:
+  this input contract has no trace-to-source mapping. A trace count is not an
+  independent-source count, and unknown does not mean zero.
+- `physical_independence` is `not_established`. `support_reasons` records the
+  undeclared source grouping and unestablished physical independence. A single
+  scored trace also records `no_between_trace_replication`.
+
+These fields describe limits of statistical interpretation, not whether a model
+can predict. More traces do not automatically establish independent replication
+or valid population inference. No universal minimum-group threshold, confidence
+interval, significance test, or pass/fail rule is introduced. Descriptive scores
+remain available even when independent-source support is unknown. Consumers that
+enforce exact summary key sets must allow this new additive field; this does not
+change the scoring protocol identity or promise an unchanged serialized document.
+
 This is teacher-forced one-step evaluation using observed history, not recursive
 multi-step forecasting. An earlier scored target may become a later origin's
 observed input. Changing a target/future value cannot change that origin's two

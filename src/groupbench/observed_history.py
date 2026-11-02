@@ -126,6 +126,19 @@ def evaluate_observed_history(observations: pd.DataFrame, *, origins: pd.DataFra
         output[name] = prediction
     return ObservedHistoryResult(summary={
         'protocol': 'observed_history_one_step_v1',
+        'evaluation_support': {
+            'claim_scope': 'descriptive_observed_history',
+            'n_scored_traces': len({trace for trace, _ in keys}),
+            'counting_unit': 'distinct trace_id in the scored origin roster',
+            'source_group_count': None,
+            'source_group_status': 'not_declared',
+            'physical_independence': 'not_established',
+            'statistical_interpretation': 'descriptive_only',
+            'support_reasons': ['source_groups_not_declared',
+                                'physical_independence_not_established'] + (
+                ['no_between_trace_replication']
+                if len({trace for trace, _ in keys}) == 1 else []),
+        },
         'n_origins': len(keys), 'coverage': 'exact_frozen_roster_no_drops',
         'weighting': 'overall row metrics and separately reported equal-trace group metrics',
         'models': scores, 'fit_calls': 0, 'selection_performed': False,
