@@ -198,6 +198,14 @@ saved analyses. Existing `mlcalc ...` commands work directly. Compatibility
 messages may retain the calculator's original names and version; no frozen
 release identity is rewritten.
 
+Delegated `tabular` commands, including `--help`, import the calculator and need
+its existing ML dependencies in the current Python environment. If those imports
+fail, `clotho tabular` exits 2 with categorical guidance rather than printing an
+import traceback or private paths. It does not install or repair packages. Use
+`clotho --help` for workflow navigation without ML dependencies. This handling
+belongs to the `clotho` wrapper; direct `mlcalc` and `groupbench` entry points are
+unchanged.
+
 ## Beta boundaries, not hidden gaps
 
 - The new measurement-supervised route is regression only, one row per device,

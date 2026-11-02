@@ -1,7 +1,8 @@
 """Axiom Clotho: local measurement-to-regression workflows and calculator core.
 
-No ML import on help, component inspection, or measurement extraction. Extraction
-and prediction algorithms remain the pinned upstream components, not rewrites.
+Workflow help, component inspection and measurement extraction need no ML import.
+Delegated tabular commands, including their help, need the existing ML dependencies.
+Extraction and prediction algorithms remain the pinned upstream components, not rewrites.
 """
 import argparse
 import importlib.util
@@ -96,8 +97,16 @@ def main(argv=None):
     arguments = list(sys.argv[1:] if argv is None else argv)
     try:
         if arguments and arguments[0] == "tabular":
-            from groupbench.cli import main as calculator_main
-            return calculator_main(arguments[1:])
+            try:
+                from groupbench.cli import main as calculator_main
+                return calculator_main(arguments[1:])
+            except ImportError:
+                # ImportError text can expose environment paths and package data.
+                # Do not install, guess a package name or rewrite the delegated parser.
+                print("error: the tabular calculator or its existing ML dependencies are unavailable; "
+                      "check the current Python environment and complete distribution. "
+                      "Use `clotho --help` for dependency-free workflow navigation.", file=sys.stderr)
+                return 2
         if arguments and arguments[0] == "init":
             return init_main(arguments[1:])
         if arguments and arguments[0] in ("prepare", "plan", "run", "score"):
