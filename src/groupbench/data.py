@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import date, timedelta
 from numbers import Integral
 from pathlib import Path
 import reprlib
@@ -92,8 +93,23 @@ def validate_prediction_features(X, feature_names, feature_types):
 
 
 def validate_target(y, n_rows: int) -> np.ndarray:
+    # np.asarray discards MaskedArray masks and exposes the hidden payload.
+    # A masked label is missing even when its stored value happens to be finite.
+    if np.ma.isMaskedArray(y) and np.ma.getmaskarray(y).any():
+        raise ValueError("The target must have one finite numeric value per row; missing targets are not dropped silently.")
     if np.iscomplexobj(y):
         raise ValueError("Complex target values are not supported.")
+    try:
+        original = np.asarray(y)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("The target must be a one-dimensional, finite numeric vector.") from exc
+    # NumPy converts datetime/timedelta values to unit-dependent numbers,
+    # including NaT to a finite minimum integer. Never infer target units
+    # or mistake that missing-value sentinel for an observed outcome.
+    if original.dtype.kind in "mM" or (original.dtype.kind == "O" and any(
+            isinstance(value, (date, timedelta, np.datetime64, np.timedelta64))
+            for value in original.flat)):
+        raise ValueError("Datetime and timedelta targets are not supported; convert observed outcomes to explicit numeric units and preserve missing targets.")
     try:
         a = np.asarray(y, dtype=float)
     except (TypeError, ValueError) as exc:
