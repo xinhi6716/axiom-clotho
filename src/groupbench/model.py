@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 import numpy as np
@@ -32,8 +33,10 @@ class Candidate:
 
 
 def candidates_for(baselines) -> list[Candidate]:
-    if isinstance(baselines, str) or not baselines or len(set(baselines)) != len(baselines):
-        raise ValueError("baselines must be a non-empty sequence of distinct model family names.")
+    if (not isinstance(baselines, Sequence) or isinstance(baselines, (str, bytes))
+            or not baselines or any(not isinstance(value, str) for value in baselines)
+            or len(set(baselines)) != len(baselines)):
+        raise ValueError("baselines must be a non-empty ordered sequence of distinct model family names.")
     known = {"dummy", "ridge", "extra_trees"}
     if set(baselines) - known:
         raise ValueError(f"Unknown baseline. Choose from {sorted(known)}.")
