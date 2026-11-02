@@ -17,8 +17,35 @@ def metric_contract():
             "positive_loss_rounded_to_zero": "error"}
 
 
+
+def _reject_boolean_probabilities(values):
+    """Preserve source Boolean types until they can be rejected explicitly.
+
+    Called after mask preflight, which already bounds sequence depth and rejects
+    cycles. Inspect only known container storage/metadata, never a generator or
+    arbitrary iterable. Numeric arrays already promoted by the caller cannot
+    reveal their former scalar types.
+    """
+    pending, seen = [values], set()
+    typed_arrays = (np.ndarray, pd.Series, pd.Index, pd.api.extensions.ExtensionArray)
+    while pending:
+        value = pending.pop()
+        boolean = isinstance(value, (bool, np.bool_))
+        if isinstance(value, typed_arrays):
+            boolean = boolean or pd.api.types.is_bool_dtype(value.dtype)
+        elif isinstance(value, memoryview):
+            boolean = boolean or value.format.lstrip("@=<>!") == "?"
+        if boolean:
+            raise ValueError("Probabilities must be numeric, not Boolean; supply explicit numeric 0/1 for probability endpoints. No labels are remapped.")
+        if isinstance(value, (list, tuple)) and id(value) not in seen:
+            seen.add(id(value))
+            items = list.__iter__(value) if isinstance(value, list) else tuple.__iter__(value)
+            pending.extend(items)
+
+
 def _probability_array(values):
     _reject_active_masks(values, "Probabilities")
+    _reject_boolean_probabilities(values)
     original = np.asarray(values)
     # Only real numeric types representable without narrowing are supported.
     # In particular, do not discard imaginary components or narrow longdouble
