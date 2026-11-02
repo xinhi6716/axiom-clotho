@@ -11,6 +11,7 @@ from .evaluation import _prepare_benchmark
 from .prediction import _prepare_prediction
 from .input_support import prediction_input_support
 from .splitting import audit_split
+from .model import optional_capabilities
 
 
 _LIMITATIONS = [
@@ -83,6 +84,10 @@ source_sha256: str | None = None, categorical_encoding: str = LEGACY) -> dict:
     if categorical_encoding == DISTINCT:
         result.update(schema_version="1.1", protocol="nested-group-kfold-distinct-v2")
         result["config"].update(encoding_options(categorical_encoding))
+    if optional_capabilities(baselines):
+        result.update(schema_version="1.2", protocol="nested-group-kfold-extended-families-v1",
+                      capabilities=optional_capabilities(baselines))
+        result["config"]["categorical_encoding"] = categorical_encoding
     return result
 
 
@@ -117,4 +122,8 @@ def plan_prediction(frame: pd.DataFrame, new_rows: pd.DataFrame, *, target: str,
     if categorical_encoding == DISTINCT:
         result.update(schema_version="1.2", protocol="group-fit-predict-distinct-v2")
         result["config"].update(encoding_options(categorical_encoding))
+    if optional_capabilities(baselines):
+        result.update(schema_version="1.3", protocol="group-fit-predict-extended-families-v1",
+                      capabilities=optional_capabilities(baselines))
+        result["config"]["categorical_encoding"] = categorical_encoding
     return result

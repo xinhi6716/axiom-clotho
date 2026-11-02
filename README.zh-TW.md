@@ -171,6 +171,8 @@ manifest、校驗碼與驗證方式見[報告指南](docs/USAGE_REFERENCE.md#out
 - **數值精度未經稽核。** 數值特徵會轉為浮點數，不同來源值可能合併。float64 輸入不保證模型全程以 float64 計算：[ExtraTrees 在前處理後於內部使用 float32 特徵](https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.ExtraTreesRegressor.html#sklearn.ensemble.ExtraTreesRegressor.fit)。保存指標一致不認證輸入精度或量測解析度。擬合前請確認來源解析度與預期特徵表示法；縮放無法恢復已遺失的區別。迴歸 HTML 報告揭露此限制，但不偵測或修復數值碰撞。
 - **輸入限制不等於運算配額。** 檔案、列數與特徵上限會拒絕不支援的輸入，但不是硬性記憶體或時間限制。[輸入與資源限制](docs/USAGE_REFERENCE.md#limits-to-understand-before-trusting-a-result)。
 
+目前原始碼另提供明確選用的 `nystroem_ridge` 與 `group_median` 迴歸比較器，保留各訓練切分內的擬合與擬合資訊；預設模型不變。這些新增功能不在已凍結的 b7 下載檔內。[選用模型、擬合次數與讀取相容性](docs/OPTIONAL_REGRESSION_FAMILIES.md)。
+
 b7 更新 Clotho 圖像、報告呈現與文件；保留 b6 拒絕已擬合迴歸 ExtraTrees 中非有限數值的檢查。既有流程、模型、切分與指標維持不變。[版本說明](docs/RELEASE_NOTES_0.3.0b7.md)。更多領域模組仍屬[規劃工作](ROADMAP.md)。
 
 ## 下一步

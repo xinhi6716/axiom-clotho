@@ -150,7 +150,7 @@ def validate_config(config):
             or len(features) != len(set(features))):
         raise WorkflowError("choose a nonempty unique subset of the measurement feature allowlist")
     if (not isinstance(baselines, list) or "dummy" not in baselines or len(baselines) < 2
-            or any(not isinstance(b, str) or b not in ("dummy", "ridge", "extra_trees") for b in baselines)
+            or any(not isinstance(b, str) or b not in ("dummy", "ridge", "extra_trees", "nystroem_ridge", "group_median") for b in baselines)
             or len(baselines) != len(set(baselines))):
         raise WorkflowError("comparison requires dummy and at least one supported unique model family")
     for key, low, high in (("outer_splits", 2, 100), ("inner_splits", 2, 100), ("seed", 0, 2 ** 32 - 101), ("max_fits", 1, 100000)):

@@ -5,12 +5,12 @@ predicts a lower weighted median of **all current training targets**, with each
 training group receiving equal total weight and its rows sharing that weight.
 It is **not** the median of group means or group medians.
 
-This module adds no registered `GroupBenchRegressor` family, CLI option, package
-root export, candidate, or default. Existing `dummy` remains the unweighted
-training mean. Passing `group_median` to the current family registry still
-rejects as an unknown family. Registry, fold-parameter routing, planning,
-reporting integration require a separate coherent change. The fixed
-`package_source` inventory now includes this standalone module.
+Also available as explicit `group_median` in `GroupBenchRegressor`, benchmark,
+fit_predict and supported measurement/FET workflow baseline lists. Existing
+defaults and `dummy`'s unweighted training mean remain unchanged. The selector
+routes only the current fit's training groups to this family; query rows need no
+groups. See [extended family usage](OPTIONAL_REGRESSION_FAMILIES.md). The fixed
+`package_source` inventory includes this module.
 Its canonical source digest consequently changes. Historical saved manifests
 with a 28-file source record, or no source record, remain readable: saved-bundle
 verification does not compare their recorded bytes with the current installation.
@@ -121,7 +121,7 @@ pipeline.fit(X, [0, 100, 101, 1], model__groups=["a", "a", "a", "b"])
 ```
 
 Do not pass `model__groups` to other estimator families that do not accept it.
-An eventual grouped selector must slice groups for every inner training fit and
+The integrated grouped selector slices groups for every inner training fit and
 the final family refit. This standalone module does not implement CV splitting,
 metadata-routing-enabled dispatch or automatic `GridSearchCV` group delivery.
 See the primary [Pipeline parameter-forwarding documentation](https://scikit-learn.org/1.8/modules/generated/sklearn.pipeline.Pipeline.html)

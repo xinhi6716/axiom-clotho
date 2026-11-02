@@ -458,12 +458,11 @@ class KernelRegressionTests(unittest.TestCase):
             predictions.append(pipeline.predict(new))
         np.testing.assert_allclose(predictions[0], predictions[1], rtol=0, atol=1e-10)
 
-    def test_module_does_not_enable_a_family_or_change_existing_grid(self):
+    def test_optional_family_does_not_change_existing_grid(self):
         self.assertEqual([candidate.name for candidate in candidates_for(("dummy", "ridge", "extra_trees"))],
                          ["dummy_mean", "ridge_alpha_0.1", "ridge_alpha_1", "ridge_alpha_10",
                           "extra_trees_depth_6", "extra_trees_depth_none"])
-        with self.assertRaisesRegex(ValueError, "Unknown baseline"):
-            candidates_for(("nystroem_ridge",))
+        self.assertEqual(len(candidates_for(("nystroem_ridge",))), 3)
 
 
 if __name__ == "__main__":

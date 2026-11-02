@@ -1,5 +1,12 @@
 # Changelog
 
+## Current source — optional grouped regression families (unreleased)
+
+- Add explicit `nystroem_ridge` and `group_median` comparators without changing default families. Keep preprocessing and landmark selection training-only; route current training groups only to the group-balanced median.
+- Record inner-fit and final-refit details with exact scheduled fit counts. Opt-in runs use evaluation schema 1.2 / prediction schema 1.3 and exact capability markers; old-only output keeps previous formats. Old strict readers reject the new versions.
+- Preserve atomic fitted state on failure and clear stale optional metadata after successful refit. Saved metadata checks establish internal consistency, not execution authenticity or scientific performance.
+- See [optional-family usage and compatibility](docs/OPTIONAL_REGRESSION_FAMILIES.md). This is current-source support, not a new release, package publication or change to frozen b7 assets.
+
 ## 0.3.0b7 — Clotho celestial visual maintenance
 
 - Refresh the spindle artwork, light/dark/mobile heroes, report emblem and report presentation; align README process diagrams by palette only. Preserve diagram words, geometry and data meaning.

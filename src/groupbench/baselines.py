@@ -134,8 +134,8 @@ class GroupBalancedMedianRegressor(RegressorMixin, BaseEstimator):
     legacy sklearn Pipeline named ``model``, pass ``model__groups=training_groups``
     to fit. Automatic metadata-routing/CV dispatch is not promised.
 
-    This explicitly imported standalone estimator is not yet a registered
-    GroupBench family. It does not change current defaults, grids or budgets.
+    Also available as the explicit optional GroupBench family group_median.
+    It does not change the default family list.
     ``score`` is the inherited row R-squared score, NOT group MAE.
     A failed refit preserves the previous complete fitted state.
     """

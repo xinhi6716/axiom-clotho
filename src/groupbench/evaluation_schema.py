@@ -9,7 +9,7 @@ import numpy as np
 
 from .data import validate_groups
 from .metrics import regression_metrics, _checked_arithmetic
-from .prediction_schema import _manifest, _DECIMAL
+from .prediction_schema import _manifest, _DECIMAL, _optional_selection_metadata, _extension_families
 from .verification import (EVALUATION_FILES, MAX_CHECKSUM_BYTES, MAX_PAYLOAD_BYTES,
                            _checksum_records, _open_run_directory, _read_file, _signature)
 
@@ -88,7 +88,8 @@ def _partitioned_metrics(observed, predicted, group_rows, fold_rows, fold_groups
 
 def _check(manifest, summary, raw):
     version = manifest.get("schema_version")
-    protocols = {"1.0": "nested-group-kfold-v1", "1.1": "nested-group-kfold-distinct-v2"}
+    protocols = {"1.0": "nested-group-kfold-v1", "1.1": "nested-group-kfold-distinct-v2",
+                 "1.2": "nested-group-kfold-extended-families-v1"}
     if not isinstance(version, str) or version not in protocols or manifest.get("protocol") != protocols[version] or "schema_id" in manifest or "schema_id" in summary:
         _fail("only supported regression evaluation schemas/protocols are accepted.")
     config = manifest.get("config")
@@ -98,8 +99,13 @@ def _check(manifest, summary, raw):
         _fail("encoding and protocol differ.")
     if summary.get("schema_version") != version or (version == "1.1" and summary.get("protocol") != protocols[version]) or (version == "1.0" and "protocol" in summary):
         _fail("summary schema/protocol differs.")
+    if version == "1.2":
+        optional = _extension_families(manifest, config)
+        if summary.get("capabilities") != manifest["capabilities"] or summary.get("protocol") != protocols[version]:
+            _fail("extended capability or protocol differs in summary.")
     baselines = config.get("baselines")
-    if not isinstance(baselines, list) or not baselines or any(not isinstance(x, str) or x not in ("dummy", "ridge", "extra_trees") for x in baselines) or len(set(baselines)) != len(baselines):
+    known = ("dummy", "ridge", "extra_trees", "nystroem_ridge", "group_median") if version == "1.2" else ("dummy", "ridge", "extra_trees")
+    if not isinstance(baselines, list) or not baselines or any(not isinstance(x, str) or x not in known for x in baselines) or len(set(baselines)) != len(baselines):
         _fail("unsupported or duplicate model family.")
     names = baselines + ["selected"]
     if not isinstance(summary.get("models"), dict) or set(summary["models"]) != set(names):
@@ -164,6 +170,9 @@ def _check(manifest, summary, raw):
         if not isinstance(audit, dict):
             _fail("invalid fold audit.")
         _compare({key: audit.get(key) for key in expected}, expected)
+        if version == "1.2":
+            inner = _count(config.get("inner_splits"), len(train_groups), 2)
+            _optional_selection_metadata(audit, n-test_rows, len(train_groups), inner, audit.get("inner_seed"), optional)
     for name in names:
         _compare(summary["models"][name], _partitioned_metrics(
             observed, predictions[name], group_rows, fold_rows, fold_groups))

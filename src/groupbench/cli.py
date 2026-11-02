@@ -39,7 +39,7 @@ def _add_protocol(parser, *, outer=True, output=True):
         parser.add_argument("--outer-splits", type=int, default=5)
     parser.add_argument("--inner-splits", type=int, default=3)
     parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--baselines", default="dummy,ridge,extra_trees", help="Comma-separated families: dummy,ridge,extra_trees")
+    parser.add_argument("--baselines", default="dummy,ridge,extra_trees", help="Comma-separated families: dummy,ridge,extra_trees; optional nystroem_ridge,group_median (defaults unchanged)")
     parser.add_argument("--categorical-encoding", choices=ENCODINGS, default=LEGACY,
                         help="Use distinct-v2 to distinguish literal missing-marker strings; default preserves legacy-v1")
     parser.add_argument("--objective", choices=("group_mae", "mae"), default="group_mae")

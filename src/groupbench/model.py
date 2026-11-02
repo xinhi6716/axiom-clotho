@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from copy import deepcopy
 
 import numpy as np
 import pandas as pd
@@ -22,6 +23,8 @@ from .categorical import LEGACY, categorical_imputer, encoding_options, validate
 from .data import (validate_features, validate_groups, validate_prediction_features,
                    validate_seed, validate_target)
 from .metrics import grouped_metrics
+from .kernel import NystroemRidgeRegressor
+from .baselines import GroupBalancedMedianRegressor
 from .splitting import GroupKFold, audit_split
 
 
@@ -37,7 +40,7 @@ def candidates_for(baselines) -> list[Candidate]:
             or not baselines or any(not isinstance(value, str) for value in baselines)
             or len(set(baselines)) != len(baselines)):
         raise ValueError("baselines must be a non-empty ordered sequence of distinct model family names.")
-    known = {"dummy", "ridge", "extra_trees"}
+    known = {"dummy", "ridge", "extra_trees", "nystroem_ridge", "group_median"}
     if set(baselines) - known:
         raise ValueError(f"Unknown baseline. Choose from {sorted(known)}.")
     result = []
@@ -46,6 +49,10 @@ def candidates_for(baselines) -> list[Candidate]:
             result.append(Candidate("dummy_mean", family, {"strategy": "mean"}))
         elif family == "ridge":
             result.extend(Candidate(f"ridge_alpha_{alpha:g}", family, {"alpha": alpha}) for alpha in (0.1, 1.0, 10.0))
+        elif family == "group_median":
+            result.append(Candidate("group_median_lower", family, {}))
+        elif family == "nystroem_ridge":
+            result.extend(Candidate(f"nystroem_ridge_alpha_{alpha:g}", family, {"alpha": alpha, "rank_cap": 64}) for alpha in (0.1, 1.0, 10.0))
         else:
             result.extend(Candidate(f"extra_trees_depth_{depth or 'none'}", family, {"max_depth": depth, "n_estimators": 64, "min_samples_leaf": 2}) for depth in (6, None))
     return result
@@ -103,9 +110,45 @@ def make_pipeline(X: pd.DataFrame, candidate: Candidate, random_state: int, cate
         model = DummyRegressor(**candidate.params)
     elif candidate.family == "ridge":
         model = Ridge(**candidate.params, solver="lsqr")
-    else:
+    elif candidate.family == "extra_trees":
         model = ExtraTreesRegressor(**candidate.params, random_state=random_state, n_jobs=1)
+    elif candidate.family == "group_median":
+        model = GroupBalancedMedianRegressor(**candidate.params)
+    elif candidate.family == "nystroem_ridge":
+        model = NystroemRidgeRegressor(**candidate.params, random_state=random_state)
+    else:
+        raise ValueError("Unknown model family in candidate.")
     return Pipeline([("preprocess", preprocessing), ("model", model)])
+
+
+def _fit_pipeline(pipeline, X, y, groups, family):
+    """Only the group-aware constant receives this fit's sliced training groups."""
+    if family == "group_median":
+        pipeline.fit(X, y, model__groups=groups)
+    else:
+        pipeline.fit(X, y)
+    _validate_fitted_numeric_state(pipeline)
+    _validate_fitted_tree_state(pipeline)
+
+
+def _optional_fit_details(pipeline, family):
+    model = pipeline.named_steps["model"]
+    if family == "nystroem_ridge":
+        return deepcopy(model.fit_details_)
+    if family == "group_median":
+        return {"implementation": "group-balanced-lower-median-v1",
+                "training_rows": int(model.n_samples_seen_),
+                "training_groups": int(model.n_groups_seen_),
+                "transformed_features": int(model.n_features_in_),
+                "constant": float(model.constant_),
+                "weight_rule": model.weight_rule_, "tie_break": model.tie_break_}
+    return None
+
+
+def optional_capabilities(baselines):
+    """Canonical exact markers for the two explicitly supported extensions."""
+    return [family + "-v1" for family in ("group_median", "nystroem_ridge")
+            if family in baselines]
 
 
 def _validate_fitted_numeric_state(pipeline):
@@ -177,40 +220,47 @@ class GroupBenchRegressor(RegressorMixin, BaseEstimator):
             for candidate in candidates:
                 oof = np.full(len(X), np.nan)
                 fold_scores = []
-                for train, test in splits:
+                inner_fit_details = []
+                for inner_fold, (train, test) in enumerate(splits):
                     pipeline = make_pipeline(X.iloc[train], candidate, seed, **encoding_options(plan.categorical_encoding))
-                    pipeline.fit(X.iloc[train], y[train])
-                    _validate_fitted_numeric_state(pipeline)
-                    _validate_fitted_tree_state(pipeline)
+                    _fit_pipeline(pipeline, X.iloc[train], y[train], groups[train], candidate.family)
                     prediction = pipeline.predict(X.iloc[test])
                     oof[test] = prediction
                     scores, _ = grouped_metrics(y[test], prediction, groups[test])
                     fold_scores.append(scores[plan.objective])
+                    details = _optional_fit_details(pipeline, candidate.family)
+                    if details is not None:
+                        inner_fit_details.append({"inner_fold": inner_fold, "train_rows": len(train),
+                                                  "test_rows": len(test),
+                                                  "details": details})
                 scores, _ = grouped_metrics(y, oof, groups)
                 records.append({
                     "candidate": candidate.name, "family": candidate.family,
                     "params": candidate.params, "selection_score": scores[plan.objective],
                     "objective": plan.objective, "inner_fold_scores": fold_scores,
                 })
+                if inner_fit_details:
+                    records[-1]["inner_fit_details"] = inner_fit_details
             # A fixed candidate order gives deterministic tie-breaking.
             winner = min(range(len(records)), key=lambda i: records[i]["selection_score"])
-            family_models, family_candidates = {}, {}
+            family_models, family_candidates, family_fit_details = {}, {}, {}
             for family in plan.refit_families:
                 best = min((i for i, c in enumerate(candidates) if c.family == family), key=lambda i: records[i]["selection_score"])
                 chosen = candidates[best]
                 pipeline = make_pipeline(X, chosen, seed, **encoding_options(plan.categorical_encoding))
-                pipeline.fit(X, y)
-                _validate_fitted_numeric_state(pipeline)
-                _validate_fitted_tree_state(pipeline)
+                _fit_pipeline(pipeline, X, y, groups, family)
                 family_models[family] = pipeline
                 family_candidates[family] = chosen.name
+                details = _optional_fit_details(pipeline, family)
+                if details is not None:
+                    family_fit_details[family] = details
         # Publish state only after selection and every family refit succeeds.
         # Otherwise a failed refit could leave old selected predictions paired
         # with a new audit or incomplete baseline models.
         best = candidates[winner]
         self.__dict__.update(
             inner_audit_=audit, family_models_=family_models,
-            family_candidates_=family_candidates, best_candidate_=best.name,
+            family_candidates_=family_candidates, family_fit_details_=family_fit_details, best_candidate_=best.name,
             best_family_=best.family, best_estimator_=family_models[best.family],
             selection_results_=records, feature_names_in_=np.array(X.columns, dtype=object),
             n_features_in_=X.shape[1], feature_types_=[str(X[c].dtype) for c in X],

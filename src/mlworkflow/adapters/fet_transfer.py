@@ -83,7 +83,7 @@ def validate_config(config):
         raise c.WorkflowError("choose a nonempty unique subset of the two FET measurement features")
     models = config["baselines"]
     if (not isinstance(models, list) or "dummy" not in models or len(models) < 2
-            or any(not isinstance(m, str) or m not in ("dummy", "ridge", "extra_trees") for m in models)
+            or any(not isinstance(m, str) or m not in ("dummy", "ridge", "extra_trees", "nystroem_ridge", "group_median") for m in models)
             or len(models) != len(set(models))):
         raise c.WorkflowError("comparison requires dummy and at least one supported unique model family")
     for name, low, high in (("outer_splits", 2, 100), ("inner_splits", 2, 100), ("seed", 0, 2 ** 32 - 101), ("max_fits", 1, 100000)):

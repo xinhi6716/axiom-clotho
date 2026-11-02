@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from copy import deepcopy
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -19,7 +20,7 @@ from .package_source import observe_package_source
 from .categorical import LEGACY, DISTINCT, encoding_options, preprocessing_description
 from .data import data_fingerprint, duplicate_diagnostics, prepare_data, validate_seed
 from .metrics import grouped_metrics
-from .model import GroupBenchRegressor, candidates_for, selection_plan
+from .model import GroupBenchRegressor, candidates_for, selection_plan, optional_capabilities
 from .splitting import GroupKFold, audit_split
 
 
@@ -101,6 +102,8 @@ def benchmark(frame: pd.DataFrame, *, target: str, group: str, features=None,
             "inner_selection": estimator.selection_results_,
             "inner_folds": estimator.inner_audit_,
         })
+        if estimator.family_fit_details_:
+            outer_audit[-1]["family_fit_details"] = deepcopy(estimator.family_fit_details_)
     if np.any(fold_ids < 0):
         raise RuntimeError("Internal error: some observations have no held-out fold.")
     model_metrics = {}
@@ -156,4 +159,10 @@ def benchmark(frame: pd.DataFrame, *, target: str, group: str, features=None,
         manifest.update(schema_version="1.1", protocol="nested-group-kfold-distinct-v2",
                         preprocessing=preprocessing_description())
         summary.update(schema_version="1.1", protocol=manifest["protocol"])
+    if optional_capabilities(baselines):
+        manifest.update(schema_version="1.2", protocol="nested-group-kfold-extended-families-v1",
+                        capabilities=optional_capabilities(baselines))
+        config["categorical_encoding"] = categorical_encoding
+        summary.update(schema_version="1.2", protocol=manifest["protocol"],
+                       capabilities=optional_capabilities(baselines))
     return BenchmarkResult(summary=summary, manifest=manifest, predictions=prediction_frame)

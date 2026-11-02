@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from copy import deepcopy
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -18,7 +19,7 @@ from .package_source import observe_package_source
 from .categorical import LEGACY, DISTINCT, encoding_options, preprocessing_description
 from .data import (_prediction_column_details, data_fingerprint, duplicate_diagnostics, prepare_data,
                    validate_features, validate_prediction_features)
-from .model import GroupBenchRegressor, selection_plan
+from .model import GroupBenchRegressor, selection_plan, optional_capabilities
 from .input_support import prediction_input_support
 
 
@@ -116,4 +117,11 @@ def fit_predict(frame: pd.DataFrame, new_rows: pd.DataFrame, *, target: str, gro
         manifest.update(schema_version="1.2", protocol="group-fit-predict-distinct-v2",
                         preprocessing=preprocessing_description())
         manifest["config"].update(encoding_options(categorical_encoding))
+    if estimator.family_fit_details_:
+        manifest["inner_selection"] = deepcopy(estimator.selection_results_)
+        manifest["family_fit_details"] = deepcopy(estimator.family_fit_details_)
+    if optional_capabilities(baselines):
+        manifest.update(schema_version="1.3", protocol="group-fit-predict-extended-families-v1",
+                        capabilities=optional_capabilities(baselines))
+        manifest["config"]["categorical_encoding"] = categorical_encoding
     return PredictionResult(pd.DataFrame({"row_position": np.arange(len(predictions)), "prediction": predictions}), manifest, estimator)

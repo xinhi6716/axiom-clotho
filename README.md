@@ -177,6 +177,8 @@ See the [report guide](docs/USAGE_REFERENCE.md#outputs) for manifests, checksums
 - **Numeric precision is not audited.** Numeric features are converted to floating point; distinct source values can merge. Float64 input does not promise float64 computation throughout a model: [ExtraTrees uses float32 features internally](https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.ExtraTreesRegressor.html#sklearn.ensemble.ExtraTreesRegressor.fit) after preprocessing. Consistent saved metrics do not certify input precision or measurement resolution. Check the source resolution and intended feature representation before fitting; scaling cannot restore distinctions already lost. The regression HTML report discloses this limitation without detecting or repairing collisions.
 - **Inputs and compute are bounded differently.** File, row and feature limits reject unsupported inputs; they are not hard memory or runtime quotas. [Input and resource limits](docs/USAGE_REFERENCE.md#limits-to-understand-before-trusting-a-result).
 
+Current source additionally offers explicit `nystroem_ridge` and `group_median` regression comparators with fold-local fitting and recorded fit details; defaults stay unchanged. These additions are not in frozen b7 downloads. [Optional families, budgets and reader compatibility](docs/OPTIONAL_REGRESSION_FAMILIES.md).
+
 Version b7 refreshes the Clotho artwork, report presentation and documentation. It retains the b6 check that rejects nonfinite fitted regression ExtraTrees state; workflows, models, splits and metrics are unchanged. [Release notes](docs/RELEASE_NOTES_0.3.0b7.md). Broader domain modules remain on the [roadmap](ROADMAP.md).
 
 ## Find your next step

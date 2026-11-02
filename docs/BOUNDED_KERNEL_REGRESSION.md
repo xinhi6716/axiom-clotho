@@ -2,12 +2,10 @@
 
 ## Status and scope
 
-`groupbench.kernel.NystroemRidgeRegressor` is a standalone numeric estimator
-primitive. **It is not registered as a GroupBench model family or offered by
-the calculator/workflow CLI.** Existing default models, grids, selection rules,
-fit budgets and output schemas are unchanged. In particular, do not pass
-`nystroem_ridge` in a calculator baseline list until a separately reviewed
-integration actually enables that capability.
+`groupbench.kernel.NystroemRidgeRegressor` remains directly importable and is
+also the explicit optional `nystroem_ridge` GroupBench family. Existing default
+families and their schemas remain unchanged. Request the optional family in
+`baselines` or CLI `--baselines`; see [extended family usage](OPTIONAL_REGRESSION_FAMILIES.md).
 
 This is a bounded smooth nonlinear comparator, not a physical or causal model,
 uncertainty estimator, extrapolation guarantee, or demonstrated improvement on
@@ -133,27 +131,25 @@ training-relative index digest, alpha, solver, thread count and map-byte bounds.
 It contains no basis feature values. The digest is not source authenticity,
 proof of execution or evidence that the data are scientifically appropriate.
 
-Any future product integration must retain both inner-fit and final-refit
-details, not label a small-fold basis as though the configured cap were the
+The integrated selector retains both inner-fit and final-refit
+details and does not label a small-fold basis as though the configured cap were the
 effective count. A no-fit plan may report the policy/cap and a row-based map
 bound, but cannot learn the encoded width/gamma by fitting a vocabulary during
 preview.
 
 ## Candidate and compatibility boundaries
 
-A proposed future registry integration has three declared alpha candidates
-`0.1, 1.0, 10.0`, with the same partition seed/basis across alphas and no gamma
-search. If explicitly added to the existing families, it would add
-`3 * inner_splits + 1` pipeline fits per selection/refit schedule: 31 rather than
-21 at three inner splits, or 155 rather than 105 at five outer folds. These are
-**design counts, not currently enabled support**. No numerical near-tie policy
-change is included.
+The optional registry integration declares alpha candidates `0.1, 1.0, 10.0`,
+with the same partition seed/basis across alphas and no gamma search. Explicit
+opt-in adds `3 * inner_splits + 1` pipeline fits per selection/refit schedule:
+31 rather than 21 at three inner splits, or 155 rather than 105 at five outer
+folds. These are scheduled fit counts, not a time or predictive-performance
+guarantee. No numerical near-tie policy changes.
 
-Integration requires coordinated registry, validator/workflow allowlist, help,
-saved-fit-details and explicit source-inventory changes. Adding a source file
-without updating the fixed inventory is not an acceptable provenance shortcut.
-Old readers' rejection of unknown capabilities must remain explicit; merely
-keeping JSON field shapes unchanged does not guarantee reader compatibility.
+Opt-in output uses evaluation schema 1.2 or prediction schema 1.3 and explicit
+capability markers. Old strict readers reject these versions. A generic checksum
+verifier may still pass the bytes; it does not understand their semantics.
+The fixed source inventory includes the kernel implementation.
 
 The focused software checks run on the existing Linux/Python 3.12.14,
 NumPy 2.3.5, pandas 2.2.3, SciPy 1.17.0 and scikit-learn 1.8.0 runtime. They
