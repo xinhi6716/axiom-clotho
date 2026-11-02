@@ -13,7 +13,46 @@ def label_contract():
             "threshold": 0.5, "comparison": ">=", "semantics": "user_defined"}
 
 
+
+def _reject_active_masks(values, name):
+    """Inspect built-in sequences without consuming arbitrary iterables.
+
+    NumPy can discard masks not just on a top-level array, but also on masked
+    row arrays/scalars nested inside a list or tuple. Use an iterative walk so
+    malformed cyclic/deep inputs cannot exhaust Python recursion. Shared row
+    containers are inspected once; no arrays or masks are modified.
+    """
+    pending = [(values, 0, False)]
+    active, finished = set(), set()
+    while pending:
+        value, depth, exiting = pending.pop()
+        if exiting:
+            active.remove(id(value))
+            finished.add(id(value))
+        elif np.ma.isMaskedArray(value):
+            mask = np.ma.getmaskarray(value)
+            if mask.dtype.kind != "b":
+                raise ValueError(f"{name} require unstructured numeric arrays.")
+            if mask.any():
+                raise ValueError(f"{name} cannot contain masked entries; no values are filled or rows dropped.")
+        elif isinstance(value, (list, tuple)):
+            identity = id(value)
+            if identity in active:
+                raise ValueError(f"{name} cannot contain cyclic sequences.")
+            if identity in finished:
+                continue
+            if depth >= 64:
+                raise ValueError(f"{name} sequence nesting exceeds supported depth.")
+            active.add(identity)
+            pending.append((value, depth, True))
+            # Use built-in storage iteration, not an overridden __iter__ on a
+            # list/tuple subclass. Never iterate a generator or custom iterable.
+            items = list.__iter__(value) if isinstance(value, list) else tuple.__iter__(value)
+            pending.extend((item, depth + 1, False) for item in items)
+
+
 def validate_binary_target(y, n_rows, *, require_both=True):
+    _reject_active_masks(y, "Binary targets/classes")
     # Preserve original sequence element types: np.asarray([0, True]) would
     # otherwise erase the Boolean before any value check can reject it.
     if isinstance(y, (pd.Series, np.ndarray)):

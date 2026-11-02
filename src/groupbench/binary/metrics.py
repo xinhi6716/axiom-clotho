@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 from ..data import validate_groups
-from .data import validate_binary_target
+from .data import _reject_active_masks, validate_binary_target
 
 EPSILON = float(np.finfo(np.float64).eps)
 
@@ -18,6 +18,7 @@ def metric_contract():
 
 
 def _probability_array(values):
+    _reject_active_masks(values, "Probabilities")
     original = np.asarray(values)
     # Only real numeric types representable without narrowing are supported.
     # In particular, do not discard imaginary components or narrow longdouble
