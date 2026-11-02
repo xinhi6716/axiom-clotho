@@ -271,6 +271,74 @@ def evaluate_saved_intervals(document):
     }
 
 
+
+def diagnose_saved_interval_reference(document):
+    """Return an opt-in descriptive sidecar, without changing normal evaluation.
+
+    Reuse the entire saved-interval contract before deriving any diagnostics.
+    Exact gaps compare observed rates with a declared reference; they are not
+    calibration errors, hypothesis tests or targets to optimize to zero. No
+    fitting, interval construction, cohort selection or file writing occurs.
+    """
+    report = evaluate_saved_intervals(document)
+    alpha = None if report["alpha_exact"] is None else Fraction(report["alpha_exact"])
+    reference = None if alpha is None else {
+        "coverage": 1 - alpha, "below_lower": alpha / 2, "above_upper": alpha / 2,
+    }
+    tails = {row["group"]: row for row in report["tail_misses"]["groups"]}
+    group_counts = [{
+        "group": row["group"], "n_rows": row["n_rows"], "covered": row["n_covered"],
+        "below_lower": tails[row["group"]]["below_lower"],
+        "above_upper": tails[row["group"]]["above_upper"],
+    } for row in report["groups"]]
+    n_rows = report["cohort"]["scored_rows"]
+    n_groups = len(group_counts)
+    count_keys = {"coverage": "covered", "below_lower": "below_lower", "above_upper": "above_upper"}
+    total_counts = {key: sum(row[key] for row in group_counts) for key in count_keys.values()}
+    row_rates = {name: Fraction(total_counts[key], n_rows) for name, key in count_keys.items()}
+    group_rates = {name: _mean([Fraction(row[key], row["n_rows"]) for row in group_counts])
+                   for name, key in count_keys.items()}
+
+    def exact_rates_and_gaps(rates):
+        return {
+            "observed_rate_exact": {key: str(value) for key, value in rates.items()},
+            "observed_minus_declared_exact": None if reference is None else {
+                key: str(value - reference[key]) for key, value in rates.items()
+            },
+        }
+
+    return {
+        "schema_id": "mlcalc.saved_interval_reference_diagnostic", "schema_version": "1.0",
+        "status": "complete_descriptive_reference_diagnostic", "claim_scope": "descriptive_only",
+        "source_evaluation_schema_version": report["schema_version"],
+        "metadata": dict(report["metadata"]), "cohort": dict(report["cohort"]),
+        "provenance_verified": False, "boundary_rule": report["boundary_rule"],
+        "alpha_exact": report["alpha_exact"],
+        "reference_origin": "declared_input_alpha_not_verified",
+        "declared_reference_exact": None if reference is None else {
+            key: str(value) for key, value in reference.items()
+        },
+        "numeric_semantics": "Rates, references and signed gaps are exact rational strings; no float rendering is used. Input numeric semantics are those of evaluate_saved_intervals.",
+        "row_weighted": {"weighting": "equal_rows", "n_rows": n_rows,
+                         "counts": total_counts, **exact_rates_and_gaps(row_rates)},
+        "equal_group": {"weighting": "equal_declared_groups_then_equal_rows_within_group",
+                        "n_groups": n_groups, "denominator_support": "group_counts",
+                        **exact_rates_and_gaps(group_rates)},
+        "group_counts": group_counts,
+        "support": {"n_scored_rows": n_rows, "n_declared_groups": n_groups,
+                    "counting_unit": "declared_input_groups_not_independent_sources",
+                    "independence": "not_established"},
+        "limitations": [
+            "Observed-minus-declared differences describe this supplied cohort only; no calibration test, confidence interval or future-coverage guarantee is provided.",
+            "Nonzero differences are not calibration failures: finite cohorts, discrete mass and closed endpoints can produce them even with correct predictive quantiles. Zero is not a pass threshold.",
+            "Alpha and central equal-tailed interpretation are declarations, not verified probabilities. Null alpha leaves references and differences unavailable; none is inferred.",
+            "Equal-group weighting does not establish independence and has no row-like binomial denominator. group_counts retains each declared group denominator.",
+            "Do not change intervals, alpha, groups or the frozen cohort to improve these diagnostics after inspecting outcomes.",
+            "No source provenance or independent-source count is established. Metadata and group labels are included; review before sharing.",
+        ],
+    }
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="mlcalc evaluate-intervals", description=__doc__)
     parser.add_argument("input", type=Path, help="Regular local saved-interval JSON; report goes to stdout only")

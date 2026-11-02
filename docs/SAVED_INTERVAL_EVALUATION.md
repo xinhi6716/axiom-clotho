@@ -229,3 +229,73 @@ hidden by overall coverage. It is **not** a calibration test, evidence of
 exchangeability, a cause-of-bias diagnosis, an extrapolation detector, a model
 selection rule or a guarantee for new devices. Do not tune on the evaluated
 cohort to make these descriptive rates look better.
+
+## Opt-in exact comparison with the declared reference
+
+`diagnose_saved_interval_reference(document)` returns a **separate sidecar
+object**. The default `evaluate_saved_intervals` return value and
+`mlcalc evaluate-intervals` JSON remain unchanged; no diagnostic is inserted
+unless the separate API is called. No new CLI option, model fit, calibration
+step, file write or interval construction is added.
+
+```python
+import json
+from groupbench.interval_evaluation import load_document, diagnose_saved_interval_reference
+
+# Use exactly the same frozen saved-interval document, not a selected subset.
+document = load_document(saved_json_text)
+sidecar = diagnose_saved_interval_reference(document)
+print(json.dumps(sidecar, indent=2, sort_keys=True, allow_nan=False))
+# To save deliberately, choose a separate new file; refuse an existing file.
+# with open("interval-reference.json", "x", encoding="utf-8") as output:
+#     json.dump(sidecar, output, indent=2, sort_keys=True, allow_nan=False)
+```
+
+The sidecar has `schema_id: mlcalc.saved_interval_reference_diagnostic` and
+its own `schema_version: "1.0"`; it is not an evaluation or prediction bundle.
+It reruns the same complete-cohort validation before deriving counts and does
+not read or write any file. It cannot prove that the caller froze endpoints or
+alpha prospectively, nor bind itself to an independently saved artifact.
+
+For declared alpha, the reference is `(1-alpha, alpha/2, alpha/2)` for coverage,
+below-lower and above-upper rates. For each of `row_weighted` and `equal_group`,
+`observed_rate_exact` and `observed_minus_declared_exact` use Fraction-style
+strings such as `"1/2"`, `"-3/10"` and `"0"`. Positive coverage difference means
+more observations were covered than the declared reference on this cohort;
+positive tail difference means more misses on that side. The three observed
+rates sum to one and the three signed differences sum to zero exactly.
+
+These differences are **not calibration errors to optimize to zero**. Besides
+finite-cohort variation, discrete mass and closed endpoints can produce nonzero
+differences with correct predictive quantiles. A genuinely deterministic value
+has correct point bounds `[y,y]`, coverage one and no tail misses for any positive
+alpha. That positive coverage difference is not a defective forecast. There is
+no pass/fail threshold, significance test or future-coverage guarantee. Do not
+retune alpha or endpoints using these already-scored outcomes.
+
+`row_weighted.counts` and `n_rows` expose the pooled numerators and denominator.
+`group_counts` retains each normalized group label, row denominator and covered /
+below / above counts; `equal_group.n_groups` is the count of these declared groups.
+Equal-group rates average exact within-group fractions, not rounded rates and
+not pooled rows. This is **not an independent-source count or a binomial sample
+size**. The `support` block explicitly leaves independence unestablished.
+
+With `alpha: null`, observed rates and counts remain available, while the
+declared reference and signed differences are null. No alpha is inferred.
+All new numerical outputs are exact strings: even a valid tiny alpha whose
+half would underflow binary64 retains an exact reference. Existing input-range
+checks still apply; the sidecar does not create new float-conversion failures
+or reinterpret closed endpoints or ties.
+
+For three group-A rows `(-1,0,1)` and one group-B row `(2)`, all with bounds
+`[0,1]` and alpha `1/5`, row coverage is `1/2` and its difference is `-3/10`;
+equal-group coverage is `1/3` and its difference is `-7/15`. Row tail differences
+are both `3/20`; equal-group below/above differences are `1/15` and `2/5`.
+Repeating all A rows changes their pooled row weight, not their equal-group
+weight. These are invented arithmetic checks, not independent replication.
+
+The sidecar includes declared metadata and group labels; review it before
+sharing. It does not replace coverage, width or the existing interval score,
+rank methods by coverage alone, or authenticate input provenance. Compare
+methods on the same frozen rows, endpoints/protocol, alpha, target, units and
+weighting definition; keep failures rather than silently changing the cohort.
