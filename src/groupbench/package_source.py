@@ -15,7 +15,7 @@ from .verification import _SAFE_OPEN_SUPPORTED, _open_run_directory, _read_file,
 
 SOURCE_FILES = (
     "__init__.py", "__main__.py", "baselines.py", "binary/__init__.py", "binary/cli.py",
-    "binary/data.py", "binary/metrics.py", "binary/model.py", "binary/report.py",
+    "binary/data.py", "binary/metrics.py", "binary/model.py", "binary/report.py", "binary/saved_evaluation.py",
     "binary/workflow.py", "budget_comparison.py", "categorical.py", "cli.py",
     "data.py", "evaluation.py", "evaluation_schema.py", "feature_manifest.py", "input_support.py",
     "interval_evaluation.py", "kernel.py", "metrics.py", "model.py", "observed_history.py", "package_source.py",

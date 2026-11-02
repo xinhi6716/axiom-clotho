@@ -131,3 +131,11 @@ compatible schema minor versions. It does not change grouping, numeric transform
 model grids, objectives, fit counts, or intentional unknown/infrequent compression.
 See [CATEGORICAL_ENCODING.md](CATEGORICAL_ENCODING.md) for exact semantics,
 legacy compatibility, migration, and limitations.
+
+## Score externally saved probabilities without fitting (current source)
+
+The separate [saved binary evaluation API](SAVED_BINARY_EVALUATION.md) accepts an
+explicit complete-cohort document and reuses these scoring definitions without
+training. Expected row IDs and row status prevent silent omission within the
+declared manifest; source completeness, freezing and independence remain unverified.
+It does not change existing bundles, defaults or the CLI.
