@@ -1,12 +1,21 @@
 """No-fit, complete-declared-cohort evaluation of saved binary probabilities."""
 from __future__ import annotations
 
+import argparse
+from decimal import Decimal, InvalidOperation
+import json
 import math
+from pathlib import Path
+import sys
+
+from ..budget_comparison import _read_input
 
 from ..data import validate_groups
 from .data import label_contract, validate_binary_target
 from .metrics import _probability_array, grouped_binary_metrics, metric_contract
 
+MAX_JSON_BYTES = 4 * 1024 * 1024
+MAX_JSON_DEPTH = 16
 MAX_ROWS = 20_000
 MAX_INTEGER = 10**100
 METADATA_KEYS = {
@@ -120,3 +129,139 @@ def evaluate_saved_binary_probabilities(document):
             "This output contains row/group IDs, observed labels, probabilities and declared metadata; review before sharing.",
         ],
     }
+
+
+def _check_json_depth(text):
+    """Bound containers before recursive JSON parsing, ignoring string contents."""
+    depth, in_string, escaped = 0, False, False
+    for char in text:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+        elif char == '"':
+            in_string = True
+        elif char in "[{":
+            depth += 1
+            if depth > MAX_JSON_DEPTH:
+                raise ValueError("Saved binary JSON nesting exceeds 16 containers")
+        elif char in "]}":
+            depth -= 1
+            if depth < 0:
+                raise ValueError("Saved binary JSON has invalid container structure")
+
+
+def _json_decimal_to_native(value, field):
+    if type(value) is not Decimal:
+        return value
+    if field == "observed_label":
+        if value not in (0, 1):
+            raise ValueError("JSON binary labels must be exactly numeric 0 or 1 before conversion")
+        return int(value)
+    if field == "group":
+        if value == value.to_integral_value():
+            result = int(value)
+            if not -MAX_INTEGER < result < MAX_INTEGER:
+                raise ValueError("JSON numeric group integers exceed 100 digits; use text IDs")
+            return result
+        result = float(value)
+        if not math.isfinite(result) or Decimal.from_float(result) != value:
+            raise ValueError("JSON fractional group IDs must be exactly representable in float64; use text IDs to preserve identity")
+        return result
+    # Probabilities have an exact source-domain check before ordinary rounding.
+    if not 0 <= value <= 1:
+        raise ValueError("JSON probabilities must be in [0,1] before float64 conversion")
+    result = float(value)
+    if (not math.isfinite(result) or (value != 0 and result == 0)
+            or (value != 1 and result == 1)):
+        raise ValueError("JSON probability conversion loses a nonendpoint value at a float64 endpoint; supply supported precision")
+    return result
+
+
+def load_saved_binary_document(text):
+    """Parse bounded JSON with explicit binary64 conversion, without file I/O.
+
+    Duplicate keys and lossy group/label identities reject. This loader performs
+    structural/numeric conversion; evaluate_saved_binary_probabilities applies
+    the complete cohort contract. Numeric metrics are not exact-decimal scores.
+    """
+    if type(text) is not str or len(text) > MAX_JSON_BYTES:
+        raise ValueError("Saved binary JSON must be text of at most 4 MiB in UTF-8")
+    try:
+        if len(text.encode("utf-8")) > MAX_JSON_BYTES:
+            raise ValueError("Saved binary JSON exceeds the 4 MiB UTF-8 limit")
+    except UnicodeError:
+        raise ValueError("Saved binary JSON must be valid UTF-8 text") from None
+    _check_json_depth(text)
+
+    def pairs(items):
+        result = {}
+        for key, value in items:
+            if key in result:
+                raise ValueError("Duplicate JSON object key")
+            result[key] = value
+        return result
+
+    def integer(token):
+        if len(token.lstrip("-")) > 100:
+            raise ValueError("JSON integers exceed 100 decimal digits")
+        return int(token)
+
+    def decimal(token):
+        if len(token) > 64:
+            raise ValueError("JSON decimal tokens exceed 64 characters")
+        try:
+            value = Decimal(token)
+        except InvalidOperation:
+            raise ValueError("Unsupported JSON decimal") from None
+        parts = value.as_tuple()
+        if not value.is_finite() or len(parts.digits) > 64 or abs(parts.exponent) > 400:
+            raise ValueError("JSON decimal precision or exponent exceeds supported limits")
+        return value
+
+    def constant(_token):
+        raise ValueError("Nonfinite JSON constants are unsupported")
+
+    try:
+        document = json.loads(text, object_pairs_hook=pairs, parse_int=integer,
+                              parse_float=decimal, parse_constant=constant)
+    except (json.JSONDecodeError, RecursionError):
+        raise ValueError("Saved binary JSON is malformed or exceeds supported nesting") from None
+    _keys(document, {"schema_version", "metadata", "expected_row_ids", "rows"}, "document")
+    rows = document["rows"]
+    if type(rows) is not list or not 1 <= len(rows) <= MAX_ROWS:
+        raise ValueError("Saved binary rows must contain 1 to 20000 entries")
+    for row in rows:
+        _keys(row, {"row_id", "group", "observed_label", "probability_1", "status"}, "row")
+        for field in ("observed_label", "probability_1", "group"):
+            row[field] = _json_decimal_to_native(row[field], field)
+    return document
+
+
+class _SavedBinaryParser(argparse.ArgumentParser):
+    def error(self, _message):
+        self.print_usage(sys.stderr)
+        self.exit(2, "error: invalid saved binary arguments; use --help. Supplied values are not echoed.\n")
+
+
+def main(argv=None):
+    parser = _SavedBinaryParser(prog="python -m groupbench.binary.saved_evaluation",
+                               description=__doc__, allow_abbrev=False)
+    parser.add_argument("input", type=Path, help="Regular local UTF-8 saved-binary JSON; complete report goes to stdout only")
+    args = parser.parse_args(argv)
+    try:
+        document = load_saved_binary_document(_read_input(args.input))
+        report = evaluate_saved_binary_probabilities(document)
+        output = json.dumps(report, sort_keys=True, indent=2, allow_nan=False, ensure_ascii=True)
+    except (ValueError, TypeError, OSError, OverflowError):
+        print("saved binary evaluation rejected: invalid or unavailable local input, unsupported numeric precision, or incomplete cohort; no scores were written.", file=sys.stderr)
+        return 2
+    print(output)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

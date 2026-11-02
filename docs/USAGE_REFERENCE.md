@@ -564,3 +564,24 @@ CSV order is not used as an identity join. Keep the original feature-row mapping
 use the same target and units, and do not silently remove missing outcomes.
 See [delayed-outcome scoring](SAVED_PREDICTION_SCORING.md) for numeric bounds,
 provenance, row/group weighting and the distinction from fresh validation.
+
+
+### Evaluate already saved binary probabilities (no fitting)
+
+```sh
+mlcalc evaluate-binary frozen-binary.json
+# Equivalent aliases:
+groupbench evaluate-binary frozen-binary.json
+clotho tabular evaluate-binary frozen-binary.json
+```
+
+Provide a strict saved-binary JSON document with declared class/target/group/cohort
+meaning, explicit expected row IDs, and exactly one successful row per expected ID.
+This is not a regression prediction bundle or an automatic label join. The shared
+loader/evaluator rejects missing, duplicate, extra or invalid rows; no rows are
+dropped. Success prints complete JSON to stdout, with no fitting or file writes;
+errors exit 2 without partial scores. There is no `--out` or overwrite option.
+Output contains supplied metadata/group identities: review it before sharing.
+The shared parser displays its canonical module invocation in help.
+See [saved binary evaluation](SAVED_BINARY_EVALUATION.md) for the exact JSON
+contract, numeric/read limits, and privacy and provenance limitations.
