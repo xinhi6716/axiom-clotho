@@ -105,6 +105,22 @@ def make_pipeline(X: pd.DataFrame, candidate: Candidate, random_state: int, cate
     return Pipeline([("preprocess", preprocessing), ("model", model)])
 
 
+def _validate_fitted_numeric_state(pipeline):
+    """Reject overflowing learned preprocessing even if a model ignores it."""
+    numeric = pipeline.named_steps["preprocess"].named_transformers_.get("numeric")
+    if numeric is None:
+        return
+    for step, attributes in (("impute", ("statistics_",)),
+                             ("scale", ("mean_", "var_", "scale_"))):
+        transformer = numeric.named_steps[step]
+        for name in attributes:
+            if not np.isfinite(getattr(transformer, name)).all():
+                raise ValueError(
+                    f"Preprocessing produced non-finite fitted numeric state ({step}.{name}). "
+                    "Rescale numeric inputs to practical units before fitting."
+                )
+
+
 def _validate_fitted_tree_state(pipeline):
     """Reject non-finite floating-point tree arrays, even if predictions are finite."""
     model = pipeline.named_steps["model"]
@@ -161,6 +177,7 @@ class GroupBenchRegressor(RegressorMixin, BaseEstimator):
                 for train, test in splits:
                     pipeline = make_pipeline(X.iloc[train], candidate, seed, **encoding_options(plan.categorical_encoding))
                     pipeline.fit(X.iloc[train], y[train])
+                    _validate_fitted_numeric_state(pipeline)
                     _validate_fitted_tree_state(pipeline)
                     prediction = pipeline.predict(X.iloc[test])
                     oof[test] = prediction
@@ -180,6 +197,7 @@ class GroupBenchRegressor(RegressorMixin, BaseEstimator):
                 chosen = candidates[best]
                 pipeline = make_pipeline(X, chosen, seed, **encoding_options(plan.categorical_encoding))
                 pipeline.fit(X, y)
+                _validate_fitted_numeric_state(pipeline)
                 _validate_fitted_tree_state(pipeline)
                 family_models[family] = pipeline
                 family_candidates[family] = chosen.name
