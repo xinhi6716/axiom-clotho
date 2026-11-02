@@ -92,6 +92,28 @@ def validate_prediction_features(X, feature_names, feature_types):
     return X
 
 
+def _validate_target_precision(original):
+    """Guard typed numeric values; retain the legacy text/object parse policy."""
+    message = ("Integer targets must be exactly representable in float64, and floating target "
+               "dtypes wider than float64 are not supported. Rescale or explicitly convert "
+               "targets after reviewing their precision.")
+    try:
+        if original.dtype.kind == "f" and original.dtype.itemsize > 8:
+            raise ValueError(message)
+        if original.dtype.kind not in "iuO":
+            return
+        for value in original.flat:
+            if isinstance(value, Integral):
+                converted = float(value)
+                # A comparison against a float can itself round the integer.
+                if not np.isfinite(converted) or int(converted) != int(value):
+                    raise ValueError(message)
+            elif isinstance(value, np.floating) and value.dtype.itemsize > 8:
+                raise ValueError(message)
+    except (TypeError, ValueError, OverflowError):
+        raise ValueError(message) from None
+
+
 def validate_target(y, n_rows: int) -> np.ndarray:
     # np.asarray discards MaskedArray masks and exposes the hidden payload.
     # A masked label is missing even when its stored value happens to be finite.
@@ -100,8 +122,11 @@ def validate_target(y, n_rows: int) -> np.ndarray:
     if np.iscomplexobj(y):
         raise ValueError("Complex target values are not supported.")
     try:
-        original = np.asarray(y)
-    except (TypeError, ValueError) as exc:
+        # Do not promote a mixed Python integer/float sequence before checking
+        # each scalar's precision. Existing arrays already have explicit dtypes.
+        original = (np.asarray(y) if isinstance(y, (np.ndarray, pd.Series))
+                    else np.asarray(y, dtype=object))
+    except (TypeError, ValueError, OverflowError) as exc:
         raise ValueError("The target must be a one-dimensional, finite numeric vector.") from exc
     # NumPy converts datetime/timedelta values to unit-dependent numbers,
     # including NaT to a finite minimum integer. Never infer target units
@@ -110,9 +135,15 @@ def validate_target(y, n_rows: int) -> np.ndarray:
             isinstance(value, (date, timedelta, np.datetime64, np.timedelta64))
             for value in original.flat)):
         raise ValueError("Datetime and timedelta targets are not supported; convert observed outcomes to explicit numeric units and preserve missing targets.")
+    # Object containers can hide NumPy complex scalars from np.iscomplexobj;
+    # float(complex_numpy_scalar) can discard their imaginary part with a warning.
+    if original.dtype.kind == "O" and any(isinstance(value, (complex, np.complexfloating))
+                                          for value in original.flat):
+        raise ValueError("Complex target values are not supported.")
+    _validate_target_precision(original)
     try:
         a = np.asarray(y, dtype=float)
-    except (TypeError, ValueError) as exc:
+    except (TypeError, ValueError, OverflowError) as exc:
         raise ValueError("The target must be a one-dimensional, finite numeric vector.") from exc
     if a.ndim != 1 or len(a) != n_rows or not np.isfinite(a).all():
         raise ValueError("The target must have one finite numeric value per row; missing targets are not dropped silently.")
