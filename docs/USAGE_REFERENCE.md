@@ -552,3 +552,15 @@ This is separate from the unchanged byte-only `mlcalc verify`. Supported schema
 combinations, smaller parser bounds and explicitly unchecked metadata are in
 [the prediction bundle contract](../docs/PREDICTION_BUNDLE_SCHEMA.md). A pass is not
 scientific validation, authenticity, or an atomic filesystem snapshot.
+
+
+## Score saved regression predictions when later outcomes arrive
+
+After `mlcalc predict`, use
+`mlcalc score-predictions --run-dir runs/new-devices --outcomes later-outcomes.csv`
+to print descriptive scores without fitting or writing files. Outcomes require
+exactly `row_position,group,observed` and the complete original prediction roster;
+CSV order is not used as an identity join. Keep the original feature-row mapping,
+use the same target and units, and do not silently remove missing outcomes.
+See [delayed-outcome scoring](SAVED_PREDICTION_SCORING.md) for numeric bounds,
+provenance, row/group weighting and the distinction from fresh validation.
