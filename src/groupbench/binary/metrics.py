@@ -102,6 +102,8 @@ def binary_metrics(y_true, probability_1):
             logarithmic[positive] = -np.log(q[positive])
             logarithmic[~positive] = -np.log1p(-q[~positive])
             log_loss = _mean(logarithmic)
+            # Diagnostic rounding follows float64, independent of caller seterr.
+            mean_probability = float(np.mean(p))
     except FloatingPointError as exc:
         raise ValueError("Binary metric arithmetic overflowed or became invalid in float64.") from exc
     if not 0 <= brier <= 1 or log_loss < 0:
@@ -112,7 +114,7 @@ def binary_metrics(y_true, probability_1):
     recall, specificity = _ratio(tp, tp + fn), _ratio(tn, tn + fp)
     return {"n_rows": len(y), "n_true_0": tn + fp, "n_true_1": tp + fn,
             "n_predicted_0": tn + fn, "n_predicted_1": tp + fp,
-            "positive_prevalence": float(np.mean(y)), "mean_probability_1": float(np.mean(p)),
+            "positive_prevalence": float(np.mean(y)), "mean_probability_1": mean_probability,
             "brier": brier, "log_loss_clipped": log_loss,
             "probability_below_log_epsilon_count": int(np.sum(p < EPSILON)),
             "probability_above_log_one_minus_epsilon_count": int(np.sum(p > 1 - EPSILON)),
