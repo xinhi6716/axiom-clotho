@@ -195,3 +195,13 @@ b7 更新 Clotho 圖像、報告呈現與文件；保留 b6 拒絕已擬合迴�
 
 **Moirai** 系列 · [Axiom](https://github.com/xinhi6716) · [Chronos](https://github.com/xinhi6716/axiom-chronos) · [Atropos](https://github.com/xinhi6716/axiom-atropos)
 
+
+### 選用領域留出內層選模
+
+表格迴歸的 `clotho tabular run`、`predict`、`plan run` 與 `plan predict`
+現在可使用 `--domain COLUMN --inner-strategy leave_one_domain_out`。
+此策略必須省略 `--inner-splits`，內層折數由各訓練分區的領域數決定。
+領域欄位只是訓練中繼資料，不會成為預測特徵；查詢 CSV 只需要特徵欄位。
+預設行為不變，外層仍是群組留出，不代表領域轉移效能。詳見
+[虛構資料命令列範例](examples/domain-inner-tabular/README.md)。
+本次未擴充 measurement 或 FET 設定結構。

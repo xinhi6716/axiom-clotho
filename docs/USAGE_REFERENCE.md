@@ -606,3 +606,18 @@ declarations. It prints descriptive paired absolute-error contrasts, with row an
 equal-group summaries; it does not infer physical identity, significance or a
 winner. See the [comparison CLI/API guide](SAVED_PREDICTION_COMPARISON.md) for
 contract limits, aliases and an invented self-comparison example.
+
+## Opt-in domain-held-out inner selection (tabular regression)
+
+`clotho tabular run`, `predict`, `plan run` and `plan predict` accept
+`--domain COLUMN --inner-strategy leave_one_domain_out`. The domain column is
+training-only metadata, never a predictor; queries remain feature-only. Omit
+`--inner-splits` with this strategy: any explicitly supplied count is rejected
+because the number of folds is determined separately by each training partition's
+domains. Without the new options, group-kfold selection still defaults to three
+inner folds and existing outputs are unchanged.
+
+See the [complete invented example](../examples/domain-inner-tabular/README.md)
+for commands, exact-string label rules, no-fit/fit-count behavior, privacy and
+limitations. Outer evaluation remains group-held-out, not domain-held-out.
+This CLI addition does not change binary, measurement or FET schemas.

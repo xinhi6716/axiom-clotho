@@ -1,0 +1,7 @@
+group,x,target,domain
+a,0,0,lab-A
+b,1,2,lab-A
+c,2,3,lab-B
+d,3,4,lab-B
+e,4,5,lab-C
+f,5,6,lab-C

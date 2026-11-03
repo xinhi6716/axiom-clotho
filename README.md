@@ -283,3 +283,13 @@ Original code and synthetic generators: [MIT](LICENSE). Dependencies retain thei
 
 Part of **Moirai** · [Axiom](https://github.com/xinhi6716) · [Chronos](https://github.com/xinhi6716/axiom-chronos) · [Atropos](https://github.com/xinhi6716/axiom-atropos)
 
+
+### Opt-in tabular domain-inner selection
+
+For training data with declared domains, tabular regression `run`, `predict` and
+both `plan` routes now accept `--domain COLUMN --inner-strategy leave_one_domain_out`.
+Omit `--inner-splits` for this strategy; folds come from training domains. Queries
+need predictors only. Defaults are unchanged, and outer evaluation still holds
+out groups, not necessarily domains. See the [invented CLI example](examples/domain-inner-tabular/README.md)
+for commands, validation, privacy and limitations. This does not extend measurement
+or FET configuration schemas.
