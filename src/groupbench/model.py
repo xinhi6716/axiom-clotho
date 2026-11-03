@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
 from copy import deepcopy
@@ -24,7 +25,7 @@ from .data import (validate_features, validate_groups, validate_prediction_featu
                    validate_seed, validate_target)
 from .metrics import grouped_metrics
 from .kernel import NystroemRidgeRegressor
-from .baselines import GroupBalancedMedianRegressor
+from .baselines import GroupBalancedMedianRegressor, GroupBalancedRidgeRegressor, _reject_masked
 from .splitting import GroupKFold, audit_split
 from .domain_selection import GROUP, DOMAIN, validate_strategy, domain_vector, domain_splits, domain_audit
 
@@ -41,7 +42,7 @@ def candidates_for(baselines) -> list[Candidate]:
             or not baselines or any(not isinstance(value, str) for value in baselines)
             or len(set(baselines)) != len(baselines)):
         raise ValueError("baselines must be a non-empty ordered sequence of distinct model family names.")
-    known = {"dummy", "ridge", "extra_trees", "nystroem_ridge", "group_median"}
+    known = {"dummy", "ridge", "extra_trees", "nystroem_ridge", "group_median", "group_balanced_ridge"}
     if set(baselines) - known:
         raise ValueError(f"Unknown baseline. Choose from {sorted(known)}.")
     result = []
@@ -50,6 +51,8 @@ def candidates_for(baselines) -> list[Candidate]:
             result.append(Candidate("dummy_mean", family, {"strategy": "mean"}))
         elif family == "ridge":
             result.extend(Candidate(f"ridge_alpha_{alpha:g}", family, {"alpha": alpha}) for alpha in (0.1, 1.0, 10.0))
+        elif family == "group_balanced_ridge":
+            result.extend(Candidate(f"group_balanced_ridge_alpha_{alpha:g}", family, {"alpha": alpha}) for alpha in (0.1, 1.0, 10.0))
         elif family == "group_median":
             result.append(Candidate("group_median_lower", family, {}))
         elif family == "nystroem_ridge":
@@ -91,6 +94,8 @@ def selection_plan(X, groups, *, baselines, inner_splits, random_state, objectiv
     candidates = tuple(candidates_for(baselines))
     validate_strategy(inner_strategy, inner_splits, domains)
     if inner_strategy == DOMAIN:
+        if "group_balanced_ridge" in baselines:
+            raise ValueError("group_balanced_ridge supports only group_kfold inner selection, not leave_one_domain_out.")
         if isinstance(domains, pd.Series) and domains.name in X.columns:
             raise ValueError("Domain metadata cannot be a predictor.")
         if isinstance(domains, pd.Series) and not domains.index.equals(X.index):
@@ -124,6 +129,8 @@ def make_pipeline(X: pd.DataFrame, candidate: Candidate, random_state: int, cate
         model = Ridge(**candidate.params, solver="lsqr")
     elif candidate.family == "extra_trees":
         model = ExtraTreesRegressor(**candidate.params, random_state=random_state, n_jobs=1)
+    elif candidate.family == "group_balanced_ridge":
+        model = GroupBalancedRidgeRegressor(**candidate.params)
     elif candidate.family == "group_median":
         model = GroupBalancedMedianRegressor(**candidate.params)
     elif candidate.family == "nystroem_ridge":
@@ -134,8 +141,8 @@ def make_pipeline(X: pd.DataFrame, candidate: Candidate, random_state: int, cate
 
 
 def _fit_pipeline(pipeline, X, y, groups, family):
-    """Only the group-aware constant receives this fit's sliced training groups."""
-    if family == "group_median":
+    """Only explicit group-aware estimators receive this fit's training groups."""
+    if family in ("group_median", "group_balanced_ridge"):
         pipeline.fit(X, y, model__groups=groups)
     else:
         pipeline.fit(X, y)
@@ -143,8 +150,20 @@ def _fit_pipeline(pipeline, X, y, groups, family):
     _validate_fitted_tree_state(pipeline)
 
 
-def _optional_fit_details(pipeline, family):
+def _optional_fit_details(pipeline, family, training_groups=None):
     model = pipeline.named_steps["model"]
+    if family == "group_balanced_ridge":
+        details = deepcopy(model.fit_details_)
+        counts = Counter(training_groups)
+        expected = {"training_rows": len(training_groups), "training_groups": len(counts),
+                    "transformed_features": int(model.n_features_in_),
+                    "min_training_group_size": min(counts.values()),
+                    "max_training_group_size": max(counts.values())}
+        if any(type(details.get(k)) is not int or details[k] != v for k, v in expected.items()):
+            raise ValueError("group_balanced_ridge fit details differ from the actual training slice.")
+        if type(details.get("alpha")) is not float or details["alpha"] != model.alpha:
+            raise ValueError("group_balanced_ridge fit alpha differs from the candidate.")
+        return details
     if family == "nystroem_ridge":
         return deepcopy(model.fit_details_)
     if family == "group_median":
@@ -158,8 +177,8 @@ def _optional_fit_details(pipeline, family):
 
 
 def optional_capabilities(baselines):
-    """Canonical exact markers for the two explicitly supported extensions."""
-    return [family + "-v1" for family in ("group_median", "nystroem_ridge")
+    """Canonical exact markers for explicitly supported optional families."""
+    return [family + "-v1" for family in ("group_median", "nystroem_ridge", "group_balanced_ridge")
             if family in baselines]
 
 
@@ -222,6 +241,10 @@ class GroupBenchRegressor(RegressorMixin, BaseEstimator):
         if domains is not None:
             domains = np.asarray(domains) if not np.ma.isMaskedArray(domains) else domains
         X = validate_features(X)
+        if (isinstance(self.baselines, Sequence) and not isinstance(self.baselines, (str, bytes))
+                and "group_balanced_ridge" in self.baselines):
+            _reject_masked(y, "y")
+            _reject_masked(groups, "groups")
         y = validate_target(y, len(X))
         groups = validate_groups(groups, len(X))
         plan = selection_plan(X, groups, baselines=self.baselines, inner_splits=self.inner_splits,
@@ -250,7 +273,7 @@ class GroupBenchRegressor(RegressorMixin, BaseEstimator):
                     oof[test] = prediction
                     scores, _ = grouped_metrics(y[test], prediction, groups[test])
                     fold_scores.append(scores[plan.objective])
-                    details = _optional_fit_details(pipeline, candidate.family)
+                    details = _optional_fit_details(pipeline, candidate.family, groups[train])
                     if details is not None:
                         inner_fit_details.append({"inner_fold": inner_fold, "train_rows": len(train),
                                                   "test_rows": len(test),
@@ -273,7 +296,7 @@ class GroupBenchRegressor(RegressorMixin, BaseEstimator):
                 _fit_pipeline(pipeline, X, y, groups, family)
                 family_models[family] = pipeline
                 family_candidates[family] = chosen.name
-                details = _optional_fit_details(pipeline, family)
+                details = _optional_fit_details(pipeline, family, groups)
                 if details is not None:
                     family_fit_details[family] = details
         # Publish state only after selection and every family refit succeeds.

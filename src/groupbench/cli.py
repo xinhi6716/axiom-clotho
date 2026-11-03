@@ -82,7 +82,7 @@ def _add_protocol(parser, *, outer=True, output=True, domain_selection=False):
     else:
         parser.add_argument("--inner-splits", type=int, default=3)
     parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--baselines", default="dummy,ridge,extra_trees", help="Comma-separated families: dummy,ridge,extra_trees; optional nystroem_ridge,group_median (defaults unchanged)")
+    parser.add_argument("--baselines", default="dummy,ridge,extra_trees", help="Comma-separated families: dummy,ridge,extra_trees; optional nystroem_ridge,group_median,group_balanced_ridge (defaults unchanged; group_balanced_ridge requires group_kfold and weights only squared-loss Ridge, not preprocessing)")
     parser.add_argument("--categorical-encoding", choices=ENCODINGS, default=LEGACY,
                         help="Use distinct-v2 to distinguish literal missing-marker strings; default preserves legacy-v1")
     parser.add_argument("--objective", choices=("group_mae", "mae"), default="group_mae")
@@ -391,13 +391,19 @@ The groupbench command is an alias for the same CLI.""",
             print(f"Prediction contract {result.contract_version} checked: schema {result.schema_version}, {result.n_predictions} rows, {result.n_features} features.")
             print(f"Input support: {result.input_support}.")
             print("Checked metadata subset and exact CSV bytes only; not scientific correctness, authenticity, model execution, or an atomic snapshot.")
+            if result.schema_version == "1.5":
+                print("Declared candidate, selection and weighted-fit details are consistency-checked, not proof of actual training weights or source truth.")
             print("Additional manifest fields and unlisted files are not validated.")
             return 0
         if args.command == "validate-evaluation-bundle":
             result = validate_evaluation_bundle(args.run_dir)
             print(f"Evaluation contract {result.contract_version} checked: schema {result.schema_version}, {result.n_rows} rows, {result.n_groups} groups, {result.n_models} models.")
             print("Saved regression metric consistency only; not scientific validity, source authenticity, model execution or an atomic snapshot.")
-            print("Inner selection, features, other metadata and unlisted files are not validated.")
+            if result.schema_version == "1.4":
+                print("Declared inner selection and weighted-fit details are consistency-checked, not proof of actual training weights or source truth.")
+                print("Features, other metadata and unlisted files are not validated.")
+            else:
+                print("Inner selection, features, other metadata and unlisted files are not validated.")
             return 0
         if args.command == "fixture":
             frame = make_materials_fixture(args.groups, args.rows_per_group, args.seed)

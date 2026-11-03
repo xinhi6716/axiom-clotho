@@ -130,4 +130,14 @@ def fit_predict(frame: pd.DataFrame, new_rows: pd.DataFrame, *, target: str, gro
         manifest["config"].update(inner_strategy=inner_strategy, domain=domain, categorical_encoding=categorical_encoding,
                                   **domain_metadata(plan.domains, groups))
         manifest["limitations"].append(LIMITATION)
+    if "group_balanced_ridge" in baselines:
+        manifest.update(schema_version="1.5", protocol="group-fit-predict-extended-families-v2",
+                        family_candidates=deepcopy(estimator.family_candidates_))
+        manifest["config"]["candidates"] = [
+            {"name": c.name, "family": c.family, "params": dict(c.params)} for c in plan.candidates]
+        manifest["limitations"].extend([
+            "group_balanced_ridge fits equal-training-group weighted squared loss, not group MAE; improvement is not guaranteed.",
+            "Only its final Ridge is weighted; imputation, scaling and category handling remain unweighted training-row operations.",
+            "Metadata consistency cannot reconstruct training rows or authenticate weights, execution, source truth or leakage absence.",
+        ])
     return PredictionResult(pd.DataFrame({"row_position": np.arange(len(predictions)), "prediction": predictions}), manifest, estimator)

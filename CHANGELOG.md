@@ -1,5 +1,25 @@
 # Changelog
 
+## Explicit group-balanced Ridge (unreleased source)
+
+- Add opt-in `group_balanced_ridge` with alpha 0.1, 1 and 10 and locally derived
+  training weights `n / (G * n_g)`. It fits weighted squared loss, not group MAE;
+  imputation, scaling and category handling remain row-weighted. Defaults,
+  objectives and candidate-order tie rules are unchanged.
+- Add bounded dense/CSR/CSC validation, explicit single-thread LSQR recipe,
+  numeric headroom checks, atomic fit state and compact fit diagnostics without
+  retained raw targets, groups or row-weight vectors.
+- Version only requests containing this family: evaluation/plan 1.4 and
+  prediction/plan 1.5, with separately frozen candidate/audit/capability contracts.
+  Older contracts remain readable; metadata consistency cannot authenticate
+  executed weights, source truth, leakage absence or scientific performance.
+- Support ordinary group-K-fold regression API, plans and CLI only. Reject
+  domain-inner, measurement/FET and binary use before fitting. Fixed temporal
+  recipes, raw readers, lazy import boundaries and source inventory38 remain.
+- See [optional family semantics and limits](docs/OPTIONAL_REGRESSION_FAMILIES.md).
+  This is a source feature, not a new release, empirical gain or compatibility
+  matrix claim. Frozen b7 downloads do not contain it.
+
 ## Metadata planning startup (unreleased source)
 
 - Defer public package exports and legacy CLI dependencies so metadata-only

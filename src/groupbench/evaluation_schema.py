@@ -9,7 +9,10 @@ import numpy as np
 
 from .data import validate_groups
 from .metrics import regression_metrics, _checked_arithmetic
-from .prediction_schema import _manifest, _DECIMAL, _optional_selection_metadata, _extension_families, _DOMAIN_FIELDS, _domain_config, _domain_selection, _reject_domain_audits, _domain_candidates, _same_declaration
+from .prediction_schema import (_manifest, _DECIMAL, _optional_selection_metadata, _extension_families,
+    _DOMAIN_FIELDS, _domain_config, _domain_selection, _reject_domain_audits, _domain_candidates,
+    _same_declaration, _extension_families_v2, _extended_selection_v2, _reject_ridge_v2_markers,
+    _EXTENDED_FAMILIES_V2, _GROUP_FIT_AUDIT_V2)
 from .verification import (EVALUATION_FILES, MAX_CHECKSUM_BYTES, MAX_PAYLOAD_BYTES,
                            _checksum_records, _open_run_directory, _read_file, _signature)
 
@@ -89,12 +92,16 @@ def _partitioned_metrics(observed, predicted, group_rows, fold_rows, fold_groups
 def _check(manifest, summary, raw):
     version = manifest.get("schema_version")
     protocols = {"1.0": "nested-group-kfold-v1", "1.1": "nested-group-kfold-distinct-v2",
-                 "1.2": "nested-group-kfold-extended-families-v1", "1.3": "nested-group-outer-domain-inner-v1"}
+                 "1.2": "nested-group-kfold-extended-families-v1", "1.3": "nested-group-outer-domain-inner-v1",
+                 "1.4": "nested-group-kfold-extended-families-v2"}
     if not isinstance(version, str) or version not in protocols or manifest.get("protocol") != protocols[version] or "schema_id" in manifest or "schema_id" in summary:
         _fail("only supported regression evaluation schemas/protocols are accepted.")
     config = manifest.get("config")
     if not isinstance(config, dict):
         _fail("missing configuration.")
+    if version != "1.4":
+        _reject_ridge_v2_markers(manifest)
+        _reject_ridge_v2_markers(summary)
     if (version == "1.1" and config.get("categorical_encoding") != "distinct-v2") or (version == "1.0" and "categorical_encoding" in config):
         _fail("encoding and protocol differ.")
     if summary.get("schema_version") != version or (version == "1.1" and summary.get("protocol") != protocols[version]) or (version == "1.0" and "protocol" in summary):
@@ -103,12 +110,17 @@ def _check(manifest, summary, raw):
         if _DOMAIN_FIELDS & set(config):
             _fail("domain selection requires evaluation schema 1.3.")
         _reject_domain_audits(manifest)
-    if version in ("1.2", "1.3"):
-        optional = _extension_families(manifest, config, allow_empty=version == "1.3")
+    if version in ("1.2", "1.3", "1.4"):
+        if version == "1.4":
+            optional, _ = _extension_families_v2(manifest, config)
+        else:
+            optional = _extension_families(manifest, config, allow_empty=version == "1.3")
         if summary.get("capabilities") != manifest["capabilities"] or summary.get("protocol") != protocols[version]:
             _fail("extended capability or protocol differs in summary.")
     baselines = config.get("baselines")
-    known = ("dummy", "ridge", "extra_trees", "nystroem_ridge", "group_median") if version in ("1.2", "1.3") else ("dummy", "ridge", "extra_trees")
+    known = (_EXTENDED_FAMILIES_V2 if version == "1.4" else
+             ("dummy", "ridge", "extra_trees", "nystroem_ridge", "group_median") if version in ("1.2", "1.3") else
+             ("dummy", "ridge", "extra_trees"))
     if not isinstance(baselines, list) or not baselines or any(not isinstance(x, str) or x not in known for x in baselines) or len(set(baselines)) != len(baselines):
         _fail("unsupported or duplicate model family.")
     names = baselines + ["selected"]
@@ -185,12 +197,29 @@ def _check(manifest, summary, raw):
                         overlap_count=0, train_groups=train_groups, test_groups=test_groups)
         if not isinstance(audit, dict):
             _fail("invalid fold audit.")
+        if version == "1.4":
+            required = _GROUP_FIT_AUDIT_V2 | {"inner_seed", "selected_candidate", "selected_family",
+                "family_candidates", "inner_selection", "inner_folds", "family_fit_details"}
+            if set(audit) != required:
+                _fail("extended-families-v2 outer fold audit fields differ.")
         _compare({key: audit.get(key) for key in expected}, expected)
         if version != "1.3":
             _reject_domain_audits(audit)
-        if version in ("1.2", "1.3"):
+        if version in ("1.2", "1.3", "1.4"):
             inner = _count(inner_counts[fold] if version == "1.3" else config.get("inner_splits"), len(train_groups), 2)
-            if optional:
+            if version == "1.4":
+                seed = _count(config.get("random_state"), 2**32 - 1)
+                expected_seed = seed + fold + 1
+                if type(audit.get("inner_seed")) is not int or audit["inner_seed"] != expected_seed:
+                    _fail("extended-families-v2 inner seed differs from the scheduled fold.")
+                _extended_selection_v2(audit, n-test_rows, len(train_groups), inner, expected_seed,
+                                       config, group_sizes={g: len(group_rows[g]) for g in train_groups})
+                # The selected column is exactly the selected family refit's
+                # predictions, not another fit selected on the outer fold.
+                if any(predictions["selected"][i] != predictions[audit["selected_family"]][i]
+                       for i in fold_rows[fold]):
+                    _fail("selected predictions differ from their declared family refit.")
+            elif optional:
                 _optional_selection_metadata(audit, n-test_rows, len(train_groups), inner, audit.get("inner_seed"), optional)
             if version == "1.3":
                 if not isinstance(audit.get("family_candidates"), dict):
@@ -221,4 +250,8 @@ def validate_evaluation_bundle(run_dir) -> EvaluationSchemaResult:
         for name, signature in signatures.items():
             if _signature(os.stat(name, dir_fd=fd, follow_symlinks=False)) != signature:
                 _fail("bundle changed during validation; retry an idle directory.")
+    if version == "1.4":
+        return EvaluationSchemaResult("1.0", version, n, ng, models, total,
+            checked_scope="saved_regression_rows_folds_models_metrics_and_extended_family_declarations",
+            unchecked_metadata="features_actual_inner_predictions_and_score_computation_weight_execution_fit_source_authenticity_and_other_metadata")
     return EvaluationSchemaResult("1.0", version, n, ng, models, total)

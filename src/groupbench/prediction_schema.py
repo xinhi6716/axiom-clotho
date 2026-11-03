@@ -248,7 +248,12 @@ def _optional_selection_metadata(value, rows, groups, inner_splits, seed, option
         _fail("extended selection records are missing or invalid.")
     for family in optional:
         family_records = [record for record in records if record.get("family") == family]
-        alphas = (0.1, 1.0, 10.0) if family == "nystroem_ridge" else (None,)
+        if family == "nystroem_ridge":
+            alphas = (0.1, 1.0, 10.0)
+        elif family == "group_median":
+            alphas = (None,)
+        else:
+            _fail("unknown optional family in the v1 detail contract.")
         if len(family_records) != len(alphas):
             _fail("extended candidate coverage differs.")
         for record, alpha in zip(family_records, alphas):
@@ -265,7 +270,7 @@ def _optional_selection_metadata(value, rows, groups, inner_splits, seed, option
                         _fail("extended per-fit row counts differ.")
                 if family == "nystroem_ridge":
                     _kernel_details(item.get("details"), audit["train_rows"], seed, alpha)
-                else:
+                elif family == "group_median":
                     _median_details(item.get("details"), audit["train_rows"], audit["train_group_count"])
     final = _object(value.get("family_fit_details"))
     if set(final) != set(optional):
@@ -273,8 +278,10 @@ def _optional_selection_metadata(value, rows, groups, inner_splits, seed, option
     for family in optional:
         if family == "nystroem_ridge":
             _kernel_details(final[family], rows, seed)
-        else:
+        elif family == "group_median":
             _median_details(final[family], rows, groups)
+        else:
+            _fail("unknown optional family in the v1 detail contract.")
 
 
 _DOMAIN_FIELDS = {"inner_strategy", "domain", "domain_values_sha256", "group_domains", "n_domains", "inner_splits_per_outer"}
@@ -319,6 +326,262 @@ def _same_declaration(actual, expected):
     if type(expected) in (int, float):
         return type(actual) in (int, float) and actual == expected
     return type(actual) is type(expected) and actual == expected
+
+
+# Frozen group-only extended-families-v2 contracts. Keep these declarations
+# separate from both installed model defaults and the domain-inner-v1 grid.
+_EXTENDED_FAMILIES_V2 = ("dummy", "ridge", "extra_trees", "nystroem_ridge",
+                         "group_median", "group_balanced_ridge")
+_EXTENDED_CAPABILITIES_V2 = ("group_median", "nystroem_ridge", "group_balanced_ridge")
+_EXTENDED_GRID_V2 = {
+    "dummy": (("dummy_mean", {"strategy": "mean"}),),
+    "ridge": tuple((f"ridge_alpha_{a:g}", {"alpha": a}) for a in (0.1, 1.0, 10.0)),
+    "extra_trees": tuple((f"extra_trees_depth_{d or 'none'}",
+                          {"max_depth": d, "n_estimators": 64, "min_samples_leaf": 2}) for d in (6, None)),
+    "group_median": (("group_median_lower", {}),),
+    "nystroem_ridge": tuple((f"nystroem_ridge_alpha_{a:g}", {"alpha": a, "rank_cap": 64})
+                           for a in (0.1, 1.0, 10.0)),
+    "group_balanced_ridge": tuple((f"group_balanced_ridge_alpha_{a:g}", {"alpha": a})
+                                 for a in (0.1, 1.0, 10.0)),
+}
+_GROUP_FIT_AUDIT_V2 = frozenset({"fold", "train_rows", "test_rows", "train_group_count",
+                               "test_group_count", "overlap_count", "train_groups", "test_groups"})
+_SELECTION_RECORD_V2 = frozenset({"candidate", "family", "params", "selection_score",
+                                "objective", "inner_fold_scores"})
+_RIDGE_DETAILS_V1 = frozenset({"implementation", "training_rows", "training_groups",
+    "transformed_features", "alpha", "solver", "tol", "max_iter", "fit_intercept", "copy_X",
+    "positive", "threads", "fitting_loss", "weight_rule", "normalization",
+    "preprocessing_weighting", "min_training_group_size", "max_training_group_size",
+    "min_row_weight", "max_row_weight", "sum_row_weights"})
+_WEIGHT_REL_TOL = 64 * 2.0 ** -52
+
+
+def _reject_ridge_v2_markers(value):
+    """Reject explicit new-family declarations when a bundle claims an old schema."""
+    if not isinstance(value, dict):
+        return
+    objects = [value]
+    outer = value.get("outer_folds")
+    if isinstance(outer, list):
+        objects.extend(item for item in outer if isinstance(item, dict))
+    config = value.get("config")
+    if isinstance(config, dict):
+        baselines = config.get("baselines")
+        if isinstance(baselines, list) and "group_balanced_ridge" in baselines:
+            _fail("group_balanced_ridge requires the extended-families-v2 schema.")
+        candidates = config.get("candidates")
+        if isinstance(candidates, list):
+            objects.extend(item for item in candidates if isinstance(item, dict))
+    for obj in objects:
+        caps = obj.get("capabilities")
+        if isinstance(caps, list) and "group_balanced_ridge-v1" in caps:
+            _fail("group_balanced_ridge capability requires the extended-families-v2 schema.")
+        records = obj.get("inner_selection")
+        inspected = [obj] + (records if isinstance(records, list) else [])
+        final = obj.get("family_fit_details")
+        winners = obj.get("family_candidates")
+        if any(isinstance(d, dict) and "group_balanced_ridge" in d for d in (final, winners)):
+            _fail("group_balanced_ridge refit metadata requires the extended-families-v2 schema.")
+        if isinstance(final, dict):
+            inspected.extend(final.values())
+        for item in inspected:
+            if not isinstance(item, dict):
+                continue
+            for key in ("name", "candidate", "family", "selected_candidate", "selected_family", "implementation"):
+                token = item.get(key)
+                if isinstance(token, str) and (token.startswith("group_balanced_ridge") or token == "group-balanced-ridge-v1"):
+                    _fail("group_balanced_ridge metadata requires the extended-families-v2 schema.")
+            details = item.get("inner_fit_details")
+            if isinstance(details, list):
+                for fit in details:
+                    if (isinstance(fit, dict) and isinstance(fit.get("details"), dict)
+                            and fit["details"].get("implementation") == "group-balanced-ridge-v1"):
+                        _fail("group_balanced_ridge fit details require the extended-families-v2 schema.")
+
+
+def _extension_families_v2(value, config):
+    baselines = config.get("baselines")
+    if (not isinstance(baselines, list) or not baselines
+            or any(type(f) is not str or f not in _EXTENDED_FAMILIES_V2 for f in baselines)
+            or len(set(baselines)) != len(baselines) or "group_balanced_ridge" not in baselines):
+        _fail("extended-families-v2 requires explicit group_balanced_ridge and known unique families.")
+    optional = [f for f in _EXTENDED_CAPABILITIES_V2 if f in baselines]
+    if (value.get("capabilities") != [f + "-v1" for f in optional]
+            or config.get("categorical_encoding") not in ("legacy-v1", "distinct-v2")):
+        _fail("extended-families-v2 capabilities or encoding differ.")
+    if type(config.get("threads")) is not int or config["threads"] != 1:
+        _fail("extended-families-v2 requires the single-thread recipe.")
+    candidates = [{"name": name, "family": family, "params": params}
+                  for family in baselines for name, params in _EXTENDED_GRID_V2[family]]
+    declared = config.get("candidates")
+    if (not isinstance(declared, list) or len(declared) != len(candidates)
+            or any(not _same_declaration(a, b) for a, b in zip(declared, candidates))):
+        _fail("extended-families-v2 candidate declaration differs from the frozen grid.")
+    return optional, candidates
+
+
+def _balanced_ridge_details(value, rows, groups, alpha, group_sizes=None):
+    """Validate finite summary arithmetic; metadata cannot authenticate fitting."""
+    value = _object(value)
+    if set(value) != _RIDGE_DETAILS_V1:
+        _fail("group-balanced Ridge detail fields differ.")
+    _count(value["transformed_features"], 6400, positive=True)
+    expected = {"implementation": "group-balanced-ridge-v1", "training_rows": rows,
+        "training_groups": groups, "solver": "lsqr", "max_iter": None,
+        "fit_intercept": True, "copy_X": True, "positive": False, "threads": 1,
+        "fitting_loss": "weighted_squared_error", "weight_rule": "equal_training_group_then_equal_row",
+        "normalization": "sum_training_rows", "preprocessing_weighting": "unweighted_training_rows"}
+    for key, item in expected.items():
+        if type(value[key]) is not type(item) or value[key] != item:
+            _fail("group-balanced Ridge details conflict with the declared fit recipe or counts.")
+    for key, item in (("alpha", alpha), ("tol", 1e-4)):
+        if type(value[key]) not in (int, float) or value[key] != item:
+            _fail("group-balanced Ridge alpha or tolerance differs from the declared recipe.")
+    smallest = _count(value["min_training_group_size"], rows, positive=True)
+    largest = _count(value["max_training_group_size"], rows, positive=True)
+    if (smallest > largest or not groups * smallest <= rows <= groups * largest
+            or (groups == 1 and smallest != largest)
+            or (groups > 1 and not smallest + largest + (groups - 2) * smallest <= rows
+                <= smallest + largest + (groups - 2) * largest)):
+        _fail("group-balanced Ridge group-size summaries cannot cover the declared rows.")
+    if group_sizes is not None and (smallest != min(group_sizes) or largest != max(group_sizes)):
+        _fail("group-balanced Ridge group-size summaries differ from retained rows.")
+    for key, target in (("min_row_weight", rows / (groups * largest)),
+                        ("max_row_weight", rows / (groups * smallest)), ("sum_row_weights", float(rows))):
+        actual = value[key]
+        if (type(actual) not in (int, float) or not math.isfinite(actual) or actual <= 0
+                or not math.isclose(actual, target, rel_tol=_WEIGHT_REL_TOL, abs_tol=0.0)):
+            _fail("group-balanced Ridge weight summaries conflict with the normalized weight rule.")
+    return value
+
+
+def _extended_selection_v2(value, rows, groups, inner, seed, config, *, group_sizes=None):
+    """Strict v2 declarations and retained-count checks, without replaying fits."""
+    _count(seed, 2**32 - 1)
+    optional = [f for f in _EXTENDED_CAPABILITIES_V2 if f in config["baselines"]]
+    candidates = [{"name": name, "family": family, "params": params}
+                  for family in config["baselines"] for name, params in _EXTENDED_GRID_V2[family]]
+    audits = value.get("inner_folds")
+    if not isinstance(audits, list) or len(audits) != inner:
+        _fail("extended-families-v2 inner fold coverage differs.")
+    population, tested, test_rows = None, set(), 0
+    for fold, audit in enumerate(audits):
+        audit = _object(audit)
+        if set(audit) != _GROUP_FIT_AUDIT_V2:
+            _fail("extended-families-v2 group fit audit fields differ.")
+        train = _count(audit["train_rows"], rows, positive=True)
+        test = _count(audit["test_rows"], rows, positive=True)
+        ng_train = _count(audit["train_group_count"], min(train, groups), positive=True)
+        ng_test = _count(audit["test_group_count"], min(test, groups), positive=True)
+        if (type(audit["fold"]) is not int or audit["fold"] != fold
+                or type(audit["overlap_count"]) is not int or audit["overlap_count"] != 0
+                or train + test != rows or ng_train + ng_test != groups):
+            _fail("extended-families-v2 inner fold counts differ.")
+        tr, te = audit["train_groups"], audit["test_groups"]
+        if (not isinstance(tr, list) or not isinstance(te, list)
+                or any(not _text(g) or not g.strip() for g in tr + te)
+                or len(tr) != ng_train or len(te) != ng_test
+                or len(set(tr)) != len(tr) or len(set(te)) != len(te)
+                or tr != sorted(tr) or te != sorted(te) or set(tr) & set(te) or tested & set(te)):
+            _fail("extended-families-v2 inner group partition differs.")
+        partition = set(tr + te)
+        if population is None:
+            population = partition
+        if partition != population or (group_sizes is not None and partition != set(group_sizes)):
+            _fail("extended-families-v2 inner group coverage differs.")
+        if group_sizes is not None and (train != sum(group_sizes[g] for g in tr) or test != sum(group_sizes[g] for g in te)):
+            _fail("extended-families-v2 inner counts differ from retained rows.")
+        tested.update(te)
+        test_rows += test
+    if tested != population or test_rows != rows:
+        _fail("extended-families-v2 inner tests must cover the declared population once.")
+    records = value.get("inner_selection")
+    if not isinstance(records, list) or len(records) != len(candidates):
+        _fail("extended-families-v2 selection candidate coverage differs.")
+    objective = config.get("selection_objective")
+    if objective not in ("mae", "group_mae"):
+        _fail("extended-families-v2 selection objective differs.")
+    widths, ridge_summaries = {}, {}
+    for record, candidate in zip(records, candidates):
+        record = _object(record)
+        keys = _SELECTION_RECORD_V2 | ({"inner_fit_details"} if candidate["family"] in optional else set())
+        if (set(record) != keys or record.get("candidate") != candidate["name"]
+                or record.get("family") != candidate["family"] or record.get("objective") != objective
+                or not _same_declaration(record.get("params"), candidate["params"])):
+            _fail("extended-families-v2 candidate fields, identity, order, parameters or objective differ.")
+        scores, score = record["inner_fold_scores"], record["selection_score"]
+        if (not isinstance(scores, list) or len(scores) != inner
+                or any(type(s) not in (int, float) or not math.isfinite(s) or s < 0 for s in scores)
+                or type(score) not in (int, float) or not math.isfinite(score) or score < 0):
+            _fail("extended-families-v2 MAE scores must be nonnegative finite fold-complete numbers.")
+        count_key, total = (("test_group_count", groups) if objective == "group_mae" else ("test_rows", rows))
+        scale = max(scores)
+        # Normalize before multiplication so a finite saved score need not
+        # overflow merely because a fold contains many rows or groups.
+        pooled = 0.0 if scale == 0 else scale * math.fsum(
+            (s / scale) * (a[count_key] / total) for s, a in zip(scores, audits))
+        if not math.isfinite(pooled) or not math.isclose(score, pooled, rel_tol=1e-10, abs_tol=1e-12):
+            _fail("extended-families-v2 selection score differs from its pooled fold scores.")
+        if candidate["family"] in optional:
+            details = record["inner_fit_details"]
+            if not isinstance(details, list) or len(details) != inner:
+                _fail("extended-families-v2 per-fit detail coverage differs.")
+            for fold, (item, audit) in enumerate(zip(details, audits)):
+                item = _object(item)
+                if set(item) != {"inner_fold", "train_rows", "test_rows", "details"}:
+                    _fail("extended-families-v2 per-fit detail wrapper fields differ.")
+                for key, expected in (("inner_fold", fold), ("train_rows", audit["train_rows"]), ("test_rows", audit["test_rows"])):
+                    if type(item[key]) is not int or item[key] != expected:
+                        _fail("extended-families-v2 per-fit counts differ.")
+                sizes = None if group_sizes is None else [group_sizes[g] for g in audit["train_groups"]]
+                _extended_details_v2(candidate["family"], item["details"], audit["train_rows"],
+                                     audit["train_group_count"], seed, candidate["params"], sizes)
+                width = item["details"]["transformed_features"]
+                if widths.setdefault(fold, width) != width:
+                    _fail("extended-families-v2 preprocessing widths differ for the same inner training slice.")
+                if candidate["family"] == "group_balanced_ridge":
+                    summary = {k: v for k, v in item["details"].items() if k != "alpha"}
+                    if not _same_declaration(ridge_summaries.setdefault(fold, summary), summary):
+                        _fail("group-balanced Ridge summaries differ across alphas for the same training slice.")
+    winner = min(records, key=lambda r: r["selection_score"])
+    winners = {f: min((r for r in records if r["family"] == f), key=lambda r: r["selection_score"])
+               for f in config["baselines"]}
+    if (value.get("selected_candidate") != winner["candidate"] or value.get("selected_family") != winner["family"]
+            or value.get("family_candidates") != {f: r["candidate"] for f, r in winners.items()}):
+        _fail("extended-families-v2 winners differ from declared scores and candidate tie order.")
+    final = _object(value.get("family_fit_details"))
+    if set(final) != set(optional):
+        _fail("extended-families-v2 final-refit detail coverage differs.")
+    sizes = None if group_sizes is None else list(group_sizes.values())
+    final_widths = set()
+    for family in optional:
+        _extended_details_v2(family, final[family], rows, groups, seed, winners[family]["params"], sizes)
+        final_widths.add(final[family]["transformed_features"])
+    if len(final_widths) != 1:
+        _fail("extended-families-v2 preprocessing widths differ for the same final training slice.")
+    full = final["group_balanced_ridge"]
+    for summary in ridge_summaries.values():
+        # GroupKFold retains whole groups. A training subset cannot contain
+        # a group smaller or larger than the full training population's extrema.
+        if (summary["min_training_group_size"] < full["min_training_group_size"]
+                or summary["max_training_group_size"] > full["max_training_group_size"]):
+            _fail("group-balanced Ridge inner group-size extrema exceed the final training population bounds.")
+    # With at least two disjoint held-out folds, each full-training group is
+    # present in an inner training slice. The envelope must therefore be exact.
+    if (min(s["min_training_group_size"] for s in ridge_summaries.values()) != full["min_training_group_size"]
+            or max(s["max_training_group_size"] for s in ridge_summaries.values()) != full["max_training_group_size"]):
+        _fail("group-balanced Ridge inner extrema do not cover the final training population extrema.")
+
+
+def _extended_details_v2(family, value, rows, groups, seed, params, sizes):
+    if family == "group_balanced_ridge":
+        _balanced_ridge_details(value, rows, groups, params["alpha"], sizes)
+    elif family == "nystroem_ridge":
+        _kernel_details(value, rows, seed, params["alpha"])
+    elif family == "group_median":
+        _median_details(value, rows, groups)
+    else:
+        _fail("unknown optional family in the extended-families-v2 detail contract.")
 
 
 def _domain_records(value, config, inner):
@@ -415,14 +678,20 @@ def _domain_selection(value, rows, group_ids, mapping, inner, config):
 def _metadata(manifest):
     version = manifest.get("schema_version")
     if (manifest.get("mode") != "fit_predict" or "schema_id" in manifest
-            or version not in ("1.0", "1.1", "1.2", "1.3", "1.4")):
-        _fail("only supported regression fit_predict schemas 1.0/1.1/1.2/1.3/1.4 are accepted.")
+            or version not in ("1.0", "1.1", "1.2", "1.3", "1.4", "1.5")):
+        _fail("only supported regression fit_predict schemas 1.0/1.1/1.2/1.3/1.4/1.5 are accepted.")
     config = _object(manifest.get("config"))
+    if version != "1.5":
+        _reject_ridge_v2_markers(manifest)
     if version != "1.4":
         if _DOMAIN_FIELDS & set(config):
             _fail("domain selection requires prediction schema 1.4.")
         _reject_domain_audits(manifest)
-    if version == "1.4":
+    if version == "1.5":
+        if manifest.get("protocol") != "group-fit-predict-extended-families-v2":
+            _fail("schema 1.5 requires the extended-families-v2 prediction protocol.")
+        optional, _ = _extension_families_v2(manifest, config)
+    elif version == "1.4":
         if manifest.get("protocol") != "domain-inner-fit-predict-v1":
             _fail("domain prediction protocol differs.")
         optional = _extension_families(manifest, config, allow_empty=True)
@@ -440,17 +709,20 @@ def _metadata(manifest):
             _fail("schema 1.2 requires the distinct-v2 prediction protocol.")
     elif "protocol" in manifest or "categorical_encoding" in config:
         _fail("legacy schema must not declare an incompatible encoding protocol.")
-    if version not in ("1.3", "1.4") and isinstance(config.get("baselines"), list) and any(
-            family in config["baselines"] for family in ("nystroem_ridge", "group_median")):
+    if version not in ("1.3", "1.4", "1.5") and isinstance(config.get("baselines"), list) and any(
+            family in config["baselines"] for family in ("nystroem_ridge", "group_median", "group_balanced_ridge")):
         _fail("optional families require the extended prediction schema.")
     n_train = _count(manifest.get("n_training_rows"), MAX_ROWS, positive=True)
     _count(manifest.get("n_training_groups"), n_train, positive=True)
     n_pred = _count(manifest.get("n_predictions"), MAX_ROWS, positive=True)
-    if version in ("1.3", "1.4"):
+    if version in ("1.3", "1.4", "1.5"):
         inner = _count(config.get("inner_splits"), manifest["n_training_groups"], positive=True)
         if inner < 2:
             _fail("extended kernel requires at least two inner folds.")
-        if optional:
+        if version == "1.5":
+            _extended_selection_v2(manifest, n_train, manifest["n_training_groups"], inner,
+                                   config.get("random_state"), config)
+        elif optional:
             _optional_selection_metadata(manifest, n_train, manifest["n_training_groups"], inner, config.get("random_state"), optional)
         if version == "1.4":
             mapping = _domain_config(config, manifest["n_training_groups"])
@@ -528,7 +800,12 @@ def _load_prediction_bundle(run_dir):
             if _signature(os.stat(name, dir_fd=fd, follow_symlinks=False)) != signature:
                 _fail("bundle changed during validation; retry with an idle directory.")
         _reject_stale_evaluation(fd)
-    result = PredictionSchemaResult("1.0", version, n_pred, n_features, support, total)
+    if version == "1.5":
+        result = PredictionSchemaResult("1.0", version, n_pred, n_features, support, total,
+            checked_scope="checksums_prediction_rows_features_support_counts_and_extended_family_declarations",
+            unchecked_metadata="training_rows_actual_inner_predictions_and_score_computation_weight_execution_fit_authenticity_and_other_manifest_fields_not_validated")
+    else:
+        result = PredictionSchemaResult("1.0", version, n_pred, n_features, support, total)
     return result, manifest, payloads["predictions.csv"], hashes
 
 

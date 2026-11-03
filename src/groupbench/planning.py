@@ -25,6 +25,13 @@ _LIMITATIONS = [
 ]
 
 
+_GROUP_BALANCED_RIDGE_LIMITATIONS = [
+    "group_balanced_ridge fits weighted squared loss, not group MAE; no improvement is guaranteed.",
+    "Weights are derived independently from each training slice; preprocessing remains unweighted by group.",
+    "The float64 weight vector adds at most 160,000 bytes, not a solver or preprocessing memory/runtime bound.",
+]
+
+
 def _split_counts(train, test, groups):
     # Do not expose group identifiers or row values in a planning report.
     return {key: value for key, value in audit_split(train, test, groups).items()
@@ -101,6 +108,9 @@ source_sha256: str | None = None, categorical_encoding: str = LEGACY, inner_stra
         result["config"].update(inner_strategy=inner_strategy, domain=domain, inner_splits=None,
                                 inner_splits_per_outer=[len(p.splits) for _, _, p in schedule], categorical_encoding=categorical_encoding)
         result["limitations"].append(LIMITATION)
+    if "group_balanced_ridge" in baselines:
+        result.update(schema_version="1.4", protocol="nested-group-kfold-extended-families-v2")
+        result["limitations"].extend(_GROUP_BALANCED_RIDGE_LIMITATIONS)
     return result
 
 
@@ -143,4 +153,7 @@ def plan_prediction(frame: pd.DataFrame, new_rows: pd.DataFrame, *, target: str,
         result.update(schema_version="1.4", protocol="domain-inner-fit-predict-v1", capabilities=optional_capabilities(baselines))
         result["config"].update(inner_strategy=inner_strategy, domain=domain, categorical_encoding=categorical_encoding)
         result["limitations"].append(LIMITATION)
+    if "group_balanced_ridge" in baselines:
+        result.update(schema_version="1.5", protocol="group-fit-predict-extended-families-v2")
+        result["limitations"].extend(_GROUP_BALANCED_RIDGE_LIMITATIONS)
     return result

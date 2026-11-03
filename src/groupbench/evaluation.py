@@ -178,4 +178,12 @@ def benchmark(frame: pd.DataFrame, *, target: str, group: str, features=None,
                         capabilities=optional_capabilities(baselines))
         config["categorical_encoding"] = categorical_encoding
         summary.update(schema_version="1.3", protocol=manifest["protocol"], capabilities=optional_capabilities(baselines))
+    if "group_balanced_ridge" in baselines:
+        manifest.update(schema_version="1.4", protocol="nested-group-kfold-extended-families-v2")
+        summary.update(schema_version="1.4", protocol=manifest["protocol"])
+        warnings.extend([
+            "group_balanced_ridge fits equal-training-group weighted squared loss, not group MAE; improvement is not guaranteed.",
+            "Only its final Ridge is weighted; imputation, scaling and category handling remain unweighted training-row operations.",
+            "Compact fit details and source checksums do not authenticate training weights, execution, source truth or leakage absence.",
+        ])
     return BenchmarkResult(summary=summary, manifest=manifest, predictions=prediction_frame)
