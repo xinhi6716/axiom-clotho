@@ -595,3 +595,14 @@ connect explicit optional families, grouped evaluation, feature-only prediction
 and zero-refit scoring with 18 anonymous invented training rows and three new rows.
 Training does fit models; the later scoring step does not. These arbitrary-unit
 fixtures verify software behavior, not scientific performance.
+
+
+### Compare saved regression predictions without refitting
+
+`mlcalc compare-predictions --run-a RUN_A --run-b RUN_B --query ORIGINAL_QUERY.csv
+--outcomes COMPLETE_OUTCOMES.csv --contract CONTRACT.json` uses two saved bundles,
+one exact shared original query, one full outcome roster and explicit semantic
+declarations. It prints descriptive paired absolute-error contrasts, with row and
+equal-group summaries; it does not infer physical identity, significance or a
+winner. See the [comparison CLI/API guide](SAVED_PREDICTION_COMPARISON.md) for
+contract limits, aliases and an invented self-comparison example.

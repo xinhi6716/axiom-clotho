@@ -1,9 +1,9 @@
-# Compare two saved regression prediction bundles (API, no fitting)
+# Compare two saved regression prediction bundles (no fitting)
 
 This current-source API bridges existing strict delayed-outcome scoring and exact
 paired absolute-error arithmetic. It does not fit/select/load models, write files,
-perform significance tests, or infer future performance. No dedicated comparison
-CLI is provided yet. Existing score commands and report schemas are unchanged.
+perform significance tests, or infer future performance. The stdout-only CLI
+below uses this same API. Existing score commands and report schemas are unchanged.
 
 ```python
 from groupbench.saved_scoring import compare_saved_predictions
@@ -102,3 +102,56 @@ The older [two-budget utility](SAVED_BUDGET_COMPARISON.md) has a different contr
 (two methods × two budgets with matched repeats). Do not invent a budget axis to
 compare two models. The fixed environment-heldout example retains its own strict
 five-arm artifact contract and now delegates to the same paired arithmetic.
+
+
+## Unified stdout-only command
+
+```sh
+mlcalc compare-predictions --run-a runs/model-a-predictions \
+  --run-b runs/model-b-predictions --query original-new-features.csv \
+  --outcomes later-outcomes.csv --contract comparison-contract.json
+```
+
+`groupbench compare-predictions` and `clotho tabular compare-predictions` delegate
+to the same parser/API. All five paths are explicit and required; there are no
+`--out`, `--overwrite`, sampling, unit-conversion or source-hash-bypass flags.
+Success prints complete JSON and exits 0. Input/contract/comparison failures exit 2
+with categorical stderr, no raw source values/paths and no partial stdout report.
+Help uses the canonical `mlcalc compare-predictions` command.
+
+The contract file is strict UTF-8 JSON with exactly the eight API declaration
+fields. Duplicate keys, unknown fields, nonstring values, malformed JSON and
+nonfinite constants reject. No numeric coercion is used. At most **64 KiB of
+contract bytes is accepted**. The reused regular-file reader has a **4 MiB read
+bound** (with at most one extra detection byte), not a 64 KiB I/O maximum; it
+checks descriptor/path signatures and allows
+explicit local symlinks to regular files. It rejects nonregular files. These
+checks are not an atomic snapshot or a storage-access timeout.
+
+The complete serialized report, including its newline, must fit 64 MiB; otherwise
+the command rejects without printing partial JSON. This is an output limit, not
+a claim about peak memory. Nothing is written to disk by the command. Shell
+redirection can overwrite an input before Python starts: choose safe destinations
+yourself. Output includes private values if you supply them; review before sharing.
+
+### Tiny invented self-comparison sanity check
+
+First complete the [optional-model walkthrough](../examples/optional-model-delayed-scoring/README.md)
+([繁體中文](../examples/optional-model-delayed-scoring/README.zh-TW.md)) to create its
+prediction bundle. Then, from the repository root:
+
+```sh
+clotho tabular compare-predictions \
+  --run-a runs/optional-later-prediction --run-b runs/optional-later-prediction \
+  --query examples/optional-model-delayed-scoring/new_features.csv \
+  --outcomes examples/optional-model-delayed-scoring/later_outcomes.csv \
+  --contract examples/optional-model-delayed-scoring/comparison_contract.json
+```
+
+This intentionally supplies the **same bundle twice**: expect
+`identical_bundle_hashes: true` and zero paired contrasts. Distinct display labels
+do not imply two different models or independent runs. This only checks command
+plumbing on invented arbitrary-unit data; it does not establish scientific
+performance. For a real two-model comparison, provide both original compatible
+bundles and replace all declarations with your actual common-cohort contract.
+This command performs no fits; creating the walkthrough bundle earlier does.

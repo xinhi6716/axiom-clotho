@@ -168,13 +168,7 @@ _COMPARISON_CONTRACT = frozenset({
 })
 
 
-def compare_saved_predictions(run_a, run_b, query_csv, outcomes_csv, contract):
-    """Descriptively compare two saved bundles linked to identical query bytes.
-
-    A shared source hash binds declared bytes, not physical identity, producer
-    behavior, units, authenticity or independence. No model is loaded or fitted.
-    Requires explicit semantic declarations; no source-hash override is offered.
-    """
+def _validate_comparison_contract(contract):
     if type(contract) is not dict or set(contract) != _COMPARISON_CONTRACT:
         raise SavedScoringError("Comparison requires the exact common semantic declaration fields.")
     for key, value in contract.items():
@@ -183,6 +177,16 @@ def compare_saved_predictions(run_a, run_b, query_csv, outcomes_csv, contract):
             raise SavedScoringError("Comparison declarations must be bounded nonblank text without NUL.")
     if contract["method_a"] == contract["method_b"]:
         raise SavedScoringError("Comparison method labels must be distinct.")
+
+
+def compare_saved_predictions(run_a, run_b, query_csv, outcomes_csv, contract):
+    """Descriptively compare two saved bundles linked to identical query bytes.
+
+    A shared source hash binds declared bytes, not physical identity, producer
+    behavior, units, authenticity or independence. No model is loaded or fitted.
+    Requires explicit semantic declarations; no source-hash override is offered.
+    """
+    _validate_comparison_contract(contract)
     try:
         loaded_a = _load_prediction_bundle(run_a)
         loaded_b = _load_prediction_bundle(run_b)
@@ -261,6 +265,65 @@ def compare_saved_predictions(run_a, run_b, query_csv, outcomes_csv, contract):
             "Inputs are consumed sequentially, not as a joint atomic snapshot. Output includes supplied declarations and row values.",
         ],
     }
+
+
+MAX_COMPARISON_CONTRACT_BYTES = 64 * 1024
+MAX_COMPARISON_OUTPUT_BYTES = 64 * 1024 * 1024
+
+
+def _load_comparison_contract(path):
+    # Existing reader: 4 MiB bound plus one detection byte; 64 KiB accepted here.
+    # Reuse its descriptor/signature checks, not a second file-opening policy.
+    raw, _digest = _read_outcomes(path)
+    if len(raw) > MAX_COMPARISON_CONTRACT_BYTES:
+        raise SavedScoringError("Comparison contract exceeds the 64 KiB accepted-byte limit.")
+    def pairs(items):
+        result = {}
+        for key, value in items:
+            if key in result:
+                raise ValueError("Duplicate contract key")
+            result[key] = value
+        return result
+    def number(_token):
+        raise ValueError("Contract values must be strings")
+    try:
+        contract = json.loads(raw.decode("utf-8"), object_pairs_hook=pairs,
+                              parse_int=number, parse_float=number, parse_constant=number)
+        _validate_comparison_contract(contract)
+    except (ValueError, TypeError, RecursionError):
+        raise SavedScoringError("Comparison contract must be strict UTF-8 JSON with exactly the required string declarations.") from None
+    return contract
+
+
+class _ComparisonParser(argparse.ArgumentParser):
+    def error(self, _message):
+        self.print_usage(sys.stderr)
+        self.exit(2, "error: invalid comparison arguments; use mlcalc compare-predictions --help. Supplied values are not echoed.\n")
+
+
+def compare_main(argv=None):
+    """Stdout-only entry point for the existing same-query comparison API."""
+    parser = _ComparisonParser(prog="mlcalc compare-predictions", allow_abbrev=False,
+                               description="Compare two complete saved regression bundles on identical query bytes; no fitting.",
+                               epilog="Stdout JSON only; no output-path, overwrite or identity-bypass options. Exit 0 compared, 2 rejected.")
+    parser.add_argument("--run-a", type=Path, required=True, help="Reference regression prediction bundle")
+    parser.add_argument("--run-b", type=Path, required=True, help="Candidate regression prediction bundle")
+    parser.add_argument("--query", type=Path, required=True, help="Exact original query CSV shared by both bundles")
+    parser.add_argument("--outcomes", type=Path, required=True, help="Complete shared row_position,group,observed CSV")
+    parser.add_argument("--contract", type=Path, required=True, help="Strict UTF-8 JSON semantic declarations (accepted <=64 KiB)")
+    args = parser.parse_args(argv)
+    try:
+        contract = _load_comparison_contract(args.contract)
+        report = compare_saved_predictions(args.run_a, args.run_b, args.query, args.outcomes, contract)
+        # Complete and bound serialization before any stdout, never partial JSON.
+        output = json.dumps(report, indent=2, sort_keys=True, ensure_ascii=True, allow_nan=False)
+        if len(output.encode("utf-8")) + 1 > MAX_COMPARISON_OUTPUT_BYTES:
+            raise ValueError("Complete comparison output exceeds supported size")
+    except (SavedScoringError, OSError, ValueError, TypeError, OverflowError):
+        print("saved comparison rejected: invalid or unavailable local inputs, unsupported numeric precision, mismatched query or incomplete cohort; no comparison was written.", file=sys.stderr)
+        return 2
+    print(output)
+    return 0
 
 
 class _Parser(argparse.ArgumentParser):

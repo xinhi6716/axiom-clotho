@@ -234,6 +234,9 @@ def _read_training(args):
 
 def main(argv=None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] == "compare-predictions":
+        from .saved_scoring import compare_main
+        return compare_main(argv[1:])
     if argv and argv[0] == "evaluate-binary":
         # Reuse the strict saved-document parser and stdout-only evaluator.
         from .binary.saved_evaluation import main as evaluate_binary
@@ -263,6 +266,7 @@ Working with your own data:
   mlcalc binary --help       Use the separate numeric 0/1 workflow.
   mlcalc evaluate-binary --help  Score a complete saved binary probability cohort; no fitting.
   mlcalc evaluate-intervals --help  Score already saved interval bounds, without fitting.
+  mlcalc compare-predictions --help  Compare two saved regression bundles on identical query bytes; no fitting.
   mlcalc score-predictions --help  Join complete later outcomes to saved regression predictions; no fitting.
 
 Use mlcalc <command> --help for required inputs and options.
@@ -270,6 +274,8 @@ The groupbench command is an alias for the same CLI.""",
     )
     parser.add_argument("--version", action="version", version=__version__)
     sub = parser.add_subparsers(dest="command", required=True)
+    sub.add_parser("compare-predictions", add_help=False,
+                   help="Compare saved regression predictions on a complete common query cohort; stdout JSON, no fitting")
     sub.add_parser("evaluate-binary", add_help=False,
                    help="Score saved binary probabilities; strict JSON input, stdout JSON, no fitting")
     sub.add_parser("score-predictions", add_help=False,

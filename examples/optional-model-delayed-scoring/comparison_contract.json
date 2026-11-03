@@ -1,0 +1,10 @@
+{
+  "method_a": "same-bundle-reference",
+  "method_b": "same-bundle-check",
+  "target_column": "response",
+  "target_definition": "Invented walkthrough response",
+  "target_unit": "arbitrary invented units",
+  "cohort_definition": "All three rows in the walkthrough new_features.csv",
+  "row_mapping_definition": "Original zero-based query positions retained; neither producer filtered or reordered rows",
+  "group_definition": "Invented queryA/queryB scoring labels, not independent experimental units"
+}
