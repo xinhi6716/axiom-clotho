@@ -120,9 +120,10 @@ def grouped_metrics(y_true, y_pred, groups) -> tuple[dict, list[dict]]:
     # Validate before NumPy can promote mixed numeric IDs to a lossy dtype.
     g = validate_groups(groups, len(y))
     per_group = []
-    for group in pd.unique(g):
-        mask = g == group
-        per_group.append({"group": str(group), **regression_metrics(y[mask], pred[mask])})
+    # Group positions once; preserve encounter order and row order within groups.
+    for group, positions in pd.Series(np.arange(len(g))).groupby(g, sort=False).groups.items():
+        idx = np.asarray(positions, dtype=int)
+        per_group.append({"group": str(group), **regression_metrics(y[idx], pred[idx])})
     overall = regression_metrics(y, pred)
     with _checked_arithmetic():
         overall.update({
