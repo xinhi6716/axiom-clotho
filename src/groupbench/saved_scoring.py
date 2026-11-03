@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import csv
 from decimal import Decimal, InvalidOperation
+from fractions import Fraction
 import hashlib
 import io
 import json
@@ -16,7 +17,7 @@ from pathlib import Path
 import re
 import sys
 
-from .metrics import grouped_metrics
+from .metrics import grouped_metrics, paired_absolute_error_difference, contrast_float
 from .prediction_schema import _load_prediction_bundle, MAX_ROWS
 from .verification import _signature
 
@@ -129,6 +130,12 @@ def score_saved_predictions(run_dir, outcomes_csv):
         raise SavedScoringError("Prediction bundle failed bounded byte/schema verification; inspect it with validate-prediction-bundle. No scores were produced.") from None
     outcome_raw, outcomes_hash = _read_outcomes(outcomes_csv)
     outcomes = _outcomes(outcome_raw, schema.n_predictions)
+    return _score_loaded_bundle((schema, _manifest, prediction_raw, hashes), outcomes, outcomes_hash)
+
+
+def _score_loaded_bundle(loaded, outcomes, outcomes_hash):
+    """Score retained verified bytes and one canonical parsed outcome roster."""
+    schema, _manifest, prediction_raw, hashes = loaded
     # The shared validator checked structure on these exact bytes. Scoring
     # additionally rejects underflow and integer precision loss on both sides;
     # this narrower scoring subset does not change public bundle validation.
@@ -152,6 +159,107 @@ def score_saved_predictions(run_dir, outcomes_csv):
                          "observed": value, "prediction": predictions[position]}
                         for position, (group, value) in enumerate(outcomes)],
         "limitations": list(LIMITATIONS),
+    }
+
+
+_COMPARISON_CONTRACT = frozenset({
+    "method_a", "method_b", "target_column", "target_definition", "target_unit",
+    "cohort_definition", "row_mapping_definition", "group_definition",
+})
+
+
+def compare_saved_predictions(run_a, run_b, query_csv, outcomes_csv, contract):
+    """Descriptively compare two saved bundles linked to identical query bytes.
+
+    A shared source hash binds declared bytes, not physical identity, producer
+    behavior, units, authenticity or independence. No model is loaded or fitted.
+    Requires explicit semantic declarations; no source-hash override is offered.
+    """
+    if type(contract) is not dict or set(contract) != _COMPARISON_CONTRACT:
+        raise SavedScoringError("Comparison requires the exact common semantic declaration fields.")
+    for key, value in contract.items():
+        limit = 256 if key in ("method_a", "method_b") else 2048
+        if type(value) is not str or not value.strip() or len(value) > limit or "\0" in value:
+            raise SavedScoringError("Comparison declarations must be bounded nonblank text without NUL.")
+    if contract["method_a"] == contract["method_b"]:
+        raise SavedScoringError("Comparison method labels must be distinct.")
+    try:
+        loaded_a = _load_prediction_bundle(run_a)
+        loaded_b = _load_prediction_bundle(run_b)
+    except (OSError, ValueError):
+        raise SavedScoringError("Both comparison bundles must pass bounded byte/schema verification.") from None
+    n = loaded_a[0].n_predictions
+    if n != loaded_b[0].n_predictions:
+        raise SavedScoringError("Comparison bundles must contain the same complete query row count.")
+    # Use the same one-read CSV parser/hash semantics as prediction production.
+    from .cli import _read_csv_with_hash
+    try:
+        query, query_hash = _read_csv_with_hash(Path(query_csv))
+    except (OSError, ValueError, TypeError):
+        raise SavedScoringError("Comparison query must be a bounded valid local CSV.") from None
+    if len(query) != n:
+        raise SavedScoringError("Original query rows must match both complete prediction rosters.")
+    for loaded in (loaded_a, loaded_b):
+        manifest = loaded[1]
+        claimed_hash = manifest.get("prediction_source_file_sha256")
+        if (type(claimed_hash) is not str
+                or re.fullmatch(r"[0-9a-f]{64}", claimed_hash) is None
+                or claimed_hash != query_hash):
+            raise SavedScoringError("Exact query bytes must match both manifest source-hash declarations.")
+        config = manifest["config"]
+        if config.get("target") != contract["target_column"]:
+            raise SavedScoringError("Both target columns must match the explicit common target declaration.")
+        if any(name not in query.columns for name in config["features"]):
+            raise SavedScoringError("Original query is missing a declared model feature column.")
+    outcome_raw, outcome_hash = _read_outcomes(outcomes_csv)
+    outcomes = _outcomes(outcome_raw, n)
+    report_a = _score_loaded_bundle(loaded_a, outcomes, outcome_hash)
+    report_b = _score_loaded_bundle(loaded_b, outcomes, outcome_hash)
+    # grouped_metrics above validates integer precision and finite arithmetic
+    # before any float conversion in the shared exact contrast primitive.
+    contrasts, grouped, rows = [], {}, []
+    try:
+        for a, b in zip(report_a["scored_rows"], report_b["scored_rows"]):
+            difference = paired_absolute_error_difference(a["prediction"], b["prediction"], a["observed"])
+            contrasts.append(difference)
+            grouped.setdefault(a["group"], []).append(difference)
+            rows.append({"row_position": a["row_position"], "group": a["group"],
+                         "observed": a["observed"], "prediction_a": a["prediction"],
+                         "prediction_b": b["prediction"],
+                         "absolute_error_b_minus_a": contrast_float(difference)})
+        group_means = {group: sum(values, Fraction()) / len(values)
+                       for group, values in grouped.items()}
+        row_mean = contrast_float(sum(contrasts, Fraction()) / n)
+        equal_group_mean = contrast_float(sum(group_means.values(), Fraction()) / len(group_means))
+        per_group = [{"group": group, "n_rows": len(grouped[group]),
+                      "mean_absolute_error_b_minus_a": contrast_float(value)}
+                     for group, value in sorted(group_means.items())]
+    except (ValueError, OverflowError):
+        raise SavedScoringError("Paired contrast arithmetic exceeds supported numeric range.") from None
+    return {
+        "schema_version": "tabular-saved-paired-comparison-v1",
+        "mode": "compare_saved_regression_predictions", "fits_performed": 0,
+        "contract": dict(contract), "n_rows": n, "n_groups": len(group_means),
+        "omitted_rows": 0, "query_sha256": query_hash, "outcomes_sha256": outcome_hash,
+        "query_bytes_match_both_manifest_declarations": True,
+        "physical_identity_verified": False, "provenance_verified": False,
+        "identical_bundle_hashes": loaded_a[3] == loaded_b[3],
+        "metric": "absolute error in declared target units; no normalization",
+        "contrast_direction": "B minus A; negative is lower B absolute error on this supplied cohort only",
+        "row_weighting": "equal supplied rows; not independent-unit inference",
+        "group_weighting": "equal supplied groups after averaging their rows; not independence certification",
+        "row_mean_absolute_error_b_minus_a": row_mean,
+        "equal_group_mean_absolute_error_b_minus_a": equal_group_mean,
+        "per_group": per_group, "paired_rows": rows,
+        "model_a": report_a, "model_b": report_b,
+        "limitations": list(LIMITATIONS) + [
+            "Common query bytes match both producer declarations, not authenticated historical mapping or model execution.",
+            "Target definitions, units and group/cohort/mapping meanings are caller declarations, not verified facts.",
+            "Different training sources, feature subsets and protocols may be compared; this is not a controlled or causal contrast.",
+            "Paired contrasts are exact on accepted binary64 inputs before display rounding; they may differ from subtraction of displayed MAEs.",
+            "No hypothesis tests, intervals, automatic winner, independence or future-performance inference are supplied.",
+            "Inputs are consumed sequentially, not as a joint atomic snapshot. Output includes supplied declarations and row values.",
+        ],
     }
 
 

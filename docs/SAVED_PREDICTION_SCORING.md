@@ -115,3 +115,8 @@ Exit 0 means complete scores were printed. Exit 2 means failure, with categorica
 stderr guidance and no partial score JSON. Existing numerical dependencies are
 still imported; **zero fitting does not mean dependency-free execution**. For
 measurement-specific bundles, retain the separate `clotho score` workflow.
+
+
+For two existing model bundles, the [same-query paired comparison API](SAVED_PREDICTION_COMPARISON.md)
+adds mandatory original-query byte linkage and shared semantic declarations.
+It does not compare arbitrary score JSON summaries or fit models.

@@ -439,26 +439,17 @@ def stable_rmse(errors):
 
 
 def paired_absolute_error_difference(prediction_a, prediction_b, target):
-    """Exact B-minus-A loss contrast of the scoring inputs' binary64 values.
-
-    Subtracting two already rounded absolute errors can erase a representable
-    paired difference. Keep this contrast rational until its final output;
-    this does not recover decimal precision lost when inputs became floats.
-    """
-    a, b, y = (Fraction.from_float(float(value))
-               for value in (prediction_a, prediction_b, target))
-    return abs(b - y) - abs(a - y)
+    # Shared exact arithmetic; the probe validates all inputs before this call.
+    from groupbench.metrics import paired_absolute_error_difference as paired
+    return paired(prediction_a, prediction_b, target)
 
 
 def contrast_float(value):
-    """Round once for JSON, refusing a nonzero contrast rounded to zero."""
+    from groupbench.metrics import contrast_float as convert
     try:
-        result = float(value)
-    except OverflowError:
-        raise InputError("paired contrast outside supported representable range") from None
-    if not math.isfinite(result) or (value != 0 and result == 0):
-        raise InputError("paired contrast outside supported representable range")
-    return result
+        return convert(value)
+    except ValueError as exc:
+        raise InputError(str(exc)) from None
 
 
 def score(prediction_blob, outcome_blob):

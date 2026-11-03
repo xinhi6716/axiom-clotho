@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from numbers import Integral
+from fractions import Fraction
+import math
 
 import numpy as np
 import pandas as pd
@@ -130,3 +132,26 @@ def grouped_metrics(y_true, y_pred, groups) -> tuple[dict, list[dict]]:
             "worst_group_mae": float(max(row["mae"] for row in per_group)),
         })
     return overall, per_group
+
+
+def paired_absolute_error_difference(prediction_a, prediction_b, target):
+    """Exact B-minus-A absolute-error contrast of validated binary64 inputs.
+
+    Callers must validate conversion/precision before calling. This preserves
+    differences lost by subtracting rounded errors; it cannot recover decimal
+    precision lost when inputs became floats. Keep the result exact to aggregate.
+    """
+    a, b, y = (Fraction.from_float(float(value))
+               for value in (prediction_a, prediction_b, target))
+    return abs(b - y) - abs(a - y)
+
+
+def contrast_float(value):
+    """Round one exact contrast for display, rejecting false zero or infinity."""
+    try:
+        result = float(value)
+    except OverflowError:
+        raise ValueError("paired contrast outside supported representable range") from None
+    if not math.isfinite(result) or (value != 0 and result == 0):
+        raise ValueError("paired contrast outside supported representable range")
+    return result
