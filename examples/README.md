@@ -34,6 +34,14 @@ For your own measurements, [clotho init](../docs/WORKFLOW_INIT.md) creates blank
 | Can changing units change a model's predictions? | [A versus nA](numeric-unit-equivalence/README.md): twelve fixed fits comparing raw models and train-only scaling. Requires scikit-learn 1.8.0 and the documented source hash; saved results can be read without fitting. |
 | How does adjusting for an intermediary change a causal question? | [Causal-design rehearsal](causal-design-rehearsal/README.md): OLS and paired interventions in an invented model. Requires the simulation-only flag; it is not a real-data causal estimator. |
 
+## Optional models and later outcomes
+
+Follow the [tiny grouped-model walkthrough](optional-model-delayed-scoring/README.md)
+([繁體中文](optional-model-delayed-scoring/README.zh-TW.md)): preview budgets,
+evaluate two opt-in families, predict three new rows, then score explicit later
+outcomes without refitting. It uses 18 invented training rows and arbitrary units,
+not real measurements. Current-source commands and matching fixtures are required.
+
 ## Analyze saved results without fitting
 
 - [Compare validation budgets](../docs/SAVED_BUDGET_COMPARISON.md): two methods × two budgets on matched observations. [Invented input](saved-budget-comparison/invented.json).

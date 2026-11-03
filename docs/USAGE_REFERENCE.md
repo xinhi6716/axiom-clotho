@@ -585,3 +585,13 @@ Output contains supplied metadata/group identities: review it before sharing.
 The shared parser displays its canonical module invocation in help.
 See [saved binary evaluation](SAVED_BINARY_EVALUATION.md) for the exact JSON
 contract, numeric/read limits, and privacy and provenance limitations.
+
+
+### Runnable optional-model and delayed-outcome example
+
+The [English walkthrough](../examples/optional-model-delayed-scoring/README.md)
+and [繁體中文操作步驟](../examples/optional-model-delayed-scoring/README.zh-TW.md)
+connect explicit optional families, grouped evaluation, feature-only prediction
+and zero-refit scoring with 18 anonymous invented training rows and three new rows.
+Training does fit models; the later scoring step does not. These arbitrary-unit
+fixtures verify software behavior, not scientific performance.
