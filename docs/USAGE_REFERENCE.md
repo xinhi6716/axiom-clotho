@@ -495,6 +495,11 @@ The ordinary score formulas, row/group weighting, models, and split protocol
 are unchanged; this is not arbitrary-precision arithmetic or a guarantee that
 estimator training itself supports extreme scales.
 
+Finite rounding is also possible: signed bias can change sign when rows with
+very different error magnitudes are reordered. See [regression metric input
+precision](REGRESSION_METRIC_INPUTS.md#signed-bias-cancellation-limitation) for
+a reproducible example and guidance.
+
 ## Baselines and resource budget
 
 | Family | Candidates | Settings |

@@ -1,5 +1,13 @@
 # Changelog
 
+## Signed bias cancellation (unreleased source)
+
+- Document and characterize a float64 signed-bias limitation: cancellation can
+  reverse its sign or change its value when rows are reordered, even though all
+  values are finite. Scoring and saved-artifact readers are unchanged. Recompute
+  bias independently at higher precision when needed; see
+  `docs/REGRESSION_METRIC_INPUTS.md`.
+
 ## Observed-history floating precision (unreleased source)
 
 - Reject NumPy floating scalars wider than float64 in observed-history timestamps,
