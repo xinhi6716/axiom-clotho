@@ -75,6 +75,63 @@ class ObservedHistoryTests(unittest.TestCase):
             bad = obs.copy(); bad['timestamp'] = times
             with self.subTest(times=times), self.assertRaises(ValueError): self.run_case(bad)
 
+    def test_wide_numpy_floats_rejected_before_scoring(self):
+        if np.dtype(np.longdouble).itemsize <= np.dtype(np.float64).itemsize:
+            self.skipTest('No wider NumPy floating dtype on this platform')
+        obs, origins, pred = self.fixture()
+        for container in ('native', 'object'):
+            for source, column, message in (
+                    ('obs', 'timestamp', 'timestamps'),
+                    ('obs', 'value', 'observations'),
+                    ('pred', 'prediction', 'saved predictions')):
+                a, p = obs.copy(), pred.copy()
+                table = a if source == 'obs' else p
+                # Preserve the longdouble scalars even in object-typed columns.
+                wide = [np.longdouble(v) for v in table[column]]
+                table[column] = pd.Series(wide, dtype=np.longdouble if container == 'native' else object)
+                with self.subTest(container=container, column=column):
+                    with self.assertRaisesRegex(ValueError, message + '.*wider than float64'):
+                        self.run_case(a, origins, p)
+
+    def test_wide_values_cannot_be_silently_scored_as_equal(self):
+        if np.finfo(np.longdouble).nmant <= np.finfo(np.float64).nmant:
+            self.skipTest('No additional longdouble mantissa bits on this platform')
+        one = np.longdouble(1)
+        distinct = one + np.longdouble(2) ** -60
+        self.assertNotEqual(one, distinct)
+        self.assertEqual(float(one), float(distinct))
+        obs = pd.DataFrame({'trace_id': ['a'] * 3, 'timestamp': [0, 1, 2],
+                            'value': pd.Series([one, one, distinct], dtype=np.longdouble)})
+        origins = pd.DataFrame({'trace_id': ['a'], 'target_index': [2]})
+        pred = origins.assign(prediction=[1.0])
+        with self.assertRaisesRegex(ValueError, 'observations.*wider than float64'):
+            self.run_case(obs, origins, pred)
+
+    def test_integer_precision_guard_for_each_numeric_input(self):
+        obs, origins, pred = self.fixture()
+        for source, column, message in (
+                ('obs', 'timestamp', 'timestamps'),
+                ('obs', 'value', 'observations'),
+                ('pred', 'prediction', 'saved predictions')):
+            for integer in (2**53 + 1, -(2**53 + 1), np.int64(-(2**53 + 1)),
+                            np.uint64(2**63 + 1)):
+                a, p = obs.copy(), pred.copy()
+                table = a if source == 'obs' else p
+                values = list(table[column])
+                values[2] = integer
+                table[column] = pd.Series(values, dtype=object)
+                with self.subTest(column=column, integer=integer):
+                    with self.assertRaisesRegex(ValueError, message + '.*integer not exactly representable'):
+                        self.run_case(a, origins, p)
+        # Large integers that really are exactly representable are accepted;
+        # don't impose a blanket 2**53 upper bound.
+        from groupbench.observed_history import _numbers
+        np.testing.assert_array_equal(_numbers([2**53 + 2, np.uint64(2**63)], 'values'),
+                                      [float(2**53 + 2), float(2**63)])
+        np.testing.assert_array_equal(_numbers([np.float16(1.5), np.float32(2.5),
+                                                 np.float64(3.5)], 'values'),
+                                      [1.5, 2.5, 3.5])
+
     def test_bad_schema_values_and_empty(self):
         obs, origins, pred = self.fixture()
         for value in [np.nan, np.inf, True, '7', 1j]:

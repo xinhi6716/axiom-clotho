@@ -1,5 +1,13 @@
 # Changelog
 
+## Observed-history floating precision (unreleased source)
+
+- Reject NumPy floating scalars wider than float64 in observed-history timestamps,
+  observations, and saved predictions before conversion. Previously these could
+  narrow silently and produce false zero errors. Existing exact-integer checks
+  remain in place. Other accepted real values still convert to float64 and may
+  lose precision; upstream loss and later arithmetic are not fully audited.
+
 ## Numeric feature precision (unreleased source)
 
 - Tighten training and prediction validation: reject integer feature values

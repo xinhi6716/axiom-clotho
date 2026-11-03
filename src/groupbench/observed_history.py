@@ -34,6 +34,12 @@ def _numbers(values, name):
     values = list(values)
     if any(isinstance(v, (bool, np.bool_)) or not isinstance(v, Real) for v in values):
         raise ValueError(f"{name} must contain real numeric values, not strings or booleans.")
+    # Do not let conversion erase distinctions in NumPy extended-precision
+    # inputs before the metric validator sees them.  Ordinary Python floats and
+    # NumPy floating scalars no wider than float64 retain their prior behavior.
+    if any(isinstance(v, np.floating) and v.dtype.itemsize > np.dtype(np.float64).itemsize
+           for v in values):
+        raise ValueError(f"{name} contains floating values wider than float64; explicitly convert after reviewing precision.")
     try:
         with np.errstate(over='raise', under='raise', invalid='raise'):
             result = np.asarray(values, dtype=np.float64)

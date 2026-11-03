@@ -33,8 +33,11 @@ independent physical device. Input order within each trace defines zero-based
 positions. Numeric timestamps must be finite and strictly increasing per trace;
 duplicate/decreasing times fail, not silently sort. Interleaved traces are allowed.
 No datetime, string, boolean or complex numeric conversion is performed. Numeric
-inputs use float64; integers that cannot be represented exactly fail. Already-lost
-precision in caller-created arrays cannot be recovered by this helper.
+inputs use float64; integers that cannot be represented exactly and NumPy floating
+scalars wider than float64 fail. Other accepted real values are converted to
+float64 and may lose precision; this is not a complete precision audit. Precision
+already lost in caller-created arrays cannot be recovered by this helper. Review
+the resolution and units before explicitly converting wider inputs.
 
 The caller must freeze the origin roster and model predictions before inspecting
 their scoring outcomes. The helper verifies exact ordered key equality, uniqueness,
