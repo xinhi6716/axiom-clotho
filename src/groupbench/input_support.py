@@ -72,3 +72,49 @@ def prediction_input_support(training: pd.DataFrame, new_rows: pd.DataFrame) -> 
         "row_flag_counts": {name: int(mask.sum()) for name, mask in flags.items()},
         "features": features,
     }
+
+
+def outer_fold_input_support(X: pd.DataFrame, groups, *, outer_splits: int = 5,
+                             random_state: int = 0) -> dict:
+    """Return optional target-free support diagnostics for benchmark outer folds.
+
+    Pass exactly the selected feature frame, row order and group labels used by
+    the benchmark. This uses its GroupKFold splitter, but does not validate inner
+    selection feasibility or fit models. Marginal ranges do not detect holes,
+    joint feature support, target shift, or establish future accuracy.
+    """
+    from .data import validate_features, validate_groups, validate_seed
+    from .splitting import GroupKFold
+
+    features = validate_features(X)
+    labels = validate_groups(groups, len(features))
+    seed = validate_seed(random_state)
+    folds = []
+    for fold, (train, test) in enumerate(
+            GroupKFold(outer_splits, seed).split(features, groups=labels)):
+        support = prediction_input_support(features.iloc[train], features.iloc[test])
+        support["reference"] = "outer_training_features_before_imputation"
+        folds.append({
+            "fold": fold,
+            "train_group_count": len(set(labels[train])),
+            "test_group_count": len(set(labels[test])),
+            "flagged_row_fraction": support["rows_with_any_flag"] / len(test),
+            "input_support": support,
+        })
+    return {
+        "schema_version": "1.0",
+        "diagnostic": "outer_fold_source_support",
+        "action": "diagnostic_only_no_input_changes",
+        "splitter": "GroupKFold",
+        "random_state": seed,
+        "outer_splits": len(folds),
+        "n_rows": len(features),
+        "n_groups": len(set(labels)),
+        "folds": folds,
+        "limitations": [
+            "Marginal feature checks do not detect interior holes or joint support gaps.",
+            "Flags are not an OOD test, calibrated uncertainty, or evidence of future accuracy.",
+            "No model selection, predictions, or benchmark outputs are changed.",
+            "Inner selection feasibility is not checked by this target-free diagnostic.",
+        ],
+    }
