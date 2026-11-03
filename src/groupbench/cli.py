@@ -13,19 +13,53 @@ import stat
 from pathlib import Path
 import sys
 
-import pandas as pd
+from importlib import import_module as _import_module
 
 from . import __version__
-from .categorical import ENCODINGS, LEGACY
-from .domain_selection import GROUP, DOMAIN
-from .data import MAX_ROWS, make_materials_fixture
-from .evaluation import benchmark
-from .feature_manifest import read_feature_manifest
-from .prediction import ensure_prediction_output, fit_predict
-from .planning import plan_benchmark, plan_prediction
-from .verification import verify_bundle
-from .evaluation_schema import validate_evaluation_bundle
-from .prediction_schema import validate_prediction_bundle_schema
+
+# Keep legacy module attributes patchable while leaving the raw-byte opener and
+# early metadata dispatch independent of numerical/model dependencies.
+_DEPENDENCIES = {
+    "pd": ("pandas", None),
+    "ENCODINGS": (".categorical", "ENCODINGS"),
+    "LEGACY": (".categorical", "LEGACY"),
+    "GROUP": (".domain_selection", "GROUP"),
+    "DOMAIN": (".domain_selection", "DOMAIN"),
+    "MAX_ROWS": (".data", "MAX_ROWS"),
+    "make_materials_fixture": (".data", "make_materials_fixture"),
+    "benchmark": (".evaluation", "benchmark"),
+    "read_feature_manifest": (".feature_manifest", "read_feature_manifest"),
+    "ensure_prediction_output": (".prediction", "ensure_prediction_output"),
+    "fit_predict": (".prediction", "fit_predict"),
+    "plan_benchmark": (".planning", "plan_benchmark"),
+    "plan_prediction": (".planning", "plan_prediction"),
+    "verify_bundle": (".verification", "verify_bundle"),
+    "validate_evaluation_bundle": (".evaluation_schema", "validate_evaluation_bundle"),
+    "validate_prediction_bundle_schema": (".prediction_schema", "validate_prediction_bundle_schema"),
+}
+
+
+def __getattr__(name):
+    if name not in _DEPENDENCIES:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    module_name, attribute = _DEPENDENCIES[name]
+    module = _import_module(module_name, __package__)
+    value = module if attribute is None else getattr(module, attribute)
+    globals()[name] = value
+    return value
+
+
+def __dir__():
+    return sorted(set(globals()) | set(_DEPENDENCIES))
+
+
+def _load_dependencies(*names):
+    # Unqualified function globals do not invoke module __getattr__. Resolve
+    # their dependencies explicitly without replacing an already patched value.
+    for name in names:
+        if name not in globals():
+            __getattr__(name)
+
 
 MAX_CSV_BYTES = 64 * 1024 * 1024
 CSV_READ_CHUNK_BYTES = 64 * 1024
@@ -34,6 +68,7 @@ OUTPUT_NAMES = ("report.html", "manifest.json", "summary.json", "predictions.csv
 
 
 def _add_protocol(parser, *, outer=True, output=True, domain_selection=False):
+    _load_dependencies("ENCODINGS", "LEGACY", "GROUP", "DOMAIN")
     if output:
         parser.add_argument("--out", type=Path, required=True, help="Local output directory")
     if outer:
@@ -156,6 +191,7 @@ def _read_csv_with_hash(path: Path, *, group=None, domain=None):
     This binds provenance to the bytes read, not to a later pathname lookup;
     it does not promise filesystem-atomic reads of concurrently edited files.
     """
+    _load_dependencies("pd", "MAX_ROWS")
     # pandas may silently use excess fields as an index, shift the remaining
     # values under the wrong names, or pad short records. Validate a bounded
     # snapshot before type inference so those repairs cannot change the data.
@@ -230,6 +266,7 @@ def _read_training(args):
     frame, source_hash = _read_csv_with_hash(args.csv_path, group=args.group,
                                              domain=getattr(args, "domain", None))
     if args.features_file is not None:
+        _load_dependencies("read_feature_manifest")
         features = read_feature_manifest(args.features_file)
     elif args.features is not None:
         features = [c.strip() for c in args.features.split(",")]
@@ -260,6 +297,7 @@ def main(argv=None) -> int:
         # Keep one parser and evaluator for both entry points, including errors.
         from .interval_evaluation import main as evaluate_intervals
         return evaluate_intervals(argv[1:])
+    _load_dependencies(*_DEPENDENCIES)
     parser = argparse.ArgumentParser(
         prog="groupbench",
         description=("ML Super Calculator: grouped regression for local tables.\n"

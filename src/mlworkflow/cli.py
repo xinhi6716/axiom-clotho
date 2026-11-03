@@ -1,7 +1,8 @@
 """Axiom Clotho: local measurement-to-regression workflows and calculator core.
 
 Workflow help, component inspection and measurement extraction need no ML import.
-Delegated tabular commands, including their help, need the existing ML dependencies.
+Most delegated tabular commands, including general tabular help, need the existing ML dependencies.
+Metadata-only plan-group-forward-windows and its help use only the Python standard library.
 Extraction and prediction algorithms remain the pinned upstream components, not rewrites.
 """
 import argparse

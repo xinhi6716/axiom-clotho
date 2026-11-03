@@ -20,6 +20,26 @@ The `groupbench` alias, `python -m groupbench plan-group-forward-windows`, and
 separate from regression `mlcalc plan run` / `plan predict` and from measurement
 `clotho plan`; none of those routes is extended or replaced.
 
+### Import boundary
+
+The metadata command and its `--help`, including the aliases above and
+`python -m groupbench.group_time_json`, use only the Python standard library.
+They do not import NumPy, pandas, SciPy, scikit-learn, or model/evaluation code.
+Plain `import groupbench` and importing the JSON adapter are also light.
+The bounded single-open metadata reader and its file-safety checks are unchanged.
+
+Package public APIs resolve on first access to their original function/class
+objects and are cached. The ordered `__all__`, `dir`, explicit imports and
+`from groupbench import *` remain supported. Star import intentionally loads
+all exported APIs, including the model dependencies. Existing incidental package
+submodule attributes remain available through a bounded compatibility map.
+
+This does not make model dependencies optional installation extras. General
+`groupbench --help` / `clotho tabular --help`, legacy CSV fit-budget planning,
+scoring and model APIs can still require them. No estimator, default, dependency
+version, saved-result format or package-source inventory is changed. A light
+metadata import is not a claim that every zero-fit command has light imports.
+
 The [tiny handwritten fixture](../examples/group_forward_window_metadata.json)
 contains only invented metadata:
 

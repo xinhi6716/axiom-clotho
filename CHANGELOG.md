@@ -1,5 +1,18 @@
 # Changelog
 
+## Metadata planning startup (unreleased source)
+
+- Defer public package exports and legacy CLI dependencies so metadata-only
+  JSON import, command help and planning avoid numerical/model imports.
+- Preserve original exported objects, ordered exports, existing submodule access,
+  CLI aliases/defaults and patchable CLI attributes. Direct JSON module execution
+  no longer preloads itself through package initialization.
+- Keep bounded input-reader bodies, deterministic plan bytes, dependency
+  declarations, estimators, persistence and the 38-file source inventory unchanged.
+  General legacy help and model-backed no-fit routes may still require ML.
+- See the [metadata import boundary](docs/GROUP_FORWARD_WINDOW_PLAN.md#import-boundary).
+  This is current-source work, not a new release or universal speedup claim.
+
 ## Saved fixed temporal results (unreleased source)
 
 - Add fresh-only typed-JSON persistence for completed fixed temporal evaluations,

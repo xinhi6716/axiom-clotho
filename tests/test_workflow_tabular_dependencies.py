@@ -113,7 +113,8 @@ assert not any(name in sys.modules for name in ('groupbench', 'numpy', 'pandas',
                 env=dict(os.environ, PYTHONPATH=SOURCE, PYTHONDONTWRITEBYTECODE="1"),
                 capture_output=True, text=True, timeout=15)
             self.assertEqual((result.returncode, result.stderr), (0, ""))
-            self.assertIn("Delegated tabular commands, including their help", result.stdout)
+            self.assertIn("Most delegated tabular commands, including general tabular help", result.stdout)
+            self.assertIn("Metadata-only plan-group-forward-windows and its help", result.stdout)
             self.assertEqual(list(Path(directory).iterdir()), [])
 
 

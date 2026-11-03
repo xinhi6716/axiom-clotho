@@ -9,6 +9,7 @@ import csv
 from decimal import Decimal, InvalidOperation
 from fractions import Fraction
 import hashlib
+from importlib import import_module as _import_module
 import io
 import json
 import math
@@ -17,9 +18,31 @@ from pathlib import Path
 import re
 import sys
 
-from .metrics import grouped_metrics, paired_absolute_error_difference, contrast_float
 from .prediction_schema import _load_prediction_bundle, MAX_ROWS
 from .verification import _signature
+
+# Preserve the former module-level metric attributes and monkeypatch targets,
+# without making the bounded raw-byte reader import numerical dependencies.
+_METRIC_NAMES = frozenset({"grouped_metrics", "paired_absolute_error_difference", "contrast_float"})
+
+
+def __getattr__(name):
+    if name not in _METRIC_NAMES:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    value = getattr(_import_module(".metrics", __package__), name)
+    globals()[name] = value
+    return value
+
+
+def __dir__():
+    return sorted(set(globals()) | _METRIC_NAMES)
+
+
+def _load_metrics(*names):
+    for name in names:
+        if name not in globals():
+            __getattr__(name)
+
 
 MAX_OUTCOMES_BYTES = 4 * 1024 * 1024
 _POSITION = re.compile(r"(?:0|[1-9][0-9]*)\Z")
@@ -135,6 +158,8 @@ def score_saved_predictions(run_dir, outcomes_csv):
 
 def _score_loaded_bundle(loaded, outcomes, outcomes_hash):
     """Score retained verified bytes and one canonical parsed outcome roster."""
+    _load_metrics("grouped_metrics")
+
     schema, _manifest, prediction_raw, hashes = loaded
     # The shared validator checked structure on these exact bytes. Scoring
     # additionally rejects underflow and integer precision loss on both sides;
@@ -219,6 +244,8 @@ def compare_saved_predictions(run_a, run_b, query_csv, outcomes_csv, contract):
     outcomes = _outcomes(outcome_raw, n)
     report_a = _score_loaded_bundle(loaded_a, outcomes, outcome_hash)
     report_b = _score_loaded_bundle(loaded_b, outcomes, outcome_hash)
+    _load_metrics("paired_absolute_error_difference", "contrast_float")
+
     # grouped_metrics above validates integer precision and finite arithmetic
     # before any float conversion in the shared exact contrast primitive.
     contrasts, grouped, rows = [], {}, []
