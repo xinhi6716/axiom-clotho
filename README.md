@@ -310,3 +310,11 @@ declarations do not prove causality or enforce downstream feature exclusion or
 preprocessing. Output retains supplied identities and timing metadata; review it
 before sharing. This is not a temporal-ML benchmark or part of the frozen b7
 download. See the [strict contract, resource limits and Python API](docs/GROUP_FORWARD_WINDOW_PLAN.md).
+
+### Fixed temporal baseline evaluation (Python only)
+
+The separate [whole-group temporal evaluator](docs/GROUP_FORWARD_BASELINE_EVALUATION.md)
+previews and runs two fixed regression recipes on a predeclared typed plan. It
+uses train-only preprocessing and reports tested and untested coverage without
+selection, full-data refits, CLI integration, or saved bundles. A matching
+execution binding and finite observed targets for every row are required.

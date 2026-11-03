@@ -1,5 +1,18 @@
 # Changelog
 
+## Fixed whole-group temporal baseline API (unreleased source)
+
+- Add a separate Python-only, in-memory preview/evaluate boundary for two fixed
+  numeric regression recipes on a completely reconstructed forward-window plan.
+- Bind copied inputs, typed group identities, declared roles, recipes, plan,
+  resource policy, and observed source/environment before creating pipelines.
+- Report immutable partial coverage, tested-only predictions, direct pooled
+  row/equal-group metrics, and exact attempted/completed pipeline-fit counts.
+- Require finite targets everywhere, exact numeric precision and row alignment,
+  train-only preprocessing, finite learned state, and bounded solver work.
+- Keep existing model, planner JSON bytes, full-OOF schemas, and CLI defaults
+  unchanged; preserve historical source inventories 28 through 36 alongside 37.
+
 ## Current source — metadata-only group forward windows (unreleased)
 
 - Add a standalone deterministic no-fit planner for exact group spans and predeclared time windows. Keep whole groups, strict label-plus-gap training cutoffs, unused memberships, explicit exclusions and partial coverage.

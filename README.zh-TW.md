@@ -222,3 +222,7 @@ mlcalc plan-group-forward-windows examples/group_forward_window_metadata.json
 輸出保留提供的群組識別碼與時間中繼資料，分享前請先檢查。
 這不是完整的時間序列機器學習評估，也不在已凍結的 b7 下載檔內。
 詳見[嚴格格式、資源限制與 Python API](docs/GROUP_FORWARD_WINDOW_PLAN.md)。
+
+### 固定時序基線評估（僅 Python）
+
+獨立的[整群時序評估 API](docs/GROUP_FORWARD_BASELINE_EVALUATION.md)先預覽，再依預先宣告的型別化計畫執行兩種固定迴歸基線。前處理只使用各視窗的訓練資料，明確列出已測與未測覆蓋範圍；不選模、不以全資料重訓，也不新增 CLI 或儲存套件格式。執行必須符合預覽綁定，且所有資料列（含未測列）都要有有限的已觀測目標值。宣告與雜湊不證明因果有效性、來源真實性或無資料洩漏。

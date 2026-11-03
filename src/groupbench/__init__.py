@@ -25,3 +25,13 @@ __all__ += ["PredictionSchemaResult", "validate_prediction_bundle_schema"]
 
 from .evaluation_schema import EvaluationSchemaResult, validate_evaluation_bundle
 __all__ += ["EvaluationSchemaResult", "validate_evaluation_bundle"]
+
+# Separate partial-coverage retrospective protocol; never a benchmark mode.
+from .group_time_evaluation import (
+    GroupForwardEvaluationError, GroupForwardEvaluationPreview,
+    GroupForwardEvaluationResult, preview_group_forward_evaluation,
+    evaluate_group_forward_baselines,
+)
+__all__ += ["GroupForwardEvaluationError", "GroupForwardEvaluationPreview",
+            "GroupForwardEvaluationResult", "preview_group_forward_evaluation",
+            "evaluate_group_forward_baselines"]
