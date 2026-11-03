@@ -1,5 +1,11 @@
 # Changelog
 
+## Current source — metadata-only group forward windows (unreleased)
+
+- Add a standalone deterministic no-fit planner for exact group spans and predeclared time windows. Keep whole groups, strict label-plus-gap training cutoffs, unused memberships, explicit exclusions and partial coverage.
+- Require declared clock/unit labels and bounded integer ticks; return immutable records without model, CLI or existing result-schema integration.
+- Preserve saved source-inventory compatibility from 28 through 34 files while extending the current inventory to 35. See the [contract and limitations](docs/GROUP_FORWARD_WINDOW_PLAN.md). This is not end-to-end temporal ML or a new release.
+
 ## Current source — optional grouped regression families (unreleased)
 
 - Add explicit `nystroem_ridge` and `group_median` comparators without changing default families. Keep preprocessing and landmark selection training-only; route current training groups only to the group-balanced median.

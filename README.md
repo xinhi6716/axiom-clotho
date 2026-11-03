@@ -293,3 +293,11 @@ need predictors only. Defaults are unchanged, and outer evaluation still holds
 out groups, not necessarily domains. See the [invented CLI example](examples/domain-inner-tabular/README.md)
 for commands, validation, privacy and limitations. This does not extend measurement
 or FET configuration schemas.
+
+### Metadata-only whole-group time windows
+
+Current source provides a standalone no-fit Python planner for predeclared
+forward windows, with whole-group train/test/unused memberships and partial
+test coverage. Timing declarations do not prove causality or enforce downstream
+feature exclusion or preprocessing. It is not a CLI or temporal-ML benchmark
+route. See the [contract and invented example](docs/GROUP_FORWARD_WINDOW_PLAN.md).
