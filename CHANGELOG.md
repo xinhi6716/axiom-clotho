@@ -1,5 +1,18 @@
 # Changelog
 
+## Byte verification startup (unreleased source)
+
+- Dispatch `mlcalc verify` and its help before numerical/model imports, reusing
+  the general CLI's verify argument/help declaration and the existing byte verifier.
+  Console aliases and `clotho tabular verify` use the same route.
+- Preserve help, success output, status codes, opaque payloads, fixed inventories
+  and read-only no-follow checks. Unknown-argument usage now names
+  `groupbench verify` rather than showing the full command menu; its diagnostic
+  also uses that subcommand prefix. Other commands keep their existing parsers.
+- Keep reader bodies, semantic validators, model paths, dependencies and the
+  38-file source inventory unchanged. This is current-source work, not a release,
+  scientific validation or universal startup-speed claim.
+
 ## Explicit group-balanced Ridge (unreleased source)
 
 - Add opt-in `group_balanced_ridge` with alpha 0.1, 1 and 10 and locally derived

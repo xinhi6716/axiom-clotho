@@ -18,7 +18,7 @@ from importlib import import_module as _import_module
 from . import __version__
 
 # Keep legacy module attributes patchable while leaving the raw-byte opener and
-# early metadata dispatch independent of numerical/model dependencies.
+# early metadata/byte-verification dispatch independent of numerical/model dependencies.
 _DEPENDENCIES = {
     "pd": ("pandas", None),
     "ENCODINGS": (".categorical", "ENCODINGS"),
@@ -278,8 +278,35 @@ def _read_training(args):
     return frame, features, source_hash
 
 
+def _add_verify_parser(sub):
+    verify = sub.add_parser("verify", help="Check existing bundle SHA-256 byte integrity without fitting or writing",
+                            description="Check SHA-256 byte integrity only, not scientific/model correctness. No fitting, writes, or model loading.",
+                            epilog="Requires POSIX no-follow file access. Limits: 16 KiB checksums.json; 64 MiB per payload. Exit status: 0 verified, 2 failed.")
+    verify.add_argument("run_dir", type=Path, help="Existing evaluation or prediction directory (no symlink components)")
+    return verify
+
+
+def _verify_main(argv):
+    # Use the same declaration as general help, without constructing model parsers.
+    root = argparse.ArgumentParser(prog="groupbench")
+    parser = _add_verify_parser(root.add_subparsers())
+    args = parser.parse_args(argv)
+    _load_dependencies("verify_bundle")
+    try:
+        result = verify_bundle(args.run_dir)
+        print(f"Verified {result.bundle_type} bundle: {len(result.files)} files, {result.total_bytes} payload bytes match checksums.json.")
+        print("Byte integrity only, not scientific/model correctness, authenticity, or proof of execution.")
+        print("Unlisted files are not checked. This is not an atomic directory snapshot; verify an idle directory.")
+        return 0
+    except (ValueError, TypeError, OSError) as exc:
+        print(f"groupbench: {exc}", file=sys.stderr)
+        return 2
+
+
 def main(argv=None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] == "verify":
+        return _verify_main(argv[1:])
     if argv and argv[0] == "plan-group-forward-windows":
         from .group_time_json import main as plan_group_windows
         return plan_group_windows(argv[1:])
@@ -358,10 +385,7 @@ The groupbench command is an alias for the same CLI.""",
             preview.add_argument("new_csv_path", type=Path, help="New rows: exactly the feature columns")
         _add_columns(preview)
         _add_protocol(preview, outer=mode == "run", output=False, domain_selection=True)
-    verify = sub.add_parser("verify", help="Check existing bundle SHA-256 byte integrity without fitting or writing",
-                            description="Check SHA-256 byte integrity only, not scientific/model correctness. No fitting, writes, or model loading.",
-                            epilog="Requires POSIX no-follow file access. Limits: 16 KiB checksums.json; 64 MiB per payload. Exit status: 0 verified, 2 failed.")
-    verify.add_argument("run_dir", type=Path, help="Existing evaluation or prediction directory (no symlink components)")
+    _add_verify_parser(sub)
     schema = sub.add_parser("validate-prediction-bundle", allow_abbrev=False,
                             help="Check supported regression prediction metadata and CSV consistency",
                             description="Read-only checksum and bounded structural consistency, not scientific/model validation.",
@@ -380,12 +404,6 @@ The groupbench command is an alias for the same CLI.""",
     try:
         if args.command == "binary":
             return run_binary(args)
-        if args.command == "verify":
-            result = verify_bundle(args.run_dir)
-            print(f"Verified {result.bundle_type} bundle: {len(result.files)} files, {result.total_bytes} payload bytes match checksums.json.")
-            print("Byte integrity only, not scientific/model correctness, authenticity, or proof of execution.")
-            print("Unlisted files are not checked. This is not an atomic directory snapshot; verify an idle directory.")
-            return 0
         if args.command == "validate-prediction-bundle":
             result = validate_prediction_bundle_schema(args.run_dir)
             print(f"Prediction contract {result.contract_version} checked: schema {result.schema_version}, {result.n_predictions} rows, {result.n_features} features.")
