@@ -24,6 +24,39 @@ def validate_seed(seed: int) -> int:
     return int(seed)
 
 
+def _validate_numeric_feature_precision(column: pd.Series) -> None:
+    """Reject typed values that float64 conversion would silently narrow.
+
+    Check before conversion, including pandas nullable integer columns. Missing
+    values remain available for the existing fold-local imputation policy.
+    Upstream conversion or parsing may already have discarded precision.
+    """
+    message = ("Numeric feature values must be representable in float64: integer "
+               "values must be exact and floating dtypes wider than float64 "
+               "are not supported. Explicitly transform the source values "
+               "after reviewing their precision.")
+    dtype = column.dtype
+    if pd.api.types.is_integer_dtype(dtype):
+        for value in column.dropna():
+            try:
+                converted = float(value)
+                if not np.isfinite(converted) or int(converted) != int(value):
+                    raise ValueError(message)
+            except (ValueError, OverflowError):
+                raise ValueError(message) from None
+    elif pd.api.types.is_float_dtype(dtype):
+        # Nullable and sparse dtypes expose their underlying NumPy dtype in
+        # different attributes. Unknown extension dtypes retain the existing
+        # conversion policy rather than failing during this precision check.
+        numeric_dtype = getattr(dtype, "numpy_dtype", getattr(dtype, "subtype", dtype))
+        try:
+            width = np.dtype(numeric_dtype).itemsize
+        except (TypeError, ValueError):
+            width = None
+        if width is not None and width > np.dtype(np.float64).itemsize:
+            raise ValueError(message)
+
+
 def validate_features(X: pd.DataFrame) -> pd.DataFrame:
     """Return a normalized copy; no imputation or fitted statistics are computed."""
     if not isinstance(X, pd.DataFrame):
@@ -39,6 +72,7 @@ def validate_features(X: pd.DataFrame) -> pd.DataFrame:
         if is_numeric_dtype(X[col]) and not is_bool_dtype(X[col]):
             if np.iscomplexobj(X[col]):
                 raise ValueError(f"Complex values are not supported: {col!r}.")
+            _validate_numeric_feature_precision(X[col])
             X[col] = X[col].astype(float)
             if np.isinf(X[col].to_numpy()).any():
                 raise ValueError(f"Infinite feature values are not supported: {col!r}.")

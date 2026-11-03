@@ -1,5 +1,14 @@
 # Changelog
 
+## Numeric feature precision (unreleased source)
+
+- Tighten training and prediction validation: reject integer feature values
+  that cannot be represented exactly as float64 and inspectable floating dtypes
+  wider than float64. Previously accepted inputs may need explicit transformation.
+  This does not detect precision already lost during CSV parsing or other upstream
+  conversion, later model-specific narrowing, or every extension dtype; object
+  columns retain their categorical interpretation. It is not a precision audit.
+
 ## Byte verification startup (unreleased source)
 
 - Dispatch `mlcalc verify` and its help before numerical/model imports, reusing

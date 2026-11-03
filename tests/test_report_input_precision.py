@@ -34,10 +34,13 @@ class InputPrecisionReportTests(unittest.TestCase):
         self.assertEqual(result.summary, before.summary)
         self.assertNotIn('input_precision', result.manifest)
 
-    def test_large_integer_source_distinction_can_be_lost_before_scaling(self):
+    def test_large_integer_distinction_lost_upstream_cannot_be_recovered(self):
         source = pd.DataFrame({'x': np.array([2**53, 2**53 + 1], dtype=np.int64)})
-        normalized = validate_features(source)
         self.assertEqual(source.x.nunique(), 2)
+        with self.assertRaisesRegex(ValueError, "representable in float64"):
+            validate_features(source)
+        # Precision lost by the caller before validation remains undetectable.
+        normalized = validate_features(source.astype(float))
         self.assertEqual(normalized.x.nunique(), 1)
         pipeline = make_pipeline(normalized, Candidate('probe', 'dummy', {}), 0)
         transformed = pipeline.named_steps['preprocess'].fit_transform(normalized)
