@@ -14,6 +14,7 @@ import pandas as pd
 import sklearn
 
 from . import __version__
+from .domain_selection import GROUP, DOMAIN, LIMITATION, prepare_domain_data, domain_metadata
 from .data import validate_source_sha256
 from .package_source import observe_package_source
 from .categorical import LEGACY, DISTINCT, encoding_options, preprocessing_description
@@ -50,9 +51,9 @@ def ensure_prediction_output(output_dir):
 
 
 def _prepare_prediction(frame, new_rows, *, target, group, features, inner_splits,
-                        random_state, baselines, objective, categorical_encoding=LEGACY):
+                        random_state, baselines, objective, categorical_encoding=LEGACY, inner_strategy=GROUP, domain=None):
     """Shared preflight of training, new-row schema and full-data fit schedule."""
-    X, y, groups = prepare_data(frame, target, group, features)
+    X, y, groups, domains = prepare_domain_data(frame, target, group, features, domain, inner_strategy, inner_splits)
     incoming = validate_features(new_rows)
     if set(incoming.columns) != set(X.columns):
         raise ValueError("New rows must contain exactly the training feature columns, without target or group columns. "
@@ -61,7 +62,7 @@ def _prepare_prediction(frame, new_rows, *, target, group, features, inner_split
     # rules, including its all-missing-column accommodation, before training.
     validate_prediction_features(incoming, X.columns, [str(X[c].dtype) for c in X])
     plan = selection_plan(X, groups, baselines=baselines, inner_splits=inner_splits,
-                          random_state=random_state, objective=objective, categorical_encoding=categorical_encoding)
+                          random_state=random_state, objective=objective, categorical_encoding=categorical_encoding, inner_strategy=inner_strategy, domains=domains)
     return X, y, groups, incoming, plan
 
 
@@ -69,7 +70,7 @@ def fit_predict(frame: pd.DataFrame, new_rows: pd.DataFrame, *, target: str, gro
                 features=None, inner_splits: int = 3, random_state: int = 0,
                 baselines=("dummy", "ridge", "extra_trees"), objective="group_mae",
                 source_sha256: str | None = None, prediction_source_sha256: str | None = None,
-                categorical_encoding: str = LEGACY) -> PredictionResult:
+                categorical_encoding: str = LEGACY, inner_strategy: str = GROUP, domain: str | None = None) -> PredictionResult:
     """Fit using all labeled rows and return local predictions for new rows.
 
     This is inference, not an independent performance estimate. ``new_rows``
@@ -81,10 +82,10 @@ def fit_predict(frame: pd.DataFrame, new_rows: pd.DataFrame, *, target: str, gro
     validate_source_sha256(prediction_source_sha256, "prediction_source_sha256")
     X, y, groups, incoming, plan = _prepare_prediction(
         frame, new_rows, target=target, group=group, features=features,
-        inner_splits=inner_splits, random_state=random_state, baselines=baselines, objective=objective, categorical_encoding=categorical_encoding)
+        inner_splits=inner_splits, random_state=random_state, baselines=baselines, objective=objective, categorical_encoding=categorical_encoding, inner_strategy=inner_strategy, domain=domain)
     random_state = plan.seed
-    estimator = GroupBenchRegressor(baselines=baselines, inner_splits=inner_splits,
-                                    random_state=random_state, objective=objective, categorical_encoding=categorical_encoding)
+    estimator = GroupBenchRegressor(baselines=baselines, inner_splits=None if inner_strategy == DOMAIN else inner_splits,
+                                    random_state=random_state, objective=objective, categorical_encoding=categorical_encoding, inner_strategy=inner_strategy)
     estimator._fit_prepared(X, y, groups, plan)
     inner_splits = len(plan.splits)
     predictions = estimator.predict(incoming)
@@ -124,4 +125,9 @@ def fit_predict(frame: pd.DataFrame, new_rows: pd.DataFrame, *, target: str, gro
         manifest.update(schema_version="1.3", protocol="group-fit-predict-extended-families-v1",
                         capabilities=optional_capabilities(baselines))
         manifest["config"]["categorical_encoding"] = categorical_encoding
+    if inner_strategy == DOMAIN:
+        manifest.update(schema_version="1.4", protocol="domain-inner-fit-predict-v1", capabilities=optional_capabilities(baselines))
+        manifest["config"].update(inner_strategy=inner_strategy, domain=domain, categorical_encoding=categorical_encoding,
+                                  **domain_metadata(plan.domains, groups))
+        manifest["limitations"].append(LIMITATION)
     return PredictionResult(pd.DataFrame({"row_position": np.arange(len(predictions)), "prediction": predictions}), manifest, estimator)

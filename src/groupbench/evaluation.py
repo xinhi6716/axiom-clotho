@@ -15,6 +15,7 @@ import pandas as pd
 import sklearn
 
 from . import __version__
+from .domain_selection import GROUP, DOMAIN, LIMITATION, prepare_domain_data, domain_metadata
 from .data import validate_source_sha256
 from .package_source import observe_package_source
 from .categorical import LEGACY, DISTINCT, encoding_options, preprocessing_description
@@ -43,10 +44,10 @@ class BenchmarkResult:
 
 
 def _prepare_benchmark(frame, *, target, group, features, outer_splits,
-                       inner_splits, random_state, baselines, objective, categorical_encoding=LEGACY):
+                       inner_splits, random_state, baselines, objective, categorical_encoding=LEGACY, inner_strategy=GROUP, domain=None):
     """Shared no-fit validation and exact seeded nested schedule."""
     seed = validate_seed(random_state)
-    X, y, groups = prepare_data(frame, target, group, features)
+    X, y, groups, domains = prepare_domain_data(frame, target, group, features, domain, inner_strategy, inner_splits)
     candidates_for(baselines)
     splits = tuple(GroupKFold(outer_splits, seed).split(X, groups=groups))
     schedule = []
@@ -55,7 +56,8 @@ def _prepare_benchmark(frame, *, target, group, features, outer_splits,
     for fold, (train, test) in enumerate(splits):
         selection = selection_plan(X.iloc[train], groups[train], baselines=baselines,
                                    inner_splits=inner_splits, random_state=seed + fold + 1,
-                                   objective=objective, categorical_encoding=categorical_encoding)
+                                   objective=objective, categorical_encoding=categorical_encoding, inner_strategy=inner_strategy,
+                                   domains=None if domains is None else domains[train])
         schedule.append((train, test, selection))
     return X, y, groups, seed, schedule
 
@@ -64,7 +66,7 @@ def benchmark(frame: pd.DataFrame, *, target: str, group: str, features=None,
               outer_splits: int = 5, inner_splits: int = 3,
               random_state: int = 0, baselines=("dummy", "ridge", "extra_trees"),
               objective: str = "group_mae", source_sha256: str | None = None,
-              categorical_encoding: str = LEGACY) -> BenchmarkResult:
+              categorical_encoding: str = LEGACY, inner_strategy: str = GROUP, domain: str | None = None) -> BenchmarkResult:
     """Estimate performance on unseen groups using genuinely nested selection.
 
     The ``selected`` entry is selected only on inner validation in each outer
@@ -76,7 +78,7 @@ def benchmark(frame: pd.DataFrame, *, target: str, group: str, features=None,
     started = time.perf_counter()
     X, y, groups, seed, schedule = _prepare_benchmark(
         frame, target=target, group=group, features=features, outer_splits=outer_splits,
-        inner_splits=inner_splits, random_state=random_state, baselines=baselines, objective=objective, categorical_encoding=categorical_encoding)
+        inner_splits=inner_splits, random_state=random_state, baselines=baselines, objective=objective, categorical_encoding=categorical_encoding, inner_strategy=inner_strategy, domain=domain)
     splits = [(train, test) for train, test, _ in schedule]
     candidates = schedule[0][2].candidates
     outer_splits = len(schedule)
@@ -86,8 +88,8 @@ def benchmark(frame: pd.DataFrame, *, target: str, group: str, features=None,
     fold_ids = np.full(len(X), -1, dtype=int)
     outer_audit = []
     for fold, (train, test, plan) in enumerate(schedule):
-        estimator = GroupBenchRegressor(baselines=baselines, inner_splits=inner_splits,
-                                        random_state=seed + fold + 1, objective=objective, categorical_encoding=categorical_encoding)
+        estimator = GroupBenchRegressor(baselines=baselines, inner_splits=None if inner_strategy == DOMAIN else inner_splits,
+                                        random_state=seed + fold + 1, objective=objective, categorical_encoding=categorical_encoding, inner_strategy=inner_strategy)
         estimator._fit_prepared(X.iloc[train].reset_index(drop=True), y[train], groups[train], plan)
         predictions = estimator.predict_baselines(X.iloc[test])
         for name in names:
@@ -122,6 +124,10 @@ def benchmark(frame: pd.DataFrame, *, target: str, group: str, features=None,
         "candidates": [{"name": c.name, "family": c.family, "params": c.params} for c in candidates],
         "threads": 1,
     }
+    if inner_strategy == DOMAIN:
+        config.update(inner_strategy=inner_strategy, domain=domain, inner_splits=None,
+                      inner_splits_per_outer=[len(plan.splits) for _, _, plan in schedule],
+                      **domain_metadata(frame[domain].to_numpy(), groups))
     config.update(encoding_options(categorical_encoding))
     fingerprint = data_fingerprint(X, y, groups)
     run_key = hashlib.sha256((fingerprint + json.dumps(config, sort_keys=True)).encode()).hexdigest()
@@ -133,6 +139,8 @@ def benchmark(frame: pd.DataFrame, *, target: str, group: str, features=None,
         "Fold variability is not a confidence interval; no uncertainty calibration is implemented.",
         "Outputs include group IDs, observed targets, and predictions; review before sharing.",
     ]
+    if inner_strategy == DOMAIN:
+        warnings.append(LIMITATION)
     if diagnostics["identical_feature_target_rows_across_groups"]:
         warnings.append(f"Found {diagnostics['identical_feature_target_rows_across_groups']} identical feature/target rows spanning different groups. Inspect duplicates before trusting evaluation; no rows were removed.")
     manifest = {
@@ -165,4 +173,9 @@ def benchmark(frame: pd.DataFrame, *, target: str, group: str, features=None,
         config["categorical_encoding"] = categorical_encoding
         summary.update(schema_version="1.2", protocol=manifest["protocol"],
                        capabilities=optional_capabilities(baselines))
+    if inner_strategy == DOMAIN:
+        manifest.update(schema_version="1.3", protocol="nested-group-outer-domain-inner-v1",
+                        capabilities=optional_capabilities(baselines))
+        config["categorical_encoding"] = categorical_encoding
+        summary.update(schema_version="1.3", protocol=manifest["protocol"], capabilities=optional_capabilities(baselines))
     return BenchmarkResult(summary=summary, manifest=manifest, predictions=prediction_frame)

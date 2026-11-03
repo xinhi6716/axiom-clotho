@@ -5,6 +5,7 @@ from __future__ import annotations
 import pandas as pd
 
 from . import __version__
+from .domain_selection import GROUP, DOMAIN, LIMITATION, prepare_domain_data, domain_metadata
 from .data import validate_source_sha256
 from .categorical import LEGACY, DISTINCT, encoding_options
 from .evaluation import _prepare_benchmark
@@ -31,13 +32,20 @@ def _split_counts(train, test, groups):
 
 
 def _selection_summary(plan, groups):
-    return {
+    result = {
         "inner_seed": plan.seed,
         "inner_folds": [{"fold": fold, **_split_counts(train, test, groups)}
                         for fold, (train, test) in enumerate(plan.splits)],
         "refit_families": list(plan.refit_families),
         "fit_counts": plan.fit_counts,
     }
+
+    if plan.inner_strategy == DOMAIN:
+        from .domain_selection import domain_audit
+        for row, (train, test) in zip(result["inner_folds"], plan.splits):
+            audit = domain_audit(train, test, plan.domains)
+            row.update({k: v for k, v in audit.items() if not k.endswith("domains")})
+    return result
 
 
 def _base_report(X, groups, plan, *, mode, target, group, source_sha256):
@@ -60,12 +68,12 @@ def _base_report(X, groups, plan, *, mode, target, group, source_sha256):
 def plan_benchmark(frame: pd.DataFrame, *, target: str, group: str, features=None,
                    outer_splits: int = 5, inner_splits: int = 3, random_state: int = 0,
                    baselines=("dummy", "ridge", "extra_trees"), objective="group_mae",
-source_sha256: str | None = None, categorical_encoding: str = LEGACY) -> dict:
+source_sha256: str | None = None, categorical_encoding: str = LEGACY, inner_strategy: str = GROUP, domain: str | None = None) -> dict:
     """Validate a nested evaluation and return its exact no-fit work schedule."""
     validate_source_sha256(source_sha256)
     X, _, groups, seed, schedule = _prepare_benchmark(
         frame, target=target, group=group, features=features, outer_splits=outer_splits,
-        inner_splits=inner_splits, random_state=random_state, baselines=baselines, objective=objective, categorical_encoding=categorical_encoding)
+        inner_splits=inner_splits, random_state=random_state, baselines=baselines, objective=objective, categorical_encoding=categorical_encoding, inner_strategy=inner_strategy, domain=domain)
     result = _base_report(X, groups, schedule[0][2], mode="run", target=target,
                           group=group, source_sha256=source_sha256)
     result["config"].update(outer_splits=len(schedule), random_state=seed)
@@ -88,6 +96,11 @@ source_sha256: str | None = None, categorical_encoding: str = LEGACY) -> dict:
         result.update(schema_version="1.2", protocol="nested-group-kfold-extended-families-v1",
                       capabilities=optional_capabilities(baselines))
         result["config"]["categorical_encoding"] = categorical_encoding
+    if inner_strategy == DOMAIN:
+        result.update(schema_version="1.3", protocol="nested-group-outer-domain-inner-v1", capabilities=optional_capabilities(baselines))
+        result["config"].update(inner_strategy=inner_strategy, domain=domain, inner_splits=None,
+                                inner_splits_per_outer=[len(p.splits) for _, _, p in schedule], categorical_encoding=categorical_encoding)
+        result["limitations"].append(LIMITATION)
     return result
 
 
@@ -95,13 +108,13 @@ def plan_prediction(frame: pd.DataFrame, new_rows: pd.DataFrame, *, target: str,
                     group: str, features=None, inner_splits: int = 3, random_state: int = 0,
                     baselines=("dummy", "ridge", "extra_trees"), objective="group_mae",
                     source_sha256: str | None = None,
-                    prediction_source_sha256: str | None = None, categorical_encoding: str = LEGACY) -> dict:
+                    prediction_source_sha256: str | None = None, categorical_encoding: str = LEGACY, inner_strategy: str = GROUP, domain: str | None = None) -> dict:
     """Validate a full-data selection/refit and new-row schema without fitting."""
     validate_source_sha256(source_sha256)
     validate_source_sha256(prediction_source_sha256, "prediction_source_sha256")
     X, _, groups, incoming, plan = _prepare_prediction(
         frame, new_rows, target=target, group=group, features=features,
-        inner_splits=inner_splits, random_state=random_state, baselines=baselines, objective=objective, categorical_encoding=categorical_encoding)
+        inner_splits=inner_splits, random_state=random_state, baselines=baselines, objective=objective, categorical_encoding=categorical_encoding, inner_strategy=inner_strategy, domain=domain)
     result = _base_report(X, groups, plan, mode="predict", target=target,
                           group=group, source_sha256=source_sha256)
     result["schema_version"] = "1.1"
@@ -126,4 +139,8 @@ def plan_prediction(frame: pd.DataFrame, new_rows: pd.DataFrame, *, target: str,
         result.update(schema_version="1.3", protocol="group-fit-predict-extended-families-v1",
                       capabilities=optional_capabilities(baselines))
         result["config"]["categorical_encoding"] = categorical_encoding
+    if inner_strategy == DOMAIN:
+        result.update(schema_version="1.4", protocol="domain-inner-fit-predict-v1", capabilities=optional_capabilities(baselines))
+        result["config"].update(inner_strategy=inner_strategy, domain=domain, categorical_encoding=categorical_encoding)
+        result["limitations"].append(LIMITATION)
     return result

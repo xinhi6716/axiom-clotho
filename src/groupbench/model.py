@@ -26,6 +26,7 @@ from .metrics import grouped_metrics
 from .kernel import NystroemRidgeRegressor
 from .baselines import GroupBalancedMedianRegressor
 from .splitting import GroupKFold, audit_split
+from .domain_selection import GROUP, DOMAIN, validate_strategy, domain_vector, domain_splits, domain_audit
 
 
 @dataclass(frozen=True)
@@ -68,6 +69,8 @@ class SelectionPlan:
     seed: int
     objective: str
     categorical_encoding: str = LEGACY
+    inner_strategy: str = GROUP
+    domains: object = None
 
     @property
     def fit_counts(self) -> dict:
@@ -79,15 +82,24 @@ class SelectionPlan:
                 "total_fits": inner + refits}
 
 
-def selection_plan(X, groups, *, baselines, inner_splits, random_state, objective, categorical_encoding=LEGACY):
+def selection_plan(X, groups, *, baselines, inner_splits, random_state, objective, categorical_encoding=LEGACY, inner_strategy=GROUP, domains=None):
     """Validate and materialize a selection schedule without fitting anything."""
     validate_categorical_encoding(categorical_encoding)
     if objective not in ("group_mae", "mae"):
         raise ValueError("objective must be 'group_mae' or 'mae'.")
     seed = validate_seed(random_state)
     candidates = tuple(candidates_for(baselines))
-    splits = tuple(GroupKFold(inner_splits, seed).split(X, groups=groups))
-    return SelectionPlan(candidates, splits, tuple(baselines), seed, objective, categorical_encoding)
+    validate_strategy(inner_strategy, inner_splits, domains)
+    if inner_strategy == DOMAIN:
+        if isinstance(domains, pd.Series) and domains.name in X.columns:
+            raise ValueError("Domain metadata cannot be a predictor.")
+        if isinstance(domains, pd.Series) and not domains.index.equals(X.index):
+            raise ValueError("Domain Series index must exactly align with X.")
+        domains = domain_vector(domains, groups, len(X))
+        splits = domain_splits(domains)
+    else:
+        splits = tuple(GroupKFold(inner_splits, seed).split(X, groups=groups))
+    return SelectionPlan(candidates, splits, tuple(baselines), seed, objective, categorical_encoding, inner_strategy, domains)
 
 
 def make_pipeline(X: pd.DataFrame, candidate: Candidate, random_state: int, categorical_encoding=LEGACY) -> Pipeline:
@@ -192,28 +204,38 @@ class GroupBenchRegressor(RegressorMixin, BaseEstimator):
     """
 
     def __init__(self, baselines=("dummy", "ridge", "extra_trees"), inner_splits=3,
-                 random_state=0, objective="group_mae", categorical_encoding=LEGACY):
+                 random_state=0, objective="group_mae", categorical_encoding=LEGACY, inner_strategy=GROUP):
         self.baselines = baselines
         self.inner_splits = inner_splits
         self.random_state = random_state
         self.objective = objective
         self.categorical_encoding = categorical_encoding
+        self.inner_strategy = inner_strategy
 
-    def fit(self, X, y, groups=None):
+    def fit(self, X, y, groups=None, domains=None):
         if groups is None:
             raise ValueError("groups is required; there is no row-random fallback.")
+        if isinstance(domains, pd.Series) and domains.name in X.columns:
+            raise ValueError("Domain metadata cannot be a predictor.")
+        if isinstance(domains, pd.Series) and not domains.index.equals(X.index):
+            raise ValueError("Domain Series index must exactly align with X.")
+        if domains is not None:
+            domains = np.asarray(domains) if not np.ma.isMaskedArray(domains) else domains
         X = validate_features(X)
         y = validate_target(y, len(X))
         groups = validate_groups(groups, len(X))
         plan = selection_plan(X, groups, baselines=self.baselines, inner_splits=self.inner_splits,
                               random_state=self.random_state, objective=self.objective,
-                              categorical_encoding=self.categorical_encoding)
+                              categorical_encoding=self.categorical_encoding, inner_strategy=self.inner_strategy, domains=domains)
         return self._fit_prepared(X, y, groups, plan)
 
     def _fit_prepared(self, X, y, groups, plan: SelectionPlan):
         """Execute a validated schedule; used by both nested and full-data fits."""
         candidates, splits, seed = plan.candidates, plan.splits, plan.seed
         audit = [{"fold": i, **audit_split(train, test, groups)} for i, (train, test) in enumerate(splits)]
+        if plan.inner_strategy == DOMAIN:
+            for row, (train, test) in zip(audit, splits):
+                row.update(domain_audit(train, test, plan.domains))
         records = []
         # Limit BLAS/OpenMP as well as the tree estimator to one thread.
         with threadpool_limits(limits=1):

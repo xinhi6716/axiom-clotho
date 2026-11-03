@@ -9,7 +9,7 @@ import numpy as np
 
 from .data import validate_groups
 from .metrics import regression_metrics, _checked_arithmetic
-from .prediction_schema import _manifest, _DECIMAL, _optional_selection_metadata, _extension_families
+from .prediction_schema import _manifest, _DECIMAL, _optional_selection_metadata, _extension_families, _DOMAIN_FIELDS, _domain_config, _domain_selection, _reject_domain_audits, _domain_candidates, _same_declaration
 from .verification import (EVALUATION_FILES, MAX_CHECKSUM_BYTES, MAX_PAYLOAD_BYTES,
                            _checksum_records, _open_run_directory, _read_file, _signature)
 
@@ -89,7 +89,7 @@ def _partitioned_metrics(observed, predicted, group_rows, fold_rows, fold_groups
 def _check(manifest, summary, raw):
     version = manifest.get("schema_version")
     protocols = {"1.0": "nested-group-kfold-v1", "1.1": "nested-group-kfold-distinct-v2",
-                 "1.2": "nested-group-kfold-extended-families-v1"}
+                 "1.2": "nested-group-kfold-extended-families-v1", "1.3": "nested-group-outer-domain-inner-v1"}
     if not isinstance(version, str) or version not in protocols or manifest.get("protocol") != protocols[version] or "schema_id" in manifest or "schema_id" in summary:
         _fail("only supported regression evaluation schemas/protocols are accepted.")
     config = manifest.get("config")
@@ -99,12 +99,16 @@ def _check(manifest, summary, raw):
         _fail("encoding and protocol differ.")
     if summary.get("schema_version") != version or (version == "1.1" and summary.get("protocol") != protocols[version]) or (version == "1.0" and "protocol" in summary):
         _fail("summary schema/protocol differs.")
-    if version == "1.2":
-        optional = _extension_families(manifest, config)
+    if version != "1.3":
+        if _DOMAIN_FIELDS & set(config):
+            _fail("domain selection requires evaluation schema 1.3.")
+        _reject_domain_audits(manifest)
+    if version in ("1.2", "1.3"):
+        optional = _extension_families(manifest, config, allow_empty=version == "1.3")
         if summary.get("capabilities") != manifest["capabilities"] or summary.get("protocol") != protocols[version]:
             _fail("extended capability or protocol differs in summary.")
     baselines = config.get("baselines")
-    known = ("dummy", "ridge", "extra_trees", "nystroem_ridge", "group_median") if version == "1.2" else ("dummy", "ridge", "extra_trees")
+    known = ("dummy", "ridge", "extra_trees", "nystroem_ridge", "group_median") if version in ("1.2", "1.3") else ("dummy", "ridge", "extra_trees")
     if not isinstance(baselines, list) or not baselines or any(not isinstance(x, str) or x not in known for x in baselines) or len(set(baselines)) != len(baselines):
         _fail("unsupported or duplicate model family.")
     names = baselines + ["selected"]
@@ -159,6 +163,18 @@ def _check(manifest, summary, raw):
     if not isinstance(audits, list) or len(audits) != nf:
         _fail("outer fold audit coverage differs.")
     sorted_groups = sorted(membership)
+    if version == "1.3":
+        candidates = _domain_candidates(config)
+        declared = config.get("candidates")
+        if (not isinstance(declared, list) or len(declared) != len(candidates)
+                or any(not _same_declaration(a, b) for a, b in zip(declared, candidates))):
+            _fail("domain candidate declaration differs from the frozen protocol grid.")
+        mapping = _domain_config(config, ng)
+        if set(mapping) != set(sorted_groups) or config.get("inner_splits") is not None:
+            _fail("domain group coverage or inner_splits declaration differs.")
+        inner_counts = config.get("inner_splits_per_outer")
+        if not isinstance(inner_counts, list) or len(inner_counts) != nf:
+            _fail("domain inner fold schedule coverage differs.")
     for fold, audit in enumerate(audits):
         test_groups = sorted(fold_groups[fold])
         # These explicit lists are part of the saved format, not row rescans.
@@ -170,9 +186,16 @@ def _check(manifest, summary, raw):
         if not isinstance(audit, dict):
             _fail("invalid fold audit.")
         _compare({key: audit.get(key) for key in expected}, expected)
-        if version == "1.2":
-            inner = _count(config.get("inner_splits"), len(train_groups), 2)
-            _optional_selection_metadata(audit, n-test_rows, len(train_groups), inner, audit.get("inner_seed"), optional)
+        if version != "1.3":
+            _reject_domain_audits(audit)
+        if version in ("1.2", "1.3"):
+            inner = _count(inner_counts[fold] if version == "1.3" else config.get("inner_splits"), len(train_groups), 2)
+            if optional:
+                _optional_selection_metadata(audit, n-test_rows, len(train_groups), inner, audit.get("inner_seed"), optional)
+            if version == "1.3":
+                if not isinstance(audit.get("family_candidates"), dict):
+                    _fail("domain family winner declaration is missing.")
+                _domain_selection(audit, n-test_rows, train_groups, mapping, inner, config)
     for name in names:
         _compare(summary["models"][name], _partitioned_metrics(
             observed, predictions[name], group_rows, fold_rows, fold_groups))

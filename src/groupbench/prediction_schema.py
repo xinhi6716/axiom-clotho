@@ -213,7 +213,7 @@ def _median_details(value, rows, groups):
         _fail("extended median constant must be finite.")
 
 
-def _extension_families(value, config):
+def _extension_families(value, config, *, allow_empty=False):
     baselines = config.get("baselines")
     known = ("dummy", "ridge", "extra_trees", "nystroem_ridge", "group_median")
     if (not isinstance(baselines, list) or not baselines
@@ -221,7 +221,7 @@ def _extension_families(value, config):
             or len(set(baselines)) != len(baselines)):
         _fail("extended baseline coverage differs.")
     optional = [family for family in ("group_median", "nystroem_ridge") if family in baselines]
-    if (not optional or value.get("capabilities") != [family + "-v1" for family in optional]
+    if ((not optional and not allow_empty) or value.get("capabilities") != [family + "-v1" for family in optional]
             or config.get("categorical_encoding") not in ("legacy-v1", "distinct-v2")):
         _fail("extended capabilities or encoding differ from requested families.")
     return optional
@@ -277,13 +277,158 @@ def _optional_selection_metadata(value, rows, groups, inner_splits, seed, option
             _median_details(final[family], rows, groups)
 
 
+_DOMAIN_FIELDS = {"inner_strategy", "domain", "domain_values_sha256", "group_domains", "n_domains", "inner_splits_per_outer"}
+
+
+# Frozen domain-inner-v1 format contract, not a lookup of installed model defaults.
+# A different candidate grid requires a new protocol/schema contract.
+_DOMAIN_GRID_V1 = {
+    "dummy": (("dummy_mean", {"strategy": "mean"}),),
+    "ridge": tuple((f"ridge_alpha_{a:g}", {"alpha": a}) for a in (0.1, 1.0, 10.0)),
+    "extra_trees": tuple((f"extra_trees_depth_{d or 'none'}",
+                          {"max_depth": d, "n_estimators": 64, "min_samples_leaf": 2}) for d in (6, None)),
+    "group_median": (("group_median_lower", {}),),
+    "nystroem_ridge": tuple((f"nystroem_ridge_alpha_{a:g}", {"alpha": a, "rank_cap": 64})
+                           for a in (0.1, 1.0, 10.0)),
+}
+_DOMAIN_AUDIT_FIELDS = {"train_domains", "test_domains", "train_domain_count",
+                        "test_domain_count", "domain_overlap_count"} | _DOMAIN_FIELDS
+
+
+def _reject_domain_audits(value):
+    """Reject explicit incompatible declarations, not unrelated legacy metadata."""
+    if _DOMAIN_AUDIT_FIELDS & set(value):
+        _fail("domain audit fields require a domain selection schema.")
+    audits = value.get("inner_folds")
+    if isinstance(audits, list):
+        for audit in audits:
+            if isinstance(audit, dict) and _DOMAIN_AUDIT_FIELDS & set(audit):
+                _fail("domain audit fields require a domain selection schema.")
+
+
+def _domain_candidates(config):
+    return [{"name": name, "family": family, "params": params}
+            for family in config["baselines"] for name, params in _DOMAIN_GRID_V1[family]]
+
+
+def _same_declaration(actual, expected):
+    # Reject bools masquerading as numeric parameters, but allow JSON 1 / 1.0.
+    if isinstance(expected, dict):
+        return (isinstance(actual, dict) and set(actual) == set(expected)
+                and all(_same_declaration(actual[k], v) for k, v in expected.items()))
+    if type(expected) in (int, float):
+        return type(actual) in (int, float) and actual == expected
+    return type(actual) is type(expected) and actual == expected
+
+
+def _domain_records(value, config, inner):
+    expected = _domain_candidates(config)
+    records = value.get("inner_selection")
+    if not isinstance(records, list) or len(records) != len(expected):
+        _fail("domain candidate coverage differs from the frozen protocol grid.")
+    objective = config.get("selection_objective")
+    if objective not in ("mae", "group_mae"):
+        _fail("domain selection objective differs.")
+    for record, candidate in zip(records, expected):
+        record = _object(record)
+        if (record.get("candidate") != candidate["name"] or record.get("family") != candidate["family"]
+                or not _same_declaration(record.get("params"), candidate["params"])
+                or record.get("objective") != objective):
+            _fail("domain candidate identity, parameters, order or objective differ.")
+        scores = record.get("inner_fold_scores")
+        score = record.get("selection_score")
+        if (not isinstance(scores, list) or len(scores) != inner
+                or any(type(x) not in (int, float) or not math.isfinite(x) or x < 0 for x in scores)
+                or type(score) not in (int, float) or not math.isfinite(score) or score < 0):
+            _fail("domain MAE scores must be nonnegative finite numbers covering every fold.")
+    winner = min(records, key=lambda r: r["selection_score"])
+    if (value.get("selected_candidate") != winner["candidate"]
+            or value.get("selected_family") != winner["family"]):
+        _fail("domain selected candidate/family differs from declared scores and tie order.")
+    if "family_candidates" in value:
+        winners = {family: min((r for r in records if r["family"] == family),
+                              key=lambda r: r["selection_score"])["candidate"]
+                   for family in config["baselines"]}
+        if value["family_candidates"] != winners:
+            _fail("domain family winners differ from declared scores and tie order.")
+
+
+def _domain_config(config, expected_groups):
+    if config.get("inner_strategy") != "leave_one_domain_out":
+        _fail("domain schema requires explicit leave_one_domain_out strategy.")
+    domain = config.get("domain")
+    if not isinstance(config.get("features"), list) or not _text(domain) or domain in (config.get("target"), config.get("group")) or domain in config["features"]:
+        _fail("domain must be separate metadata, not a predictor or target/group.")
+    mapping = _object(config.get("group_domains"))
+    if len(mapping) != expected_groups or not mapping:
+        _fail("domain mapping group coverage differs.")
+    def valid(v):
+        return isinstance(v, str) and bool(v) and len(v) <= 128 and v == v.strip() and not any(ord(c)<32 or 127<=ord(c)<=159 for c in v)
+    if any(not isinstance(g, str) or not valid(d) for g, d in mapping.items()):
+        _fail("invalid domain mapping identity.")
+    count = _count(config.get("n_domains"), expected_groups, positive=True)
+    if count < 2 or count != len(set(mapping.values())):
+        _fail("domain count differs from mapping.")
+    fingerprint = config.get("domain_values_sha256")
+    if not isinstance(fingerprint, str) or not re.fullmatch(r"[0-9a-f]{64}", fingerprint):
+        _fail("domain fingerprint must be a SHA256 declaration.")
+    return mapping
+
+
+def _domain_selection(value, rows, group_ids, mapping, inner, config):
+    groups = set(group_ids)
+    domains = set(mapping[g] for g in groups)
+    if type(inner) is not int or inner < 2 or inner != len(domains):
+        _fail("domain-dependent inner fold count differs.")
+    audits = value.get("inner_folds")
+    if not isinstance(audits, list) or len(audits) != inner:
+        _fail("domain inner fold coverage differs.")
+    seen, tests = set(), 0
+    for fold, audit in enumerate(audits):
+        audit = _object(audit)
+        train, test = audit.get("train_groups"), audit.get("test_groups")
+        if (not isinstance(train, list) or not isinstance(test, list) or
+                any(not isinstance(g, str) for g in train + test) or
+                len(train) != len(set(train)) or len(test) != len(set(test)) or
+                not train or not test or set(train) & set(test) or set(train + test) != groups):
+            _fail("inner domain group partition differs.")
+        td, vd = sorted(set(mapping[g] for g in train)), sorted(set(mapping[g] for g in test))
+        if len(vd) != 1 or set(td) & set(vd) or vd[0] in seen:
+            _fail("inner domains overlap or validation domain repeats.")
+        seen.add(vd[0])
+        for key, expected in dict(fold=fold, train_domains=td, test_domains=vd,
+                train_domain_count=len(td), test_domain_count=1, domain_overlap_count=0,
+                train_group_count=len(train), test_group_count=len(test), overlap_count=0).items():
+            actual = audit.get(key)
+            if type(actual) is not type(expected) or actual != expected:
+                _fail("inner domain audit fields differ.")
+        tr = _count(audit.get("train_rows"), rows, positive=True)
+        te = _count(audit.get("test_rows"), rows, positive=True)
+        if tr + te != rows or tr < len(train) or te < len(test):
+            _fail("inner domain row partition differs.")
+        tests += te
+    if seen != domains or tests != rows:
+        _fail("domain validation must cover all training rows exactly once by declared counts.")
+    _domain_records(value, config, inner)
+
+
 def _metadata(manifest):
     version = manifest.get("schema_version")
     if (manifest.get("mode") != "fit_predict" or "schema_id" in manifest
-            or version not in ("1.0", "1.1", "1.2", "1.3")):
-        _fail("only supported regression fit_predict schemas 1.0/1.1/1.2/1.3 are accepted.")
+            or version not in ("1.0", "1.1", "1.2", "1.3", "1.4")):
+        _fail("only supported regression fit_predict schemas 1.0/1.1/1.2/1.3/1.4 are accepted.")
     config = _object(manifest.get("config"))
-    if version == "1.3":
+    if version != "1.4":
+        if _DOMAIN_FIELDS & set(config):
+            _fail("domain selection requires prediction schema 1.4.")
+        _reject_domain_audits(manifest)
+    if version == "1.4":
+        if manifest.get("protocol") != "domain-inner-fit-predict-v1":
+            _fail("domain prediction protocol differs.")
+        optional = _extension_families(manifest, config, allow_empty=True)
+        if manifest.get("selected_family") not in config["baselines"]:
+            _fail("domain selected family differs.")
+    elif version == "1.3":
         if manifest.get("protocol") != "group-fit-predict-extended-families-v1":
             _fail("schema 1.3 requires the extended-family prediction protocol.")
         optional = _extension_families(manifest, config)
@@ -295,17 +440,21 @@ def _metadata(manifest):
             _fail("schema 1.2 requires the distinct-v2 prediction protocol.")
     elif "protocol" in manifest or "categorical_encoding" in config:
         _fail("legacy schema must not declare an incompatible encoding protocol.")
-    if version != "1.3" and isinstance(config.get("baselines"), list) and any(
+    if version not in ("1.3", "1.4") and isinstance(config.get("baselines"), list) and any(
             family in config["baselines"] for family in ("nystroem_ridge", "group_median")):
         _fail("optional families require the extended prediction schema.")
     n_train = _count(manifest.get("n_training_rows"), MAX_ROWS, positive=True)
     _count(manifest.get("n_training_groups"), n_train, positive=True)
     n_pred = _count(manifest.get("n_predictions"), MAX_ROWS, positive=True)
-    if version == "1.3":
+    if version in ("1.3", "1.4"):
         inner = _count(config.get("inner_splits"), manifest["n_training_groups"], positive=True)
         if inner < 2:
             _fail("extended kernel requires at least two inner folds.")
-        _optional_selection_metadata(manifest, n_train, manifest["n_training_groups"], inner, config.get("random_state"), optional)
+        if optional:
+            _optional_selection_metadata(manifest, n_train, manifest["n_training_groups"], inner, config.get("random_state"), optional)
+        if version == "1.4":
+            mapping = _domain_config(config, manifest["n_training_groups"])
+            _domain_selection(manifest, n_train, list(mapping), mapping, inner, config)
     features = manifest.get("feature_schema")
     if not isinstance(features, list) or not 1 <= len(features) <= MAX_FEATURES:
         _fail("feature schema must contain 1 to 100 records.")
