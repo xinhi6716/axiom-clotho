@@ -20,6 +20,55 @@ from groupbench.report import render_html
 from groupbench.binary.report import render_binary_html
 
 
+# Exact historical memberships, not current SOURCE_FILES minus omissions. Adding
+# an owned module must never silently rewrite a saved historical source record.
+LEGACY_SOURCE_FILES_28 = (
+    '__init__.py',
+    '__main__.py',
+    'binary/__init__.py',
+    'binary/cli.py',
+    'binary/data.py',
+    'binary/metrics.py',
+    'binary/model.py',
+    'binary/report.py',
+    'binary/workflow.py',
+    'budget_comparison.py',
+    'categorical.py',
+    'cli.py',
+    'data.py',
+    'evaluation.py',
+    'evaluation_schema.py',
+    'feature_manifest.py',
+    'input_support.py',
+    'interval_evaluation.py',
+    'metrics.py',
+    'model.py',
+    'observed_history.py',
+    'package_source.py',
+    'planning.py',
+    'prediction.py',
+    'prediction_schema.py',
+    'report.py',
+    'splitting.py',
+    'verification.py',
+)
+HISTORICAL_SOURCE_ADDITIONS = (
+    'baselines.py',
+    'kernel.py',
+    'binary/saved_evaluation.py',
+    'saved_scoring.py',
+    'quantity_contract.py',
+    'domain_selection.py',
+    'group_time_plan.py',
+    'group_time_json.py',
+    'group_time_evaluation.py',
+)
+HISTORICAL_SOURCE_INVENTORIES = {
+    28 + count: tuple(sorted(LEGACY_SOURCE_FILES_28 + HISTORICAL_SOURCE_ADDITIONS[:count]))
+    for count in range(len(HISTORICAL_SOURCE_ADDITIONS) + 1)
+}
+
+
 @unittest.skipUnless(source._SAFE_OPEN_SUPPORTED, "Requires POSIX no-follow source observation")
 class PackageSourceTests(unittest.TestCase):
     def setUp(self):
@@ -47,7 +96,7 @@ class PackageSourceTests(unittest.TestCase):
         installed = Path(source.__file__).parent
         self.assertEqual(tuple(sorted(source.SOURCE_FILES)), source.SOURCE_FILES)
         self.assertEqual(set(source.SOURCE_FILES), {p.relative_to(installed).as_posix() for p in installed.rglob("*.py")})
-        self.assertEqual(len(set(source.SOURCE_FILES)), 37)
+        self.assertEqual(len(set(source.SOURCE_FILES)), 38)
         self.assertIn("baselines.py", source.SOURCE_FILES)
         self.assertIn("kernel.py", source.SOURCE_FILES)
         self.assertIn("binary/saved_evaluation.py", source.SOURCE_FILES)
@@ -57,6 +106,7 @@ class PackageSourceTests(unittest.TestCase):
         self.assertIn("group_time_evaluation.py", source.SOURCE_FILES)
         self.assertIn("group_time_json.py", source.SOURCE_FILES)
         self.assertIn("group_time_plan.py", source.SOURCE_FILES)
+        self.assertIn("group_time_saved.py", source.SOURCE_FILES)
 
     def test_canonical_digest_is_explicit_and_stable(self):
         observed = source.observe_package_source()
@@ -185,22 +235,31 @@ class PackageSourceTests(unittest.TestCase):
 
 
 class SourceFallbackAndRenderingTests(unittest.TestCase):
+    def test_historical_inventory_memberships_are_pinned(self):
+        self.assertEqual(tuple(HISTORICAL_SOURCE_INVENTORIES), tuple(range(28, 38)))
+        previous = set(LEGACY_SOURCE_FILES_28)
+        self.assertEqual(len(previous), 28)
+        for count, names in HISTORICAL_SOURCE_INVENTORIES.items():
+            with self.subTest(inventory=count):
+                self.assertEqual(len(names), count)
+                self.assertEqual(names, tuple(sorted(set(names))))
+                self.assertNotIn("group_time_saved.py", names)
+                self.assertEqual(set(names), previous)
+            if count < 37:
+                previous.add(HISTORICAL_SOURCE_ADDITIONS[count - 28])
+        self.assertEqual(
+            set(source.SOURCE_FILES),
+            set(HISTORICAL_SOURCE_INVENTORIES[37]) | {"group_time_saved.py"},
+        )
+
     @unittest.skipUnless(source._SAFE_OPEN_SUPPORTED, "Requires POSIX bundle verification")
     def test_legacy_inventory_and_absent_metadata_remain_read_only_compatible(self):
         # Original synthetic saved artifacts: no estimator fit or old-study replay.
         from test_prediction_schema import manifest, write_bundle
 
         descriptors = [None]
-        for omitted in ({"baselines.py", "kernel.py", "binary/saved_evaluation.py", "saved_scoring.py", "quantity_contract.py", "domain_selection.py", "group_time_plan.py", "group_time_json.py", "group_time_evaluation.py"},
-                        {"kernel.py", "binary/saved_evaluation.py", "saved_scoring.py", "quantity_contract.py", "domain_selection.py", "group_time_plan.py", "group_time_json.py", "group_time_evaluation.py"},
-                        {"binary/saved_evaluation.py", "saved_scoring.py", "quantity_contract.py", "domain_selection.py", "group_time_plan.py", "group_time_json.py", "group_time_evaluation.py"},
-                        {"saved_scoring.py", "quantity_contract.py", "domain_selection.py", "group_time_plan.py", "group_time_json.py", "group_time_evaluation.py"},
-                        {"quantity_contract.py", "domain_selection.py", "group_time_plan.py", "group_time_json.py", "group_time_evaluation.py"},
-                        {"domain_selection.py", "group_time_plan.py", "group_time_json.py", "group_time_evaluation.py"},
-                        {"group_time_plan.py", "group_time_json.py", "group_time_evaluation.py"},
-                        {"group_time_json.py", "group_time_evaluation.py"}, {"group_time_evaluation.py"}, set()):
-            names = [name for name in source.SOURCE_FILES
-                     if name not in omitted]
+        inventories = tuple(HISTORICAL_SOURCE_INVENTORIES.values()) + (source.SOURCE_FILES,)
+        for names in inventories:
             files = {name: hashlib.sha256(("invented source: " + name).encode()).hexdigest()
                      for name in names}
             body = {"schema_version": "1.0", "algorithm": "sha256",
@@ -208,7 +267,7 @@ class SourceFallbackAndRenderingTests(unittest.TestCase):
             canonical = json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
             descriptors.append({**body, "status": "available",
                                 "sha256": hashlib.sha256(canonical).hexdigest()})
-        self.assertEqual([len(item["files"]) for item in descriptors[1:]], [28, 29, 30, 31, 32, 33, 34, 35, 36, 37])
+        self.assertEqual([len(item["files"]) for item in descriptors[1:]], [28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38])
         with tempfile.TemporaryDirectory() as temp, patch.object(source, "observe_package_source", side_effect=AssertionError("saved verification must not recapture installed source")):
             for version in ("1.0", "1.1", "1.2"):
                 for index, descriptor in enumerate(descriptors):
@@ -306,7 +365,7 @@ class ResultSourceMetadataTests(unittest.TestCase):
                                 saved.manifest.pop("package_source", None)
                             else:
                                 files = {name: hashlib.sha256(("invented legacy source: " + name).encode()).hexdigest()
-                                         for name in source.SOURCE_FILES if name not in {"baselines.py", "kernel.py", "binary/saved_evaluation.py", "saved_scoring.py", "quantity_contract.py", "domain_selection.py", "group_time_plan.py", "group_time_json.py", "group_time_evaluation.py"}}
+                                         for name in LEGACY_SOURCE_FILES_28}
                                 self.assertEqual(len(files), 28)
                                 body = {"schema_version": "1.0", "algorithm": "sha256",
                                         "scope": "fixed_groupbench_python_sources_v1", "files": files}

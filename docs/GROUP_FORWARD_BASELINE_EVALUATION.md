@@ -1,11 +1,14 @@
 # Fixed whole-group temporal regression evaluation v1
 
-This Python-only, in-memory API answers: how did two fixed recipes perform on
-these declared future-group windows? It is separate from `benchmark`, selection,
-full-OOF results, saved bundles, CLI commands, and the metadata-only planner.
-There is no model choice, tuning, full-data refit, fitted-model return, or file
-writer. Existing evaluation and prediction bundle schemas do not accept this
-schema. No scientific-performance claim follows from the software fixtures.
+This current-source Python API answers: how did two fixed recipes perform on
+these declared future-group windows? Evaluation remains in memory and separate
+from `benchmark`, selection, full-OOF results, CLI commands, and the metadata-only
+planner. There is no model choice, tuning, full-data refit, or fitted-model
+return. A separate [fresh-only saved-result API](SAVED_GROUP_FORWARD_EVALUATION.md)
+can persist completed results and check retained declarations/metrics without
+rerunning models. Existing legacy evaluation and prediction bundle schemas do
+not accept this schema. No scientific-performance claim follows from the
+software fixtures.
 
 ## Preview, then evaluate the same snapshot
 
@@ -186,3 +189,16 @@ inconsistency before returning. This is not a saved-result import API. Hashes an
 checks do not authenticate source truth, attest executed code, establish causal
 validity, or prove any model ran. Identical inputs need not yield bit-identical
 numeric results across dependency or hardware versions.
+
+## Save a completed result without rerunning it
+
+Use `write_group_forward_evaluation_bundle(result, fresh_output_dir)` for the
+separate two-file typed-JSON bundle and
+`validate_group_forward_evaluation_bundle(run_dir)` for read-only retained-byte
+and declared-result consistency. Both are additive root exports. Validation
+reconstructs the full declared plan and metrics from tested records, preserving
+partial coverage, typed group IDs, and zero validation fits. It does not inspect
+installed source or compare dependency versions. It cannot recreate the opaque
+input digest, prove fitting, or authenticate source or scientific validity.
+See the [saved-result contract](SAVED_GROUP_FORWARD_EVALUATION.md) for fresh-path
+failure behavior, strict bounds, privacy, and checked/unchecked scope.

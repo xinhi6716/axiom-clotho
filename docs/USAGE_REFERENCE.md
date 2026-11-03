@@ -250,6 +250,33 @@ not protected by the CLI. See the [input/output contracts and bounded resource
 preflight](GROUP_FORWARD_WINDOW_PLAN.md). This is current-source functionality,
 not part of the frozen b7 download or a temporal-ML evaluation guarantee.
 
+### Save and check fixed temporal results
+
+Current source also provides a separate Python-only
+[fixed temporal evaluator](GROUP_FORWARD_BASELINE_EVALUATION.md) and a
+[saved-result contract](SAVED_GROUP_FORWARD_EVALUATION.md). After an already
+completed `GroupForwardEvaluationResult`:
+
+```python
+from groupbench import (
+    write_group_forward_evaluation_bundle, validate_group_forward_evaluation_bundle,
+)
+
+# runs exists; temporal-001 must not exist. No fitting happens in these calls.
+payload = write_group_forward_evaluation_bundle(result, "runs/temporal-001")
+checked = validate_group_forward_evaluation_bundle(payload.parent)
+assert checked.validation_fits_performed == 0
+```
+
+The fresh-only writer stores `temporal_result.json` plus `checksums.json`. Typed
+integer/string IDs and intentional partial test coverage are retained; there is
+no CSV conversion, selected model, overwrite mode, model loader, or new temporal
+modeling CLI. The reader checks retained bytes, reconstructed declared plan,
+fixed recipe/resource declarations, tested records, metrics, and internal
+bindings. It cannot reconstruct the original input hash, prove training, or
+authenticate source/scientific claims, and never reads declared source paths.
+This is unreleased current-source support, not a change to frozen downloads.
+
 ### Predict new rows
 
 First evaluate the procedure with `run`. Then supply a second CSV containing **exactly the feature columns**, without target or group columns:
@@ -514,7 +541,7 @@ mlcalc verify runs/example-predictions
 
 `verify` only reads an existing directory. It does not fit a model, open the report in a browser, parse payload contents, load serialized models, read source datasets, access the network, or create/repair files. Exit status **0** means every expected file's observed bytes match `checksums.json`; **2** means verification or command usage failed. A missing file, changed byte, malformed/duplicate checksum record, unsupported file set, or unsafe file path fails verification.
 
-The existing checksum format is exactly `{"algorithm": "sha256", "files": {"filename": "64 lowercase hexadecimal characters"}}`. Evaluation bundles must list exactly `report.html`, `summary.json`, `manifest.json`, and `predictions.csv`. Prediction bundles must list exactly `manifest.json` and `predictions.csv`, with no stale `report.html` or `summary.json` entries in the directory. Other unlisted files are not opened or verified. This command does not validate the manifest, CSV, report, or model semantics and does not recognize arbitrary checksum manifests.
+The existing checksum format is exactly `{"algorithm": "sha256", "files": {"filename": "64 lowercase hexadecimal characters"}}`. Evaluation bundles must list exactly `report.html`, `summary.json`, `manifest.json`, and `predictions.csv`. Prediction bundles must list exactly `manifest.json` and `predictions.csv`, with no stale `report.html` or `summary.json` entries in the directory. Current-source temporal bundles list exactly `temporal_result.json`, report type `temporal_evaluation`, and reject stale `manifest.json`, `summary.json`, `predictions.csv`, or `report.html` names. Other unlisted files are not opened or verified. This command does not validate the manifest, CSV, report, temporal JSON, or model semantics and does not recognize arbitrary checksum manifests. Use `validate_group_forward_evaluation_bundle` for temporal declared-result consistency; byte verification does not dispatch to it.
 
 Verification requires POSIX directory-relative file access and no-follow opens. It fails closed on platforms without these primitives. Use a direct relative or absolute directory path without `..`, a network-style `//` root, or symlink components; checksum/payload entries must be regular files, not symlinks, directories, or FIFOs. Metadata is capped at **16 KiB** and each of at most four payloads at **64 MiB**, with **64 KiB** streaming reads. Larger bundles are rejected rather than partially verified. These are byte/read bounds, not a wall-clock deadline or a sandbox; use trusted local storage and OS limits where needed.
 
@@ -525,7 +552,7 @@ Verification requires POSIX directory-relative file access and no-follow opens. 
 ## Limits to understand before trusting a result
 
 - Group disjointness protects only the supplied grouping axis. Related compositions, overlapping specimens, time leakage, or feature engineering performed on all data can still leak information.
-- Holding out a combined `batch × specimen` label does not automatically isolate both crossed factors. Use a scientifically appropriate split strategy; multi-axis and temporal holdouts are not implemented yet.
+- Holding out a combined `batch × specimen` label does not automatically isolate both crossed factors. Use a scientifically appropriate split strategy. Multi-axis holdouts are not implemented; current-source fixed temporal evaluation is a separate explicit partial-coverage Python protocol, not an option on legacy run/predict commands.
 - Default commands perform regression; binary classification requires the explicit `binary` namespace described above. Foundation-model training, calibrated uncertainty, causal inference, scientific-unit validation, extrapolation guarantees, and production monitoring are not included.
 - Sparse small groups can produce unstable rankings. Fold variability is not a confidence interval, and a single seed is not a robustness study.
 - The synthetic fixture is not a validated semiconductor/materials simulator. No private research data, unpublished manuscript, or review content is embedded.

@@ -1,5 +1,21 @@
 # Changelog
 
+## Saved fixed temporal results (unreleased source)
+
+- Add fresh-only typed-JSON persistence for completed fixed temporal evaluations,
+  with a separately versioned envelope and the unchanged partial-coverage result.
+- Add read-only retained-byte and declared-plan/prediction/metric consistency,
+  zero validation fits, internal source-map digest checks, and explicit unchecked
+  input, execution, authenticity, and scientific scope.
+- Extend byte verification with the exact `temporal_evaluation` inventory without
+  making it a semantic reader or adding a temporal model CLI or loader.
+- Preserve exact historical source inventories 28 through 37, absent-source
+  legacy cases, and the separate four-route 28-file fixture; current inventory
+  becomes 38. Legacy result schemas and writer file sets remain unchanged.
+- See the [saved-result contract](docs/SAVED_GROUP_FORWARD_EVALUATION.md). This is
+  current-source work, not a package release, publication, or test-run claim;
+  frozen downloads and historical release guidance are unchanged.
+
 ## Fixed whole-group temporal baseline API (unreleased source)
 
 - Add a separate Python-only, in-memory preview/evaluate boundary for two fixed

@@ -35,3 +35,12 @@ from .group_time_evaluation import (
 __all__ += ["GroupForwardEvaluationError", "GroupForwardEvaluationPreview",
             "GroupForwardEvaluationResult", "preview_group_forward_evaluation",
             "evaluate_group_forward_baselines"]
+
+# Read-only saved temporal consistency and fresh-only persistence, without fitting.
+from .group_time_saved import (
+    GroupForwardBundleError, GroupForwardBundleValidation,
+    write_group_forward_evaluation_bundle, validate_group_forward_evaluation_bundle,
+)
+__all__ += ["GroupForwardBundleError", "GroupForwardBundleValidation",
+            "write_group_forward_evaluation_bundle",
+            "validate_group_forward_evaluation_bundle"]

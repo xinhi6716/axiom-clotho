@@ -1,4 +1,4 @@
-"""Bounded, read-only byte-integrity checks for the two existing bundle writers.
+"""Bounded, read-only byte-integrity checks for fixed supported bundle inventories.
 
 Payloads are never parsed, executed, rendered, or deserialized. A successful
 check is not an authenticated origin, scientific validation, or atomic snapshot.
@@ -21,6 +21,7 @@ MAX_PAYLOAD_BYTES = 64 * 1024 * 1024
 READ_CHUNK_BYTES = 64 * 1024
 PREDICTION_FILES = frozenset({"manifest.json", "predictions.csv"})
 EVALUATION_FILES = PREDICTION_FILES | {"report.html", "summary.json"}
+TEMPORAL_FILES = frozenset({"temporal_result.json"})
 _SAFE_OPEN_SUPPORTED = (
     os.name == "posix"
     and all(hasattr(os, flag) for flag in ("O_DIRECTORY", "O_NOFOLLOW", "O_NONBLOCK"))
@@ -129,8 +130,8 @@ def _checksum_records(raw):
     if checksums["algorithm"] != "sha256":
         raise ValueError("checksums.json algorithm must be sha256.")
     records = checksums["files"]
-    if not isinstance(records, dict) or set(records) not in (PREDICTION_FILES, EVALUATION_FILES):
-        raise ValueError("checksums.json must list exactly the two prediction files or four evaluation files; other paths are forbidden.")
+    if not isinstance(records, dict) or set(records) not in (PREDICTION_FILES, EVALUATION_FILES, TEMPORAL_FILES):
+        raise ValueError("checksums.json must list exactly a supported prediction, evaluation or temporal inventory; other paths are forbidden.")
     for digest in records.values():
         if not isinstance(digest, str) or re.fullmatch(r"[0-9a-f]{64}", digest) is None:
             raise ValueError("checksums.json digests must be 64 lowercase hexadecimal SHA-256 characters.")
@@ -146,21 +147,34 @@ def _reject_stale_evaluation(directory_fd):
         raise ValueError("Prediction bundle contains unverified evaluation artifacts; use a separate run directory.")
 
 
+def _reject_stale_temporal(directory_fd):
+    for name in sorted(EVALUATION_FILES):
+        try:
+            os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+        except FileNotFoundError:
+            continue
+        raise ValueError("Temporal bundle contains unverified legacy artifacts; use a separate run directory.")
+
+
 def verify_bundle(run_dir) -> VerificationResult:
     """Verify exact writer file sets without loading models or reading sources.
 
     The checksum file is capped at 16 KiB, and each of at most four payloads at
     64 MiB. Unexpected files are neither opened nor verified. Prediction bundles
-    must not contain stale report.html or summary.json entries. No writes occur.
+    must not contain stale report.html or summary.json entries. Temporal bundles
+    reject all four known legacy payload names without parsing their own payload. No writes occur.
     Directory/payload races detected by metadata checks fail, but this is not a
     lock or a guarantee of a filesystem-atomic snapshot under concurrent mutation.
     """
     with _open_run_directory(run_dir) as directory_fd:
         _, _, raw, signature = _read_file(directory_fd, "checksums.json", MAX_CHECKSUM_BYTES, collect=True)
         records = _checksum_records(raw)
-        bundle_type = "prediction" if set(records) == PREDICTION_FILES else "evaluation"
+        bundle_type = ("prediction" if set(records) == PREDICTION_FILES else
+                       "temporal_evaluation" if set(records) == TEMPORAL_FILES else "evaluation")
         if bundle_type == "prediction":
             _reject_stale_evaluation(directory_fd)
+        elif bundle_type == "temporal_evaluation":
+            _reject_stale_temporal(directory_fd)
         signatures = {"checksums.json": signature}
         total_bytes = 0
         for name in sorted(records):
@@ -176,4 +190,6 @@ def verify_bundle(run_dir) -> VerificationResult:
                 raise ValueError(f"Bundle file {name} changed during verification; retry with an idle directory.")
         if bundle_type == "prediction":
             _reject_stale_evaluation(directory_fd)
+        elif bundle_type == "temporal_evaluation":
+            _reject_stale_temporal(directory_fd)
     return VerificationResult(bundle_type, tuple(sorted(records)), total_bytes)

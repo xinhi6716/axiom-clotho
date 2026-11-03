@@ -14,7 +14,7 @@ safety. No commit, release or trusted origin is inferred from the digest.
 ## What is observed
 
 The helper anchors reads to its own imported module's package directory, not the
-current working directory. It reads a fixed allowlist of 37 owned `.py` files,
+current working directory. It reads a fixed allowlist of 38 owned `.py` files,
 including itself and both report renderers, once when assembling each result
 manifest after fitting. No directory scan, Git command, `.git`, dependency file,
 user dataset, model file, bytecode or network access is involved. No absolute
@@ -44,7 +44,7 @@ do not contribute. This is not a whole-repository or wheel fingerprint.
 ## Availability and limits
 
 Source access reuses the byte verifier's POSIX descriptor-relative, no-follow
-regular-file reader. Each file is capped at 256 KiB (37 files, at most 9.25 MiB
+regular-file reader. Each file is capped at 256 KiB (38 files, at most 9.5 MiB
 total); data is streamed and only digests are retained. Detected file changes,
 symlinks in the source path, missing or oversized files and I/O errors return
 `status: "unavailable"` with a fixed reason, no partial digest or local path.
@@ -59,10 +59,11 @@ under its existing contract. Missing metadata does not imply a particular
 release. The HTML uses the saved record, not a fresh filesystem observation.
 Reports do not authenticate or fully validate arbitrary supplied metadata.
 Synthetic read-only compatibility tests retain all prior inventories of 28
-through 36 files and the current 37-file inventory, including the standalone
-`group_time_plan.py` helper, strict metadata adapter `group_time_json.py`, and
-separate `group_time_evaluation.py` evaluator.
-Absent-source metadata cases remain supported. That compatibility does not
+through 37 files with their exact historical memberships and the current 38-file
+inventory, including the standalone `group_time_plan.py` helper, strict metadata
+adapter `group_time_json.py`, separate `group_time_evaluation.py` evaluator, and
+saved temporal result module `group_time_saved.py`. The separate four-route
+28-file fixture remains fixed. Absent-source legacy cases remain supported. That compatibility does not
 validate the recorded source claims or compare them with the installed package.
 
 Files can change after import or during execution. Even an available observation
@@ -92,3 +93,12 @@ and records the observation in its preview/result environment. Unlike legacy
 modeling routes, it rejects unavailable source observation because its mandatory
 preview-to-execution binding requires that identity. It also binds dependency
 versions separately. Neither binding proves which code actually executed.
+
+The [saved temporal consistency reader](SAVED_GROUP_FORWARD_EVALUATION.md) treats
+the saved source descriptor as inert data. It checks its available-status schema
+and internal aggregate digest without opening declared filenames, observing the
+installed package, or requiring the current inventory. Thus an internally
+consistent saved 37-file temporal map can remain valid after the inventory grows
+to 38. This is internal declaration consistency, not source truth, completeness,
+authenticity, or proof of executed code. Legacy validators continue leaving source
+metadata unchecked where their existing contracts did so.
