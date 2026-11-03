@@ -1,0 +1,1460 @@
+{
+  "capabilities": [
+    "group_median-v1",
+    "nystroem_ridge-v1"
+  ],
+  "config": {
+    "baselines": [
+      "dummy",
+      "ridge",
+      "extra_trees",
+      "nystroem_ridge",
+      "group_median"
+    ],
+    "candidates": [
+      {
+        "family": "dummy",
+        "name": "dummy_mean",
+        "params": {
+          "strategy": "mean"
+        }
+      },
+      {
+        "family": "ridge",
+        "name": "ridge_alpha_0.1",
+        "params": {
+          "alpha": 0.1
+        }
+      },
+      {
+        "family": "ridge",
+        "name": "ridge_alpha_1",
+        "params": {
+          "alpha": 1.0
+        }
+      },
+      {
+        "family": "ridge",
+        "name": "ridge_alpha_10",
+        "params": {
+          "alpha": 10.0
+        }
+      },
+      {
+        "family": "extra_trees",
+        "name": "extra_trees_depth_6",
+        "params": {
+          "max_depth": 6,
+          "min_samples_leaf": 2,
+          "n_estimators": 64
+        }
+      },
+      {
+        "family": "extra_trees",
+        "name": "extra_trees_depth_none",
+        "params": {
+          "max_depth": null,
+          "min_samples_leaf": 2,
+          "n_estimators": 64
+        }
+      },
+      {
+        "family": "nystroem_ridge",
+        "name": "nystroem_ridge_alpha_0.1",
+        "params": {
+          "alpha": 0.1,
+          "rank_cap": 64
+        }
+      },
+      {
+        "family": "nystroem_ridge",
+        "name": "nystroem_ridge_alpha_1",
+        "params": {
+          "alpha": 1.0,
+          "rank_cap": 64
+        }
+      },
+      {
+        "family": "nystroem_ridge",
+        "name": "nystroem_ridge_alpha_10",
+        "params": {
+          "alpha": 10.0,
+          "rank_cap": 64
+        }
+      },
+      {
+        "family": "group_median",
+        "name": "group_median_lower",
+        "params": {}
+      }
+    ],
+    "categorical_encoding": "legacy-v1",
+    "features": [
+      "x",
+      "z"
+    ],
+    "group": "group",
+    "inner_splits": 2,
+    "outer_splits": 3,
+    "random_state": 731967,
+    "selection_objective": "group_mae",
+    "target": "y",
+    "threads": 1
+  },
+  "created_at_utc": "2026-11-03T00:00:21.859129+00:00",
+  "data_diagnostics": {
+    "action": "diagnostic_only_no_rows_removed",
+    "cross_group_duplicate_patterns": 0,
+    "identical_feature_target_rows": 0,
+    "identical_feature_target_rows_across_groups": 0
+  },
+  "data_sha256": "3686534bbd1b394f417d042069e92612d1a9eba1b6696426cc19e2bf5015d06c",
+  "elapsed_seconds": 0.941704081982607,
+  "environment": {
+    "numpy": "2.3.5",
+    "pandas": "2.2.3",
+    "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+    "python": "3.12.14",
+    "scikit_learn": "1.8.0"
+  },
+  "feature_schema": [
+    {
+      "dtype": "float64",
+      "missing_count": 0,
+      "name": "x"
+    },
+    {
+      "dtype": "float64",
+      "missing_count": 0,
+      "name": "z"
+    }
+  ],
+  "groupbench_version": "0.3.0b7",
+  "limitations": [
+    "Synthetic examples validate plumbing, not scientific predictive performance.",
+    "Group separation protects only the supplied grouping axis; it does not prove absence of other leakage.",
+    "The outer leaderboard must not be reused for tuning without a new independent evaluation.",
+    "Fold variability is not a confidence interval; no uncertainty calibration is implemented.",
+    "Outputs include group IDs, observed targets, and predictions; review before sharing."
+  ],
+  "n_groups": 18,
+  "n_rows": 54,
+  "network_required_at_runtime": false,
+  "outer_folds": [
+    {
+      "family_candidates": {
+        "dummy": "dummy_mean",
+        "extra_trees": "extra_trees_depth_6",
+        "group_median": "group_median_lower",
+        "nystroem_ridge": "nystroem_ridge_alpha_0.1",
+        "ridge": "ridge_alpha_1"
+      },
+      "family_fit_details": {
+        "group_median": {
+          "constant": 2.4601871319254873,
+          "implementation": "group-balanced-lower-median-v1",
+          "tie_break": "lower_observed_target",
+          "training_groups": 12,
+          "training_rows": 36,
+          "transformed_features": 2,
+          "weight_rule": "equal_training_group_then_equal_row"
+        },
+        "nystroem_ridge": {
+          "alpha": 0.1,
+          "basis_indices_sha256": "0d2f7219be1a39f1d7efbb9024c694a2c90cf4d49804edb83422a2dbbd04725a",
+          "basis_sampling": "uniform_training_rows_without_replacement",
+          "effective_n_components": 36,
+          "gamma": 0.5,
+          "gamma_policy": "inverse_transformed_width",
+          "implementation": "bounded-nystroem-rbf-ridge-v1",
+          "map_byte_limit": 16777216,
+          "random_state": 731968,
+          "rank_cap": 64,
+          "solver": "svd",
+          "threads": 1,
+          "training_map_bytes": 10368,
+          "training_rows": 36,
+          "transformed_features": 2
+        }
+      },
+      "fold": 0,
+      "inner_folds": [
+        {
+          "fold": 0,
+          "overlap_count": 0,
+          "test_group_count": 6,
+          "test_groups": [
+            "g01",
+            "g03",
+            "g06",
+            "g08",
+            "g16",
+            "g17"
+          ],
+          "test_rows": 18,
+          "train_group_count": 6,
+          "train_groups": [
+            "g02",
+            "g10",
+            "g12",
+            "g13",
+            "g14",
+            "g15"
+          ],
+          "train_rows": 18
+        },
+        {
+          "fold": 1,
+          "overlap_count": 0,
+          "test_group_count": 6,
+          "test_groups": [
+            "g02",
+            "g10",
+            "g12",
+            "g13",
+            "g14",
+            "g15"
+          ],
+          "test_rows": 18,
+          "train_group_count": 6,
+          "train_groups": [
+            "g01",
+            "g03",
+            "g06",
+            "g08",
+            "g16",
+            "g17"
+          ],
+          "train_rows": 18
+        }
+      ],
+      "inner_seed": 731968,
+      "inner_selection": [
+        {
+          "candidate": "dummy_mean",
+          "family": "dummy",
+          "inner_fold_scores": [
+            1.3749004512480558,
+            1.391570188413577
+          ],
+          "objective": "group_mae",
+          "params": {
+            "strategy": "mean"
+          },
+          "selection_score": 1.3832353198308163
+        },
+        {
+          "candidate": "ridge_alpha_0.1",
+          "family": "ridge",
+          "inner_fold_scores": [
+            0.2121830090366319,
+            0.24539177648744626
+          ],
+          "objective": "group_mae",
+          "params": {
+            "alpha": 0.1
+          },
+          "selection_score": 0.22878739276203908
+        },
+        {
+          "candidate": "ridge_alpha_1",
+          "family": "ridge",
+          "inner_fold_scores": [
+            0.21474999368885916,
+            0.23800315510468642
+          ],
+          "objective": "group_mae",
+          "params": {
+            "alpha": 1.0
+          },
+          "selection_score": 0.2263765743967728
+        },
+        {
+          "candidate": "ridge_alpha_10",
+          "family": "ridge",
+          "inner_fold_scores": [
+            0.5364186196870652,
+            0.5214057547680215
+          ],
+          "objective": "group_mae",
+          "params": {
+            "alpha": 10.0
+          },
+          "selection_score": 0.5289121872275433
+        },
+        {
+          "candidate": "extra_trees_depth_6",
+          "family": "extra_trees",
+          "inner_fold_scores": [
+            0.3631259112798329,
+            0.49293625194909957
+          ],
+          "objective": "group_mae",
+          "params": {
+            "max_depth": 6,
+            "min_samples_leaf": 2,
+            "n_estimators": 64
+          },
+          "selection_score": 0.4280310816144663
+        },
+        {
+          "candidate": "extra_trees_depth_none",
+          "family": "extra_trees",
+          "inner_fold_scores": [
+            0.3631259112798329,
+            0.49293625194909957
+          ],
+          "objective": "group_mae",
+          "params": {
+            "max_depth": null,
+            "min_samples_leaf": 2,
+            "n_estimators": 64
+          },
+          "selection_score": 0.4280310816144663
+        },
+        {
+          "candidate": "nystroem_ridge_alpha_0.1",
+          "family": "nystroem_ridge",
+          "inner_fit_details": [
+            {
+              "details": {
+                "alpha": 0.1,
+                "basis_indices_sha256": "3c3c46f415400b9763ffa9b3c1fe5170449c902e78ec94eb8e8fe068fa6de6ab",
+                "basis_sampling": "uniform_training_rows_without_replacement",
+                "effective_n_components": 18,
+                "gamma": 0.5,
+                "gamma_policy": "inverse_transformed_width",
+                "implementation": "bounded-nystroem-rbf-ridge-v1",
+                "map_byte_limit": 16777216,
+                "random_state": 731968,
+                "rank_cap": 64,
+                "solver": "svd",
+                "threads": 1,
+                "training_map_bytes": 2592,
+                "training_rows": 18,
+                "transformed_features": 2
+              },
+              "inner_fold": 0,
+              "test_rows": 18,
+              "train_rows": 18
+            },
+            {
+              "details": {
+                "alpha": 0.1,
+                "basis_indices_sha256": "3c3c46f415400b9763ffa9b3c1fe5170449c902e78ec94eb8e8fe068fa6de6ab",
+                "basis_sampling": "uniform_training_rows_without_replacement",
+                "effective_n_components": 18,
+                "gamma": 0.5,
+                "gamma_policy": "inverse_transformed_width",
+                "implementation": "bounded-nystroem-rbf-ridge-v1",
+                "map_byte_limit": 16777216,
+                "random_state": 731968,
+                "rank_cap": 64,
+                "solver": "svd",
+                "threads": 1,
+                "training_map_bytes": 2592,
+                "training_rows": 18,
+                "transformed_features": 2
+              },
+              "inner_fold": 1,
+              "test_rows": 18,
+              "train_rows": 18
+            }
+          ],
+          "inner_fold_scores": [
+            0.4027065939415397,
+            0.4433094164762428
+          ],
+          "objective": "group_mae",
+          "params": {
+            "alpha": 0.1,
+            "rank_cap": 64
+          },
+          "selection_score": 0.4230080052088912
+        },
+        {
+          "candidate": "nystroem_ridge_alpha_1",
+          "family": "nystroem_ridge",
+          "inner_fit_details": [
+            {
+              "details": {
+                "alpha": 1.0,
+                "basis_indices_sha256": "3c3c46f415400b9763ffa9b3c1fe5170449c902e78ec94eb8e8fe068fa6de6ab",
+                "basis_sampling": "uniform_training_rows_without_replacement",
+                "effective_n_components": 18,
+                "gamma": 0.5,
+                "gamma_policy": "inverse_transformed_width",
+                "implementation": "bounded-nystroem-rbf-ridge-v1",
+                "map_byte_limit": 16777216,
+                "random_state": 731968,
+                "rank_cap": 64,
+                "solver": "svd",
+                "threads": 1,
+                "training_map_bytes": 2592,
+                "training_rows": 18,
+                "transformed_features": 2
+              },
+              "inner_fold": 0,
+              "test_rows": 18,
+              "train_rows": 18
+            },
+            {
+              "details": {
+                "alpha": 1.0,
+                "basis_indices_sha256": "3c3c46f415400b9763ffa9b3c1fe5170449c902e78ec94eb8e8fe068fa6de6ab",
+                "basis_sampling": "uniform_training_rows_without_replacement",
+                "effective_n_components": 18,
+                "gamma": 0.5,
+                "gamma_policy": "inverse_transformed_width",
+                "implementation": "bounded-nystroem-rbf-ridge-v1",
+                "map_byte_limit": 16777216,
+                "random_state": 731968,
+                "rank_cap": 64,
+                "solver": "svd",
+                "threads": 1,
+                "training_map_bytes": 2592,
+                "training_rows": 18,
+                "transformed_features": 2
+              },
+              "inner_fold": 1,
+              "test_rows": 18,
+              "train_rows": 18
+            }
+          ],
+          "inner_fold_scores": [
+            0.5377484865503116,
+            0.5978328937892887
+          ],
+          "objective": "group_mae",
+          "params": {
+            "alpha": 1.0,
+            "rank_cap": 64
+          },
+          "selection_score": 0.5677906901698002
+        },
+        {
+          "candidate": "nystroem_ridge_alpha_10",
+          "family": "nystroem_ridge",
+          "inner_fit_details": [
+            {
+              "details": {
+                "alpha": 10.0,
+                "basis_indices_sha256": "3c3c46f415400b9763ffa9b3c1fe5170449c902e78ec94eb8e8fe068fa6de6ab",
+                "basis_sampling": "uniform_training_rows_without_replacement",
+                "effective_n_components": 18,
+                "gamma": 0.5,
+                "gamma_policy": "inverse_transformed_width",
+                "implementation": "bounded-nystroem-rbf-ridge-v1",
+                "map_byte_limit": 16777216,
+                "random_state": 731968,
+                "rank_cap": 64,
+                "solver": "svd",
+                "threads": 1,
+                "training_map_bytes": 2592,
+                "training_rows": 18,
+                "transformed_features": 2
+              },
+              "inner_fold": 0,
+              "test_rows": 18,
+              "train_rows": 18
+            },
+            {
+              "details": {
+                "alpha": 10.0,
+                "basis_indices_sha256": "3c3c46f415400b9763ffa9b3c1fe5170449c902e78ec94eb8e8fe068fa6de6ab",
+                "basis_sampling": "uniform_training_rows_without_replacement",
+                "effective_n_components": 18,
+                "gamma": 0.5,
+                "gamma_policy": "inverse_transformed_width",
+                "implementation": "bounded-nystroem-rbf-ridge-v1",
+                "map_byte_limit": 16777216,
+                "random_state": 731968,
+                "rank_cap": 64,
+                "solver": "svd",
+                "threads": 1,
+                "training_map_bytes": 2592,
+                "training_rows": 18,
+                "transformed_features": 2
+              },
+              "inner_fold": 1,
+              "test_rows": 18,
+              "train_rows": 18
+            }
+          ],
+          "inner_fold_scores": [
+            1.0711649662213751,
+            1.0436932244599937
+          ],
+          "objective": "group_mae",
+          "params": {
+            "alpha": 10.0,
+            "rank_cap": 64
+          },
+          "selection_score": 1.0574290953406844
+        },
+        {
+          "candidate": "group_median_lower",
+          "family": "group_median",
+          "inner_fit_details": [
+            {
+              "details": {
+                "constant": 2.4601871319254873,
+                "implementation": "group-balanced-lower-median-v1",
+                "tie_break": "lower_observed_target",
+                "training_groups": 6,
+                "training_rows": 18,
+                "transformed_features": 2,
+                "weight_rule": "equal_training_group_then_equal_row"
+              },
+              "inner_fold": 0,
+              "test_rows": 18,
+              "train_rows": 18
+            },
+            {
+              "details": {
+                "constant": 2.063973845911665,
+                "implementation": "group-balanced-lower-median-v1",
+                "tie_break": "lower_observed_target",
+                "training_groups": 6,
+                "training_rows": 18,
+                "transformed_features": 2,
+                "weight_rule": "equal_training_group_then_equal_row"
+              },
+              "inner_fold": 1,
+              "test_rows": 18,
+              "train_rows": 18
+            }
+          ],
+          "inner_fold_scores": [
+            1.3749004512480558,
+            1.4850395602966548
+          ],
+          "objective": "group_mae",
+          "params": {},
+          "selection_score": 1.4299700057723552
+        }
+      ],
+      "overlap_count": 0,
+      "selected_candidate": "ridge_alpha_1",
+      "selected_family": "ridge",
+      "test_group_count": 6,
+      "test_groups": [
+        "g00",
+        "g04",
+        "g05",
+        "g07",
+        "g09",
+        "g11"
+      ],
+      "test_rows": 18,
+      "train_group_count": 12,
+      "train_groups": [
+        "g01",
+        "g02",
+        "g03",
+        "g06",
+        "g08",
+        "g10",
+        "g12",
+        "g13",
+        "g14",
+        "g15",
+        "g16",
+        "g17"
+      ],
+      "train_rows": 36
+    },
+    {
+      "family_candidates": {
+        "dummy": "dummy_mean",
+        "extra_trees": "extra_trees_depth_6",
+        "group_median": "group_median_lower",
+        "nystroem_ridge": "nystroem_ridge_alpha_0.1",
+        "ridge": "ridge_alpha_0.1"
+      },
+      "family_fit_details": {
+        "group_median": {
+          "constant": -0.27919751657722913,
+          "implementation": "group-balanced-lower-median-v1",
+          "tie_break": "lower_observed_target",
+          "training_groups": 12,
+          "training_rows": 36,
+          "transformed_features": 2,
+          "weight_rule": "equal_training_group_then_equal_row"
+        },
+        "nystroem_ridge": {
+          "alpha": 0.1,
+          "basis_indices_sha256": "10bc84bbe75b81cacce8df3a79d4bbb2ed4b1b41383c49a0e2f3ec75b838617b",
+          "basis_sampling": "uniform_training_rows_without_replacement",
+          "effective_n_components": 36,
+          "gamma": 0.5,
+          "gamma_policy": "inverse_transformed_width",
+          "implementation": "bounded-nystroem-rbf-ridge-v1",
+          "map_byte_limit": 16777216,
+          "random_state": 731969,
+          "rank_cap": 64,
+          "solver": "svd",
+          "threads": 1,
+          "training_map_bytes": 10368,
+          "training_rows": 36,
+          "transformed_features": 2
+        }
+      },
+      "fold": 1,
+      "inner_folds": [
+        {
+          "fold": 0,
+          "overlap_count": 0,
+          "test_group_count": 6,
+          "test_groups": [
+            "g03",
+            "g04",
+            "g09",
+            "g10",
+            "g11",
+            "g14"
+          ],
+          "test_rows": 18,
+          "train_group_count": 6,
+          "train_groups": [
+            "g00",
+            "g05",
+            "g07",
+            "g12",
+            "g16",
+            "g17"
+          ],
+          "train_rows": 18
+        },
+        {
+          "fold": 1,
+          "overlap_count": 0,
+          "test_group_count": 6,
+          "test_groups": [
+            "g00",
+            "g05",
+            "g07",
+            "g12",
+            "g16",
+            "g17"
+          ],
+          "test_rows": 18,
+          "train_group_count": 6,
+          "train_groups": [
+            "g03",
+            "g04",
+            "g09",
+            "g10",
+            "g11",
+            "g14"
+          ],
+          "train_rows": 18
+        }
+      ],
+      "inner_seed": 731969,
+      "inner_selection": [
+        {
+          "candidate": "dummy_mean",
+          "family": "dummy",
+          "inner_fold_scores": [
+            2.6843027456554025,
+            2.8279235883016542
+          ],
+          "objective": "group_mae",
+          "params": {
+            "strategy": "mean"
+          },
+          "selection_score": 2.7561131669785284
+        },
+        {
+          "candidate": "ridge_alpha_0.1",
+          "family": "ridge",
+          "inner_fold_scores": [
+            0.20147222015419156,
+            0.3014978507247951
+          ],
+          "objective": "group_mae",
+          "params": {
+            "alpha": 0.1
+          },
+          "selection_score": 0.25148503543949335
+        },
+        {
+          "candidate": "ridge_alpha_1",
+          "family": "ridge",
+          "inner_fold_scores": [
+            0.24368911218352016,
+            0.2987944603160589
+          ],
+          "objective": "group_mae",
+          "params": {
+            "alpha": 1.0
+          },
+          "selection_score": 0.2712417862497895
+        },
+        {
+          "candidate": "ridge_alpha_10",
+          "family": "ridge",
+          "inner_fold_scores": [
+            0.9873560968076845,
+            1.054392015300925
+          ],
+          "objective": "group_mae",
+          "params": {
+            "alpha": 10.0
+          },
+          "selection_score": 1.0208740560543044
+        },
+        {
+          "candidate": "extra_trees_depth_6",
+          "family": "extra_trees",
+          "inner_fold_scores": [
+            0.3537715354578978,
+            0.344378292679544
+          ],
+          "objective": "group_mae",
+          "params": {
+            "max_depth": 6,
+            "min_samples_leaf": 2,
+            "n_estimators": 64
+          },
+          "selection_score": 0.3490749140687208
+        },
+        {
+          "candidate": "extra_trees_depth_none",
+          "family": "extra_trees",
+          "inner_fold_scores": [
+            0.3537715354578978,
+            0.344378292679544
+          ],
+          "objective": "group_mae",
+          "params": {
+            "max_depth": null,
+            "min_samples_leaf": 2,
+            "n_estimators": 64
+          },
+          "selection_score": 0.3490749140687208
+        },
+        {
+          "candidate": "nystroem_ridge_alpha_0.1",
+          "family": "nystroem_ridge",
+          "inner_fit_details": [
+            {
+              "details": {
+                "alpha": 0.1,
+                "basis_indices_sha256": "37a468e86bdd584f38382bcc8c04ade88c28f34f249de527697eba0d85a08a0c",
+                "basis_sampling": "uniform_training_rows_without_replacement",
+                "effective_n_components": 18,
+                "gamma": 0.5,
+                "gamma_policy": "inverse_transformed_width",
+                "implementation": "bounded-nystroem-rbf-ridge-v1",
+                "map_byte_limit": 16777216,
+                "random_state": 731969,
+                "rank_cap": 64,
+                "solver": "svd",
+                "threads": 1,
+                "training_map_bytes": 2592,
+                "training_rows": 18,
+                "transformed_features": 2
+              },
+              "inner_fold": 0,
+              "test_rows": 18,
+              "train_rows": 18
+            },
+            {
+              "details": {
+                "alpha": 0.1,
+                "basis_indices_sha256": "37a468e86bdd584f38382bcc8c04ade88c28f34f249de527697eba0d85a08a0c",
+                "basis_sampling": "uniform_training_rows_without_replacement",
+                "effective_n_components": 18,
+                "gamma": 0.5,
+                "gamma_policy": "inverse_transformed_width",
+                "implementation": "bounded-nystroem-rbf-ridge-v1",
+                "map_byte_limit": 16777216,
+                "random_state": 731969,
+                "rank_cap": 64,
+                "solver": "svd",
+                "threads": 1,
+                "training_map_bytes": 2592,
+                "training_rows": 18,
+                "transformed_features": 2
+              },
+              "inner_fold": 1,
+              "test_rows": 18,
+              "train_rows": 18
+            }
+          ],
+          "inner_fold_scores": [
+            0.4286865610281507,
+            0.3843221338460044
+          ],
+          "objective": "group_mae",
+          "params": {
+            "alpha": 0.1,
+            "rank_cap": 64
+          },
+          "selection_score": 0.4065043474370776
+        },
+        {
+          "candidate": "nystroem_ridge_alpha_1",
+          "family": "nystroem_ridge",
+          "inner_fit_details": [
+            {
+              "details": {
+                "alpha": 1.0,
+                "basis_indices_sha256": "37a468e86bdd584f38382bcc8c04ade88c28f34f249de527697eba0d85a08a0c",
+                "basis_sampling": "uniform_training_rows_without_replacement",
+                "effective_n_components": 18,
+                "gamma": 0.5,
+                "gamma_policy": "inverse_transformed_width",
+                "implementation": "bounded-nystroem-rbf-ridge-v1",
+                "map_byte_limit": 16777216,
+                "random_state": 731969,
+                "rank_cap": 64,
+                "solver": "svd",
+                "threads": 1,
+                "training_map_bytes": 2592,
+                "training_rows": 18,
+                "transformed_features": 2
+              },
+              "inner_fold": 0,
+              "test_rows": 18,
+              "train_rows": 18
+            },
+            {
+              "details": {
+                "alpha": 1.0,
+                "basis_indices_sha256": "37a468e86bdd584f38382bcc8c04ade88c28f34f249de527697eba0d85a08a0c",
+                "basis_sampling": "uniform_training_rows_without_replacement",
+                "effective_n_components": 18,
+                "gamma": 0.5,
+                "gamma_policy": "inverse_transformed_width",
+                "implementation": "bounded-nystroem-rbf-ridge-v1",
+                "map_byte_limit": 16777216,
+                "random_state": 731969,
+                "rank_cap": 64,
+                "solver": "svd",
+                "threads": 1,
+                "training_map_bytes": 2592,
+                "training_rows": 18,
+                "transformed_features": 2
+              },
+              "inner_fold": 1,
+              "test_rows": 18,
+              "train_rows": 18
+            }
+          ],
+          "inner_fold_scores": [
+            0.6797269197024041,
+            0.7053081884243574
+          ],
+          "objective": "group_mae",
+          "params": {
+            "alpha": 1.0,
+            "rank_cap": 64
+          },
+          "selection_score": 0.6925175540633807
+        },
+        {
+          "candidate": "nystroem_ridge_alpha_10",
+          "family": "nystroem_ridge",
+          "inner_fit_details": [
+            {
+              "details": {
+                "alpha": 10.0,
+                "basis_indices_sha256": "37a468e86bdd584f38382bcc8c04ade88c28f34f249de527697eba0d85a08a0c",
+                "basis_sampling": "uniform_training_rows_without_replacement",
+                "effective_n_components": 18,
+                "gamma": 0.5,
+                "gamma_policy": "inverse_transformed_width",
+                "implementation": "bounded-nystroem-rbf-ridge-v1",
+                "map_byte_limit": 16777216,
+                "random_state": 731969,
+                "rank_cap": 64,
+                "solver": "svd",
+                "threads": 1,
+                "training_map_bytes": 2592,
+                "training_rows": 18,
+                "transformed_features": 2
+              },
+              "inner_fold": 0,
+              "test_rows": 18,
+              "train_rows": 18
+            },
+            {
+              "details": {
+                "alpha": 10.0,
+                "basis_indices_sha256": "37a468e86bdd584f38382bcc8c04ade88c28f34f249de527697eba0d85a08a0c",
+                "basis_sampling": "uniform_training_rows_without_replacement",
+                "effective_n_components": 18,
+                "gamma": 0.5,
+                "gamma_policy": "inverse_transformed_width",
+                "implementation": "bounded-nystroem-rbf-ridge-v1",
+                "map_byte_limit": 16777216,
+                "random_state": 731969,
+                "rank_cap": 64,
+                "solver": "svd",
+                "threads": 1,
+                "training_map_bytes": 2592,
+                "training_rows": 18,
+                "transformed_features": 2
+              },
+              "inner_fold": 1,
+              "test_rows": 18,
+              "train_rows": 18
+            }
+          ],
+          "inner_fold_scores": [
+            1.9175788124822928,
+            2.0304745518459253
+          ],
+          "objective": "group_mae",
+          "params": {
+            "alpha": 10.0,
+            "rank_cap": 64
+          },
+          "selection_score": 1.9740266821641086
+        },
+        {
+          "candidate": "group_median_lower",
+          "family": "group_median",
+          "inner_fit_details": [
+            {
+              "details": {
+                "constant": -0.833098984764903,
+                "implementation": "group-balanced-lower-median-v1",
+                "tie_break": "lower_observed_target",
+                "training_groups": 6,
+                "training_rows": 18,
+                "transformed_features": 2,
+                "weight_rule": "equal_training_group_then_equal_row"
+              },
+              "inner_fold": 0,
+              "test_rows": 18,
+              "train_rows": 18
+            },
+            {
+              "details": {
+                "constant": -0.27919751657722913,
+                "implementation": "group-balanced-lower-median-v1",
+                "tie_break": "lower_observed_target",
+                "training_groups": 6,
+                "training_rows": 18,
+                "transformed_features": 2,
+                "weight_rule": "equal_training_group_then_equal_row"
+              },
+              "inner_fold": 1,
+              "test_rows": 18,
+              "train_rows": 18
+            }
+          ],
+          "inner_fold_scores": [
+            2.901590879622653,
+            2.8279235883016547
+          ],
+          "objective": "group_mae",
+          "params": {},
+          "selection_score": 2.8647572339621536
+        }
+      ],
+      "overlap_count": 0,
+      "selected_candidate": "ridge_alpha_0.1",
+      "selected_family": "ridge",
+      "test_group_count": 6,
+      "test_groups": [
+        "g01",
+        "g02",
+        "g06",
+        "g08",
+        "g13",
+        "g15"
+      ],
+      "test_rows": 18,
+      "train_group_count": 12,
+      "train_groups": [
+        "g00",
+        "g03",
+        "g04",
+        "g05",
+        "g07",
+        "g09",
+        "g10",
+        "g11",
+        "g12",
+        "g14",
+        "g16",
+        "g17"
+      ],
+      "train_rows": 36
+    },
+    {
+      "family_candidates": {
+        "dummy": "dummy_mean",
+        "extra_trees": "extra_trees_depth_6",
+        "group_median": "group_median_lower",
+        "nystroem_ridge": "nystroem_ridge_alpha_0.1",
+        "ridge": "ridge_alpha_0.1"
+      },
+      "family_fit_details": {
+        "group_median": {
+          "constant": -0.27919751657722913,
+          "implementation": "group-balanced-lower-median-v1",
+          "tie_break": "lower_observed_target",
+          "training_groups": 12,
+          "training_rows": 36,
+          "transformed_features": 2,
+          "weight_rule": "equal_training_group_then_equal_row"
+        },
+        "nystroem_ridge": {
+          "alpha": 0.1,
+          "basis_indices_sha256": "95b9fd2aeb08861f16313b797eb4204b0771751300d188b44d9406da564057db",
+          "basis_sampling": "uniform_training_rows_without_replacement",
+          "effective_n_components": 36,
+          "gamma": 0.5,
+          "gamma_policy": "inverse_transformed_width",
+          "implementation": "bounded-nystroem-rbf-ridge-v1",
+          "map_byte_limit": 16777216,
+          "random_state": 731970,
+          "rank_cap": 64,
+          "solver": "svd",
+          "threads": 1,
+          "training_map_bytes": 10368,
+          "training_rows": 36,
+          "transformed_features": 2
+        }
+      },
+      "fold": 2,
+      "inner_folds": [
+        {
+          "fold": 0,
+          "overlap_count": 0,
+          "test_group_count": 6,
+          "test_groups": [
+            "g01",
+            "g02",
+            "g05",
+            "g06",
+            "g09",
+            "g13"
+          ],
+          "test_rows": 18,
+          "train_group_count": 6,
+          "train_groups": [
+            "g00",
+            "g04",
+            "g07",
+            "g08",
+            "g11",
+            "g15"
+          ],
+          "train_rows": 18
+        },
+        {
+          "fold": 1,
+          "overlap_count": 0,
+          "test_group_count": 6,
+          "test_groups": [
+            "g00",
+            "g04",
+            "g07",
+            "g08",
+            "g11",
+            "g15"
+          ],
+          "test_rows": 18,
+          "train_group_count": 6,
+          "train_groups": [
+            "g01",
+            "g02",
+            "g05",
+            "g06",
+            "g09",
+            "g13"
+          ],
+          "train_rows": 18
+        }
+      ],
+      "inner_seed": 731970,
+      "inner_selection": [
+        {
+          "candidate": "dummy_mean",
+          "family": "dummy",
+          "inner_fold_scores": [
+            1.5798723997522153,
+            1.5647479328401814
+          ],
+          "objective": "group_mae",
+          "params": {
+            "strategy": "mean"
+          },
+          "selection_score": 1.5723101662961982
+        },
+        {
+          "candidate": "ridge_alpha_0.1",
+          "family": "ridge",
+          "inner_fold_scores": [
+            0.1714648317586556,
+            0.265651726204726
+          ],
+          "objective": "group_mae",
+          "params": {
+            "alpha": 0.1
+          },
+          "selection_score": 0.21855827898169086
+        },
+        {
+          "candidate": "ridge_alpha_1",
+          "family": "ridge",
+          "inner_fold_scores": [
+            0.21120218089295625,
+            0.29588480713734044
+          ],
+          "objective": "group_mae",
+          "params": {
+            "alpha": 1.0
+          },
+          "selection_score": 0.25354349401514836
+        },
+        {
+          "candidate": "ridge_alpha_10",
+          "family": "ridge",
+          "inner_fold_scores": [
+            0.597448238784568,
+            0.6352707247158512
+          ],
+          "objective": "group_mae",
+          "params": {
+            "alpha": 10.0
+          },
+          "selection_score": 0.6163594817502096
+        },
+        {
+          "candidate": "extra_trees_depth_6",
+          "family": "extra_trees",
+          "inner_fold_scores": [
+            0.31017172920669067,
+            0.28964621416828734
+          ],
+          "objective": "group_mae",
+          "params": {
+            "max_depth": 6,
+            "min_samples_leaf": 2,
+            "n_estimators": 64
+          },
+          "selection_score": 0.299908971687489
+        },
+        {
+          "candidate": "extra_trees_depth_none",
+          "family": "extra_trees",
+          "inner_fold_scores": [
+            0.31017172920669067,
+            0.28964621416828734
+          ],
+          "objective": "group_mae",
+          "params": {
+            "max_depth": null,
+            "min_samples_leaf": 2,
+            "n_estimators": 64
+          },
+          "selection_score": 0.299908971687489
+        },
+        {
+          "candidate": "nystroem_ridge_alpha_0.1",
+          "family": "nystroem_ridge",
+          "inner_fit_details": [
+            {
+              "details": {
+                "alpha": 0.1,
+                "basis_indices_sha256": "f90e8b597d356ad2d9990d7ce5947b6e7450c766a9b8007592734643c43ba686",
+                "basis_sampling": "uniform_training_rows_without_replacement",
+                "effective_n_components": 18,
+                "gamma": 0.5,
+                "gamma_policy": "inverse_transformed_width",
+                "implementation": "bounded-nystroem-rbf-ridge-v1",
+                "map_byte_limit": 16777216,
+                "random_state": 731970,
+                "rank_cap": 64,
+                "solver": "svd",
+                "threads": 1,
+                "training_map_bytes": 2592,
+                "training_rows": 18,
+                "transformed_features": 2
+              },
+              "inner_fold": 0,
+              "test_rows": 18,
+              "train_rows": 18
+            },
+            {
+              "details": {
+                "alpha": 0.1,
+                "basis_indices_sha256": "f90e8b597d356ad2d9990d7ce5947b6e7450c766a9b8007592734643c43ba686",
+                "basis_sampling": "uniform_training_rows_without_replacement",
+                "effective_n_components": 18,
+                "gamma": 0.5,
+                "gamma_policy": "inverse_transformed_width",
+                "implementation": "bounded-nystroem-rbf-ridge-v1",
+                "map_byte_limit": 16777216,
+                "random_state": 731970,
+                "rank_cap": 64,
+                "solver": "svd",
+                "threads": 1,
+                "training_map_bytes": 2592,
+                "training_rows": 18,
+                "transformed_features": 2
+              },
+              "inner_fold": 1,
+              "test_rows": 18,
+              "train_rows": 18
+            }
+          ],
+          "inner_fold_scores": [
+            0.34594656276041597,
+            0.43983543705839273
+          ],
+          "objective": "group_mae",
+          "params": {
+            "alpha": 0.1,
+            "rank_cap": 64
+          },
+          "selection_score": 0.39289099990940435
+        },
+        {
+          "candidate": "nystroem_ridge_alpha_1",
+          "family": "nystroem_ridge",
+          "inner_fit_details": [
+            {
+              "details": {
+                "alpha": 1.0,
+                "basis_indices_sha256": "f90e8b597d356ad2d9990d7ce5947b6e7450c766a9b8007592734643c43ba686",
+                "basis_sampling": "uniform_training_rows_without_replacement",
+                "effective_n_components": 18,
+                "gamma": 0.5,
+                "gamma_policy": "inverse_transformed_width",
+                "implementation": "bounded-nystroem-rbf-ridge-v1",
+                "map_byte_limit": 16777216,
+                "random_state": 731970,
+                "rank_cap": 64,
+                "solver": "svd",
+                "threads": 1,
+                "training_map_bytes": 2592,
+                "training_rows": 18,
+                "transformed_features": 2
+              },
+              "inner_fold": 0,
+              "test_rows": 18,
+              "train_rows": 18
+            },
+            {
+              "details": {
+                "alpha": 1.0,
+                "basis_indices_sha256": "f90e8b597d356ad2d9990d7ce5947b6e7450c766a9b8007592734643c43ba686",
+                "basis_sampling": "uniform_training_rows_without_replacement",
+                "effective_n_components": 18,
+                "gamma": 0.5,
+                "gamma_policy": "inverse_transformed_width",
+                "implementation": "bounded-nystroem-rbf-ridge-v1",
+                "map_byte_limit": 16777216,
+                "random_state": 731970,
+                "rank_cap": 64,
+                "solver": "svd",
+                "threads": 1,
+                "training_map_bytes": 2592,
+                "training_rows": 18,
+                "transformed_features": 2
+              },
+              "inner_fold": 1,
+              "test_rows": 18,
+              "train_rows": 18
+            }
+          ],
+          "inner_fold_scores": [
+            0.5240599720945145,
+            0.5682492703132265
+          ],
+          "objective": "group_mae",
+          "params": {
+            "alpha": 1.0,
+            "rank_cap": 64
+          },
+          "selection_score": 0.5461546212038705
+        },
+        {
+          "candidate": "nystroem_ridge_alpha_10",
+          "family": "nystroem_ridge",
+          "inner_fit_details": [
+            {
+              "details": {
+                "alpha": 10.0,
+                "basis_indices_sha256": "f90e8b597d356ad2d9990d7ce5947b6e7450c766a9b8007592734643c43ba686",
+                "basis_sampling": "uniform_training_rows_without_replacement",
+                "effective_n_components": 18,
+                "gamma": 0.5,
+                "gamma_policy": "inverse_transformed_width",
+                "implementation": "bounded-nystroem-rbf-ridge-v1",
+                "map_byte_limit": 16777216,
+                "random_state": 731970,
+                "rank_cap": 64,
+                "solver": "svd",
+                "threads": 1,
+                "training_map_bytes": 2592,
+                "training_rows": 18,
+                "transformed_features": 2
+              },
+              "inner_fold": 0,
+              "test_rows": 18,
+              "train_rows": 18
+            },
+            {
+              "details": {
+                "alpha": 10.0,
+                "basis_indices_sha256": "f90e8b597d356ad2d9990d7ce5947b6e7450c766a9b8007592734643c43ba686",
+                "basis_sampling": "uniform_training_rows_without_replacement",
+                "effective_n_components": 18,
+                "gamma": 0.5,
+                "gamma_policy": "inverse_transformed_width",
+                "implementation": "bounded-nystroem-rbf-ridge-v1",
+                "map_byte_limit": 16777216,
+                "random_state": 731970,
+                "rank_cap": 64,
+                "solver": "svd",
+                "threads": 1,
+                "training_map_bytes": 2592,
+                "training_rows": 18,
+                "transformed_features": 2
+              },
+              "inner_fold": 1,
+              "test_rows": 18,
+              "train_rows": 18
+            }
+          ],
+          "inner_fold_scores": [
+            1.2354348738873953,
+            1.2270577487242569
+          ],
+          "objective": "group_mae",
+          "params": {
+            "alpha": 10.0,
+            "rank_cap": 64
+          },
+          "selection_score": 1.231246311305826
+        },
+        {
+          "candidate": "group_median_lower",
+          "family": "group_median",
+          "inner_fit_details": [
+            {
+              "details": {
+                "constant": -1.0576828630146404,
+                "implementation": "group-balanced-lower-median-v1",
+                "tie_break": "lower_observed_target",
+                "training_groups": 6,
+                "training_rows": 18,
+                "transformed_features": 2,
+                "weight_rule": "equal_training_group_then_equal_row"
+              },
+              "inner_fold": 0,
+              "test_rows": 18,
+              "train_rows": 18
+            },
+            {
+              "details": {
+                "constant": 0.8952895385083419,
+                "implementation": "group-balanced-lower-median-v1",
+                "tie_break": "lower_observed_target",
+                "training_groups": 6,
+                "training_rows": 18,
+                "transformed_features": 2,
+                "weight_rule": "equal_training_group_then_equal_row"
+              },
+              "inner_fold": 1,
+              "test_rows": 18,
+              "train_rows": 18
+            }
+          ],
+          "inner_fold_scores": [
+            1.9202141433973365,
+            1.777088994014784
+          ],
+          "objective": "group_mae",
+          "params": {},
+          "selection_score": 1.84865156870606
+        }
+      ],
+      "overlap_count": 0,
+      "selected_candidate": "ridge_alpha_0.1",
+      "selected_family": "ridge",
+      "test_group_count": 6,
+      "test_groups": [
+        "g03",
+        "g10",
+        "g12",
+        "g14",
+        "g16",
+        "g17"
+      ],
+      "test_rows": 18,
+      "train_group_count": 12,
+      "train_groups": [
+        "g00",
+        "g01",
+        "g02",
+        "g04",
+        "g05",
+        "g06",
+        "g07",
+        "g08",
+        "g09",
+        "g11",
+        "g13",
+        "g15"
+      ],
+      "train_rows": 36
+    }
+  ],
+  "package_source": {
+    "algorithm": "sha256",
+    "files": {
+      "__init__.py": "fe2d52504b085622ef2b5cb895af4c895ae213210ed12e637b76652fa8a2ac06",
+      "__main__.py": "935a1c1166b0c1ea35a82256345000bf2c73ded718d77773bc27a71ecce28f7d",
+      "baselines.py": "2973d75f2612bb8d51a9e0b617862f0fa14a4fa8c6000db671178a2e0962a6c2",
+      "binary/__init__.py": "3ce7b14dead36ef67af0ed9da298186c9951730ef4587e325e0f7a5cfc44fe8a",
+      "binary/cli.py": "5d62b751439aa31e0636daa02d025631440c8eb38caef097dfeb832d4f20e37f",
+      "binary/data.py": "21da2d6aa1087688d1fd3d0dfacf705b91906000a2ab6f96a5e0e9c75a10d786",
+      "binary/metrics.py": "1b1cd472ef916731ef6b9f207564acc64d86f252c68177f60f780b9c39bbd2a2",
+      "binary/model.py": "faca1d25b043110e40c69fa3fd6382ef2c8695cd0bda2267541c52cf1575d287",
+      "binary/report.py": "c0dbe53c978d08f35acee799b70b3aeaf2204d9fd87bcf31061273aa81028fe9",
+      "binary/saved_evaluation.py": "fca45ef7bf59eb49128ec9b8fec95ffc8d4e2c45467ec326ce1c0852bf33bc0c",
+      "binary/workflow.py": "71cac8a2b42afe05a0ca7a6473190b00b08d00189d6ea6bf48f21bd0180c550e",
+      "budget_comparison.py": "a9acd577c555863caf3983ff19c9beda34695b6cc93b771efa35a0efc18c84ca",
+      "categorical.py": "7cd8295080e9cc4f205c350f1f9446b03eb30986e94020489e03ebbb8ae09aac",
+      "cli.py": "00e90310e3a3b80d637bb7656a63d2286a8a47b4911752734aa23ff685dd805b",
+      "data.py": "788542f6ecc010c37fd1540b1a748ff80954f5b0578e6f751b6113791dfedbe4",
+      "evaluation.py": "a09a3cf4cb194aa798bc1811e2327465e8ee79841e2ebc012170140744d5a757",
+      "evaluation_schema.py": "5aa3926f35b8558fab7aa8c6a54f1b866aaeec97105caf05118d5929ba257ba7",
+      "feature_manifest.py": "6d89e4a28dd97e695e2cbc760bc928ae4315de7dce5f0df01d5162d7df64c8a9",
+      "input_support.py": "b491b790fb22cda718d1a50d71eea9c7b7b2b6f9a29ca27c528d3d8f3a0f5b2f",
+      "interval_evaluation.py": "6b61036a1a6f4a2c15f13eea37263f24b692888a9e2a9c4e4f9263972ac90e81",
+      "kernel.py": "148a3a2bfb77cee5dbd1796f3a1a3e54c68ec46adfc1b7a3be631e9185197b3f",
+      "metrics.py": "4eb264714ebb867fd152f2d7f2424a3270e86a5aa97409be681fcbaa1eeb8a4f",
+      "model.py": "34e378d5600f0c6672c8a54fc031448c07807b8a5ffe5b8ed9860813d4622520",
+      "observed_history.py": "68bbe3e99732714e0a077d72f62115590005ce3b10b067bedd96efa28a007566",
+      "package_source.py": "48a855b77cb0df8406f375e97936fc87ad5a17f2687e851d4fdc1ccb43b3f2bd",
+      "planning.py": "8231553d6555b4f39de75da8daaafe01bb3265eb9035b342a636c9506dabafd3",
+      "prediction.py": "7edf21750f68c0c5f462175b030084fec28bb30c17b558de20edc0d7e82483c4",
+      "prediction_schema.py": "ba6d460393bea2d84babf731b33afeaab81471011ca9f5820e921b2c3e703f5f",
+      "report.py": "e0129b4fbeab6fb58829077f510cd212d998ffe2d396fdd5479fd9135b6eff58",
+      "saved_scoring.py": "8902e3b90d1d016815d33fb84bb244b3831f2f4438068770d43ec9c7c6e8ea5a",
+      "splitting.py": "df53484c6cdfa71ce3abbe824f77ccaac7fb016af98f16d7f783bfed159bb858",
+      "verification.py": "280212eb922718d9fc3b249fbbef630d1583b36bee6d47164e82324845a50191"
+    },
+    "schema_version": "1.0",
+    "scope": "fixed_groupbench_python_sources_v1",
+    "sha256": "cdd45ec2a860769276d25624e5a23136ed5b49c0d2385e9da54e2e1681ce063b",
+    "status": "available"
+  },
+  "preprocessing": "Within each fit: numeric median imputation + scaling; categorical constant imputation + train-only one-hot encoding (max 64 categories per feature).",
+  "protocol": "nested-group-kfold-extended-families-v1",
+  "run_key": "b3d7b80c156c561e803d3d8cdb82d319f412cd6fdb6e2c44d308285bffe643eb",
+  "schema_version": "1.2",
+  "source_file_sha256": null
+}

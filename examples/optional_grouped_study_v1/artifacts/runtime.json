@@ -1,0 +1,9 @@
+{
+  "numpy": "2.3.5",
+  "pandas": "2.2.3",
+  "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+  "python": "3.12.14",
+  "scikit-learn": "1.8.0",
+  "scipy": "1.17.0",
+  "threadpoolctl": "3.6.0"
+}

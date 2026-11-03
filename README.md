@@ -318,3 +318,5 @@ previews and runs two fixed regression recipes on a predeclared typed plan. It
 uses train-only preprocessing and reports tested and untested coverage without
 selection, full-data refits, CLI integration, or saved bundles. A matching
 execution binding and finite observed targets for every row are required.
+
+Fixed synthetic comparison: [optional grouped models](examples/optional_grouped_study_v1/README.md), including all negative extrapolation results and the resource-monitoring qualification.

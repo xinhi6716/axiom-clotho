@@ -1,0 +1,8042 @@
+[
+  {
+    "case_id": "0_731903",
+    "fold_ids": [
+      1,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      1,
+      1,
+      1,
+      1,
+      2,
+      2,
+      1,
+      1,
+      1,
+      2,
+      2,
+      2,
+      2,
+      0,
+      0,
+      2,
+      2,
+      2,
+      0,
+      0,
+      0,
+      0
+    ],
+    "fold_roles": [
+      "iid_group_holdout",
+      "iid_group_holdout",
+      "iid_group_holdout"
+    ],
+    "folds": [
+      {
+        "fold": 0,
+        "test": [
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          45,
+          46,
+          50,
+          51,
+          52,
+          53
+        ],
+        "test_groups": [
+          "g01",
+          "g02",
+          "g03",
+          "g04",
+          "g15",
+          "g17"
+        ],
+        "train": [
+          0,
+          1,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          47,
+          48,
+          49
+        ]
+      },
+      {
+        "fold": 1,
+        "test": [
+          0,
+          1,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          32,
+          33,
+          34,
+          35,
+          38,
+          39,
+          40
+        ],
+        "test_groups": [
+          "g00",
+          "g05",
+          "g06",
+          "g07",
+          "g11",
+          "g13"
+        ],
+        "train": [
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          36,
+          37,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53
+        ]
+      },
+      {
+        "fold": 2,
+        "test": [
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          36,
+          37,
+          41,
+          42,
+          43,
+          44,
+          47,
+          48,
+          49
+        ],
+        "test_groups": [
+          "g08",
+          "g09",
+          "g10",
+          "g12",
+          "g14",
+          "g16"
+        ],
+        "train": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          32,
+          33,
+          34,
+          35,
+          38,
+          39,
+          40,
+          45,
+          46,
+          50,
+          51,
+          52,
+          53
+        ]
+      }
+    ],
+    "plan": {
+      "candidates": [
+        {
+          "family": "dummy",
+          "name": "dummy_mean",
+          "params": {
+            "strategy": "mean"
+          }
+        },
+        {
+          "family": "ridge",
+          "name": "ridge_alpha_0.1",
+          "params": {
+            "alpha": 0.1
+          }
+        },
+        {
+          "family": "ridge",
+          "name": "ridge_alpha_1",
+          "params": {
+            "alpha": 1.0
+          }
+        },
+        {
+          "family": "ridge",
+          "name": "ridge_alpha_10",
+          "params": {
+            "alpha": 10.0
+          }
+        },
+        {
+          "family": "extra_trees",
+          "name": "extra_trees_depth_6",
+          "params": {
+            "max_depth": 6,
+            "min_samples_leaf": 2,
+            "n_estimators": 64
+          }
+        },
+        {
+          "family": "extra_trees",
+          "name": "extra_trees_depth_none",
+          "params": {
+            "max_depth": null,
+            "min_samples_leaf": 2,
+            "n_estimators": 64
+          }
+        },
+        {
+          "family": "nystroem_ridge",
+          "name": "nystroem_ridge_alpha_0.1",
+          "params": {
+            "alpha": 0.1,
+            "rank_cap": 64
+          }
+        },
+        {
+          "family": "nystroem_ridge",
+          "name": "nystroem_ridge_alpha_1",
+          "params": {
+            "alpha": 1.0,
+            "rank_cap": 64
+          }
+        },
+        {
+          "family": "nystroem_ridge",
+          "name": "nystroem_ridge_alpha_10",
+          "params": {
+            "alpha": 10.0,
+            "rank_cap": 64
+          }
+        },
+        {
+          "family": "group_median",
+          "name": "group_median_lower",
+          "params": {}
+        }
+      ],
+      "capabilities": [
+        "group_median-v1",
+        "nystroem_ridge-v1"
+      ],
+      "config": {
+        "baselines": [
+          "dummy",
+          "ridge",
+          "extra_trees",
+          "nystroem_ridge",
+          "group_median"
+        ],
+        "categorical_encoding": "legacy-v1",
+        "features": [
+          "x",
+          "z"
+        ],
+        "group": "group",
+        "inner_splits": 2,
+        "outer_splits": 3,
+        "random_state": 731903,
+        "selection_objective": "group_mae",
+        "target": "y",
+        "threads": 1
+      },
+      "feature_schema": [
+        {
+          "dtype": "float64",
+          "missing_count": 0,
+          "name": "x"
+        },
+        {
+          "dtype": "float64",
+          "missing_count": 0,
+          "name": "z"
+        }
+      ],
+      "fit_budget": {
+        "full_data_family_refits": 0,
+        "inner_selection_fits": 60,
+        "outer_family_refits": 15,
+        "selected_extra_refits": 0,
+        "total_fits": 75,
+        "unit": "pipeline.fit calls"
+      },
+      "fits_performed": 0,
+      "groupbench_version": "0.3.0b7",
+      "kind": "execution_plan",
+      "limitations": [
+        "No models or preprocessing were fitted; no predictions, scores or result files were written.",
+        "Counts describe intended pipeline.fit calls if execution succeeds, not a hard resource budget or time/memory estimate.",
+        "Each pipeline fit includes preprocessing and one estimator; individual trees and preprocessing steps are not counted separately.",
+        "Every requested family is refitted once per selection, including dummy. The selected entry reuses its winning family refit, with no extra fit.",
+        "Schema and split validation do not establish training success, leakage absence, predictive performance or extrapolation safety.",
+        "This plan describes the current input and options; changing inputs, options or software can change later execution."
+      ],
+      "mode": "run",
+      "n_training_groups": 18,
+      "n_training_rows": 54,
+      "outer_folds": [
+        {
+          "fit_counts": {
+            "family_refits": 5,
+            "inner_selection_fits": 20,
+            "total_fits": 25
+          },
+          "fold": 0,
+          "inner_folds": [
+            {
+              "fold": 0,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            },
+            {
+              "fold": 1,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            }
+          ],
+          "inner_seed": 731904,
+          "overlap_count": 0,
+          "refit_families": [
+            "dummy",
+            "ridge",
+            "extra_trees",
+            "nystroem_ridge",
+            "group_median"
+          ],
+          "test_group_count": 6,
+          "test_rows": 18,
+          "train_group_count": 12,
+          "train_rows": 36
+        },
+        {
+          "fit_counts": {
+            "family_refits": 5,
+            "inner_selection_fits": 20,
+            "total_fits": 25
+          },
+          "fold": 1,
+          "inner_folds": [
+            {
+              "fold": 0,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            },
+            {
+              "fold": 1,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            }
+          ],
+          "inner_seed": 731905,
+          "overlap_count": 0,
+          "refit_families": [
+            "dummy",
+            "ridge",
+            "extra_trees",
+            "nystroem_ridge",
+            "group_median"
+          ],
+          "test_group_count": 6,
+          "test_rows": 18,
+          "train_group_count": 12,
+          "train_rows": 36
+        },
+        {
+          "fit_counts": {
+            "family_refits": 5,
+            "inner_selection_fits": 20,
+            "total_fits": 25
+          },
+          "fold": 2,
+          "inner_folds": [
+            {
+              "fold": 0,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            },
+            {
+              "fold": 1,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            }
+          ],
+          "inner_seed": 731906,
+          "overlap_count": 0,
+          "refit_families": [
+            "dummy",
+            "ridge",
+            "extra_trees",
+            "nystroem_ridge",
+            "group_median"
+          ],
+          "test_group_count": 6,
+          "test_rows": 18,
+          "train_group_count": 12,
+          "train_rows": 36
+        }
+      ],
+      "protocol": "nested-group-kfold-extended-families-v1",
+      "schema_version": "1.2",
+      "source_file_sha256": null
+    },
+    "root": 731903,
+    "scenario": "linear_iid",
+    "scenario_id": 0
+  },
+  {
+    "case_id": "0_731927",
+    "fold_ids": [
+      0,
+      0,
+      1,
+      1,
+      1,
+      2,
+      2,
+      2,
+      2,
+      0,
+      0,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      1,
+      0,
+      0,
+      0,
+      1,
+      1,
+      1,
+      1,
+      2,
+      2,
+      2,
+      2,
+      2,
+      0,
+      0,
+      0,
+      0,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2
+    ],
+    "fold_roles": [
+      "iid_group_holdout",
+      "iid_group_holdout",
+      "iid_group_holdout"
+    ],
+    "folds": [
+      {
+        "fold": 0,
+        "test": [
+          0,
+          1,
+          9,
+          10,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          29,
+          30,
+          31,
+          41,
+          42,
+          43,
+          44
+        ],
+        "test_groups": [
+          "g00",
+          "g03",
+          "g07",
+          "g08",
+          "g10",
+          "g14"
+        ],
+        "train": [
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          27,
+          28,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39,
+          40,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53
+        ]
+      },
+      {
+        "fold": 1,
+        "test": [
+          2,
+          3,
+          4,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          27,
+          28,
+          32,
+          33,
+          34,
+          35
+        ],
+        "test_groups": [
+          "g01",
+          "g04",
+          "g05",
+          "g06",
+          "g09",
+          "g11"
+        ],
+        "train": [
+          0,
+          1,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          29,
+          30,
+          31,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53
+        ]
+      },
+      {
+        "fold": 2,
+        "test": [
+          5,
+          6,
+          7,
+          8,
+          36,
+          37,
+          38,
+          39,
+          40,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53
+        ],
+        "test_groups": [
+          "g02",
+          "g12",
+          "g13",
+          "g15",
+          "g16",
+          "g17"
+        ],
+        "train": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          41,
+          42,
+          43,
+          44
+        ]
+      }
+    ],
+    "plan": {
+      "candidates": [
+        {
+          "family": "dummy",
+          "name": "dummy_mean",
+          "params": {
+            "strategy": "mean"
+          }
+        },
+        {
+          "family": "ridge",
+          "name": "ridge_alpha_0.1",
+          "params": {
+            "alpha": 0.1
+          }
+        },
+        {
+          "family": "ridge",
+          "name": "ridge_alpha_1",
+          "params": {
+            "alpha": 1.0
+          }
+        },
+        {
+          "family": "ridge",
+          "name": "ridge_alpha_10",
+          "params": {
+            "alpha": 10.0
+          }
+        },
+        {
+          "family": "extra_trees",
+          "name": "extra_trees_depth_6",
+          "params": {
+            "max_depth": 6,
+            "min_samples_leaf": 2,
+            "n_estimators": 64
+          }
+        },
+        {
+          "family": "extra_trees",
+          "name": "extra_trees_depth_none",
+          "params": {
+            "max_depth": null,
+            "min_samples_leaf": 2,
+            "n_estimators": 64
+          }
+        },
+        {
+          "family": "nystroem_ridge",
+          "name": "nystroem_ridge_alpha_0.1",
+          "params": {
+            "alpha": 0.1,
+            "rank_cap": 64
+          }
+        },
+        {
+          "family": "nystroem_ridge",
+          "name": "nystroem_ridge_alpha_1",
+          "params": {
+            "alpha": 1.0,
+            "rank_cap": 64
+          }
+        },
+        {
+          "family": "nystroem_ridge",
+          "name": "nystroem_ridge_alpha_10",
+          "params": {
+            "alpha": 10.0,
+            "rank_cap": 64
+          }
+        },
+        {
+          "family": "group_median",
+          "name": "group_median_lower",
+          "params": {}
+        }
+      ],
+      "capabilities": [
+        "group_median-v1",
+        "nystroem_ridge-v1"
+      ],
+      "config": {
+        "baselines": [
+          "dummy",
+          "ridge",
+          "extra_trees",
+          "nystroem_ridge",
+          "group_median"
+        ],
+        "categorical_encoding": "legacy-v1",
+        "features": [
+          "x",
+          "z"
+        ],
+        "group": "group",
+        "inner_splits": 2,
+        "outer_splits": 3,
+        "random_state": 731927,
+        "selection_objective": "group_mae",
+        "target": "y",
+        "threads": 1
+      },
+      "feature_schema": [
+        {
+          "dtype": "float64",
+          "missing_count": 0,
+          "name": "x"
+        },
+        {
+          "dtype": "float64",
+          "missing_count": 0,
+          "name": "z"
+        }
+      ],
+      "fit_budget": {
+        "full_data_family_refits": 0,
+        "inner_selection_fits": 60,
+        "outer_family_refits": 15,
+        "selected_extra_refits": 0,
+        "total_fits": 75,
+        "unit": "pipeline.fit calls"
+      },
+      "fits_performed": 0,
+      "groupbench_version": "0.3.0b7",
+      "kind": "execution_plan",
+      "limitations": [
+        "No models or preprocessing were fitted; no predictions, scores or result files were written.",
+        "Counts describe intended pipeline.fit calls if execution succeeds, not a hard resource budget or time/memory estimate.",
+        "Each pipeline fit includes preprocessing and one estimator; individual trees and preprocessing steps are not counted separately.",
+        "Every requested family is refitted once per selection, including dummy. The selected entry reuses its winning family refit, with no extra fit.",
+        "Schema and split validation do not establish training success, leakage absence, predictive performance or extrapolation safety.",
+        "This plan describes the current input and options; changing inputs, options or software can change later execution."
+      ],
+      "mode": "run",
+      "n_training_groups": 18,
+      "n_training_rows": 54,
+      "outer_folds": [
+        {
+          "fit_counts": {
+            "family_refits": 5,
+            "inner_selection_fits": 20,
+            "total_fits": 25
+          },
+          "fold": 0,
+          "inner_folds": [
+            {
+              "fold": 0,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            },
+            {
+              "fold": 1,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            }
+          ],
+          "inner_seed": 731928,
+          "overlap_count": 0,
+          "refit_families": [
+            "dummy",
+            "ridge",
+            "extra_trees",
+            "nystroem_ridge",
+            "group_median"
+          ],
+          "test_group_count": 6,
+          "test_rows": 18,
+          "train_group_count": 12,
+          "train_rows": 36
+        },
+        {
+          "fit_counts": {
+            "family_refits": 5,
+            "inner_selection_fits": 20,
+            "total_fits": 25
+          },
+          "fold": 1,
+          "inner_folds": [
+            {
+              "fold": 0,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            },
+            {
+              "fold": 1,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            }
+          ],
+          "inner_seed": 731929,
+          "overlap_count": 0,
+          "refit_families": [
+            "dummy",
+            "ridge",
+            "extra_trees",
+            "nystroem_ridge",
+            "group_median"
+          ],
+          "test_group_count": 6,
+          "test_rows": 18,
+          "train_group_count": 12,
+          "train_rows": 36
+        },
+        {
+          "fit_counts": {
+            "family_refits": 5,
+            "inner_selection_fits": 20,
+            "total_fits": 25
+          },
+          "fold": 2,
+          "inner_folds": [
+            {
+              "fold": 0,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            },
+            {
+              "fold": 1,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            }
+          ],
+          "inner_seed": 731930,
+          "overlap_count": 0,
+          "refit_families": [
+            "dummy",
+            "ridge",
+            "extra_trees",
+            "nystroem_ridge",
+            "group_median"
+          ],
+          "test_group_count": 6,
+          "test_rows": 18,
+          "train_group_count": 12,
+          "train_rows": 36
+        }
+      ],
+      "protocol": "nested-group-kfold-extended-families-v1",
+      "schema_version": "1.2",
+      "source_file_sha256": null
+    },
+    "root": 731927,
+    "scenario": "linear_iid",
+    "scenario_id": 0
+  },
+  {
+    "case_id": "0_731939",
+    "fold_ids": [
+      1,
+      1,
+      1,
+      1,
+      1,
+      0,
+      0,
+      0,
+      0,
+      1,
+      1,
+      2,
+      2,
+      2,
+      1,
+      1,
+      1,
+      1,
+      2,
+      2,
+      1,
+      1,
+      1,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      0,
+      0,
+      0,
+      2,
+      2,
+      2,
+      2,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      1,
+      1,
+      1,
+      0,
+      0,
+      2,
+      2,
+      2,
+      0,
+      0,
+      0,
+      0
+    ],
+    "fold_roles": [
+      "iid_group_holdout",
+      "iid_group_holdout",
+      "iid_group_holdout"
+    ],
+    "folds": [
+      {
+        "fold": 0,
+        "test": [
+          5,
+          6,
+          7,
+          8,
+          29,
+          30,
+          31,
+          36,
+          37,
+          38,
+          39,
+          40,
+          45,
+          46,
+          50,
+          51,
+          52,
+          53
+        ],
+        "test_groups": [
+          "g02",
+          "g10",
+          "g12",
+          "g13",
+          "g15",
+          "g17"
+        ],
+        "train": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          32,
+          33,
+          34,
+          35,
+          41,
+          42,
+          43,
+          44,
+          47,
+          48,
+          49
+        ]
+      },
+      {
+        "fold": 1,
+        "test": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          9,
+          10,
+          14,
+          15,
+          16,
+          17,
+          20,
+          21,
+          22,
+          41,
+          42,
+          43,
+          44
+        ],
+        "test_groups": [
+          "g00",
+          "g01",
+          "g03",
+          "g05",
+          "g07",
+          "g14"
+        ],
+        "train": [
+          5,
+          6,
+          7,
+          8,
+          11,
+          12,
+          13,
+          18,
+          19,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39,
+          40,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53
+        ]
+      },
+      {
+        "fold": 2,
+        "test": [
+          11,
+          12,
+          13,
+          18,
+          19,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          32,
+          33,
+          34,
+          35,
+          47,
+          48,
+          49
+        ],
+        "test_groups": [
+          "g04",
+          "g06",
+          "g08",
+          "g09",
+          "g11",
+          "g16"
+        ],
+        "train": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          14,
+          15,
+          16,
+          17,
+          20,
+          21,
+          22,
+          29,
+          30,
+          31,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          50,
+          51,
+          52,
+          53
+        ]
+      }
+    ],
+    "plan": {
+      "candidates": [
+        {
+          "family": "dummy",
+          "name": "dummy_mean",
+          "params": {
+            "strategy": "mean"
+          }
+        },
+        {
+          "family": "ridge",
+          "name": "ridge_alpha_0.1",
+          "params": {
+            "alpha": 0.1
+          }
+        },
+        {
+          "family": "ridge",
+          "name": "ridge_alpha_1",
+          "params": {
+            "alpha": 1.0
+          }
+        },
+        {
+          "family": "ridge",
+          "name": "ridge_alpha_10",
+          "params": {
+            "alpha": 10.0
+          }
+        },
+        {
+          "family": "extra_trees",
+          "name": "extra_trees_depth_6",
+          "params": {
+            "max_depth": 6,
+            "min_samples_leaf": 2,
+            "n_estimators": 64
+          }
+        },
+        {
+          "family": "extra_trees",
+          "name": "extra_trees_depth_none",
+          "params": {
+            "max_depth": null,
+            "min_samples_leaf": 2,
+            "n_estimators": 64
+          }
+        },
+        {
+          "family": "nystroem_ridge",
+          "name": "nystroem_ridge_alpha_0.1",
+          "params": {
+            "alpha": 0.1,
+            "rank_cap": 64
+          }
+        },
+        {
+          "family": "nystroem_ridge",
+          "name": "nystroem_ridge_alpha_1",
+          "params": {
+            "alpha": 1.0,
+            "rank_cap": 64
+          }
+        },
+        {
+          "family": "nystroem_ridge",
+          "name": "nystroem_ridge_alpha_10",
+          "params": {
+            "alpha": 10.0,
+            "rank_cap": 64
+          }
+        },
+        {
+          "family": "group_median",
+          "name": "group_median_lower",
+          "params": {}
+        }
+      ],
+      "capabilities": [
+        "group_median-v1",
+        "nystroem_ridge-v1"
+      ],
+      "config": {
+        "baselines": [
+          "dummy",
+          "ridge",
+          "extra_trees",
+          "nystroem_ridge",
+          "group_median"
+        ],
+        "categorical_encoding": "legacy-v1",
+        "features": [
+          "x",
+          "z"
+        ],
+        "group": "group",
+        "inner_splits": 2,
+        "outer_splits": 3,
+        "random_state": 731939,
+        "selection_objective": "group_mae",
+        "target": "y",
+        "threads": 1
+      },
+      "feature_schema": [
+        {
+          "dtype": "float64",
+          "missing_count": 0,
+          "name": "x"
+        },
+        {
+          "dtype": "float64",
+          "missing_count": 0,
+          "name": "z"
+        }
+      ],
+      "fit_budget": {
+        "full_data_family_refits": 0,
+        "inner_selection_fits": 60,
+        "outer_family_refits": 15,
+        "selected_extra_refits": 0,
+        "total_fits": 75,
+        "unit": "pipeline.fit calls"
+      },
+      "fits_performed": 0,
+      "groupbench_version": "0.3.0b7",
+      "kind": "execution_plan",
+      "limitations": [
+        "No models or preprocessing were fitted; no predictions, scores or result files were written.",
+        "Counts describe intended pipeline.fit calls if execution succeeds, not a hard resource budget or time/memory estimate.",
+        "Each pipeline fit includes preprocessing and one estimator; individual trees and preprocessing steps are not counted separately.",
+        "Every requested family is refitted once per selection, including dummy. The selected entry reuses its winning family refit, with no extra fit.",
+        "Schema and split validation do not establish training success, leakage absence, predictive performance or extrapolation safety.",
+        "This plan describes the current input and options; changing inputs, options or software can change later execution."
+      ],
+      "mode": "run",
+      "n_training_groups": 18,
+      "n_training_rows": 54,
+      "outer_folds": [
+        {
+          "fit_counts": {
+            "family_refits": 5,
+            "inner_selection_fits": 20,
+            "total_fits": 25
+          },
+          "fold": 0,
+          "inner_folds": [
+            {
+              "fold": 0,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            },
+            {
+              "fold": 1,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            }
+          ],
+          "inner_seed": 731940,
+          "overlap_count": 0,
+          "refit_families": [
+            "dummy",
+            "ridge",
+            "extra_trees",
+            "nystroem_ridge",
+            "group_median"
+          ],
+          "test_group_count": 6,
+          "test_rows": 18,
+          "train_group_count": 12,
+          "train_rows": 36
+        },
+        {
+          "fit_counts": {
+            "family_refits": 5,
+            "inner_selection_fits": 20,
+            "total_fits": 25
+          },
+          "fold": 1,
+          "inner_folds": [
+            {
+              "fold": 0,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            },
+            {
+              "fold": 1,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            }
+          ],
+          "inner_seed": 731941,
+          "overlap_count": 0,
+          "refit_families": [
+            "dummy",
+            "ridge",
+            "extra_trees",
+            "nystroem_ridge",
+            "group_median"
+          ],
+          "test_group_count": 6,
+          "test_rows": 18,
+          "train_group_count": 12,
+          "train_rows": 36
+        },
+        {
+          "fit_counts": {
+            "family_refits": 5,
+            "inner_selection_fits": 20,
+            "total_fits": 25
+          },
+          "fold": 2,
+          "inner_folds": [
+            {
+              "fold": 0,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            },
+            {
+              "fold": 1,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            }
+          ],
+          "inner_seed": 731942,
+          "overlap_count": 0,
+          "refit_families": [
+            "dummy",
+            "ridge",
+            "extra_trees",
+            "nystroem_ridge",
+            "group_median"
+          ],
+          "test_group_count": 6,
+          "test_rows": 18,
+          "train_group_count": 12,
+          "train_rows": 36
+        }
+      ],
+      "protocol": "nested-group-kfold-extended-families-v1",
+      "schema_version": "1.2",
+      "source_file_sha256": null
+    },
+    "root": 731939,
+    "scenario": "linear_iid",
+    "scenario_id": 0
+  },
+  {
+    "case_id": "0_731951",
+    "fold_ids": [
+      0,
+      0,
+      1,
+      1,
+      1,
+      2,
+      2,
+      2,
+      2,
+      1,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      2,
+      2,
+      2,
+      2,
+      2,
+      1,
+      1,
+      1,
+      1,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      0,
+      0,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "fold_roles": [
+      "iid_group_holdout",
+      "iid_group_holdout",
+      "iid_group_holdout"
+    ],
+    "folds": [
+      {
+        "fold": 0,
+        "test": [
+          0,
+          1,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          36,
+          37,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53
+        ],
+        "test_groups": [
+          "g00",
+          "g04",
+          "g05",
+          "g12",
+          "g16",
+          "g17"
+        ],
+        "train": [
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46
+        ]
+      },
+      {
+        "fold": 1,
+        "test": [
+          2,
+          3,
+          4,
+          9,
+          10,
+          23,
+          24,
+          25,
+          26,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46
+        ],
+        "test_groups": [
+          "g01",
+          "g03",
+          "g08",
+          "g13",
+          "g14",
+          "g15"
+        ],
+        "train": [
+          0,
+          1,
+          5,
+          6,
+          7,
+          8,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53
+        ]
+      },
+      {
+        "fold": 2,
+        "test": [
+          5,
+          6,
+          7,
+          8,
+          18,
+          19,
+          20,
+          21,
+          22,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35
+        ],
+        "test_groups": [
+          "g02",
+          "g06",
+          "g07",
+          "g09",
+          "g10",
+          "g11"
+        ],
+        "train": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          23,
+          24,
+          25,
+          26,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53
+        ]
+      }
+    ],
+    "plan": {
+      "candidates": [
+        {
+          "family": "dummy",
+          "name": "dummy_mean",
+          "params": {
+            "strategy": "mean"
+          }
+        },
+        {
+          "family": "ridge",
+          "name": "ridge_alpha_0.1",
+          "params": {
+            "alpha": 0.1
+          }
+        },
+        {
+          "family": "ridge",
+          "name": "ridge_alpha_1",
+          "params": {
+            "alpha": 1.0
+          }
+        },
+        {
+          "family": "ridge",
+          "name": "ridge_alpha_10",
+          "params": {
+            "alpha": 10.0
+          }
+        },
+        {
+          "family": "extra_trees",
+          "name": "extra_trees_depth_6",
+          "params": {
+            "max_depth": 6,
+            "min_samples_leaf": 2,
+            "n_estimators": 64
+          }
+        },
+        {
+          "family": "extra_trees",
+          "name": "extra_trees_depth_none",
+          "params": {
+            "max_depth": null,
+            "min_samples_leaf": 2,
+            "n_estimators": 64
+          }
+        },
+        {
+          "family": "nystroem_ridge",
+          "name": "nystroem_ridge_alpha_0.1",
+          "params": {
+            "alpha": 0.1,
+            "rank_cap": 64
+          }
+        },
+        {
+          "family": "nystroem_ridge",
+          "name": "nystroem_ridge_alpha_1",
+          "params": {
+            "alpha": 1.0,
+            "rank_cap": 64
+          }
+        },
+        {
+          "family": "nystroem_ridge",
+          "name": "nystroem_ridge_alpha_10",
+          "params": {
+            "alpha": 10.0,
+            "rank_cap": 64
+          }
+        },
+        {
+          "family": "group_median",
+          "name": "group_median_lower",
+          "params": {}
+        }
+      ],
+      "capabilities": [
+        "group_median-v1",
+        "nystroem_ridge-v1"
+      ],
+      "config": {
+        "baselines": [
+          "dummy",
+          "ridge",
+          "extra_trees",
+          "nystroem_ridge",
+          "group_median"
+        ],
+        "categorical_encoding": "legacy-v1",
+        "features": [
+          "x",
+          "z"
+        ],
+        "group": "group",
+        "inner_splits": 2,
+        "outer_splits": 3,
+        "random_state": 731951,
+        "selection_objective": "group_mae",
+        "target": "y",
+        "threads": 1
+      },
+      "feature_schema": [
+        {
+          "dtype": "float64",
+          "missing_count": 0,
+          "name": "x"
+        },
+        {
+          "dtype": "float64",
+          "missing_count": 0,
+          "name": "z"
+        }
+      ],
+      "fit_budget": {
+        "full_data_family_refits": 0,
+        "inner_selection_fits": 60,
+        "outer_family_refits": 15,
+        "selected_extra_refits": 0,
+        "total_fits": 75,
+        "unit": "pipeline.fit calls"
+      },
+      "fits_performed": 0,
+      "groupbench_version": "0.3.0b7",
+      "kind": "execution_plan",
+      "limitations": [
+        "No models or preprocessing were fitted; no predictions, scores or result files were written.",
+        "Counts describe intended pipeline.fit calls if execution succeeds, not a hard resource budget or time/memory estimate.",
+        "Each pipeline fit includes preprocessing and one estimator; individual trees and preprocessing steps are not counted separately.",
+        "Every requested family is refitted once per selection, including dummy. The selected entry reuses its winning family refit, with no extra fit.",
+        "Schema and split validation do not establish training success, leakage absence, predictive performance or extrapolation safety.",
+        "This plan describes the current input and options; changing inputs, options or software can change later execution."
+      ],
+      "mode": "run",
+      "n_training_groups": 18,
+      "n_training_rows": 54,
+      "outer_folds": [
+        {
+          "fit_counts": {
+            "family_refits": 5,
+            "inner_selection_fits": 20,
+            "total_fits": 25
+          },
+          "fold": 0,
+          "inner_folds": [
+            {
+              "fold": 0,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            },
+            {
+              "fold": 1,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            }
+          ],
+          "inner_seed": 731952,
+          "overlap_count": 0,
+          "refit_families": [
+            "dummy",
+            "ridge",
+            "extra_trees",
+            "nystroem_ridge",
+            "group_median"
+          ],
+          "test_group_count": 6,
+          "test_rows": 18,
+          "train_group_count": 12,
+          "train_rows": 36
+        },
+        {
+          "fit_counts": {
+            "family_refits": 5,
+            "inner_selection_fits": 20,
+            "total_fits": 25
+          },
+          "fold": 1,
+          "inner_folds": [
+            {
+              "fold": 0,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            },
+            {
+              "fold": 1,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            }
+          ],
+          "inner_seed": 731953,
+          "overlap_count": 0,
+          "refit_families": [
+            "dummy",
+            "ridge",
+            "extra_trees",
+            "nystroem_ridge",
+            "group_median"
+          ],
+          "test_group_count": 6,
+          "test_rows": 18,
+          "train_group_count": 12,
+          "train_rows": 36
+        },
+        {
+          "fit_counts": {
+            "family_refits": 5,
+            "inner_selection_fits": 20,
+            "total_fits": 25
+          },
+          "fold": 2,
+          "inner_folds": [
+            {
+              "fold": 0,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            },
+            {
+              "fold": 1,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            }
+          ],
+          "inner_seed": 731954,
+          "overlap_count": 0,
+          "refit_families": [
+            "dummy",
+            "ridge",
+            "extra_trees",
+            "nystroem_ridge",
+            "group_median"
+          ],
+          "test_group_count": 6,
+          "test_rows": 18,
+          "train_group_count": 12,
+          "train_rows": 36
+        }
+      ],
+      "protocol": "nested-group-kfold-extended-families-v1",
+      "schema_version": "1.2",
+      "source_file_sha256": null
+    },
+    "root": 731951,
+    "scenario": "linear_iid",
+    "scenario_id": 0
+  },
+  {
+    "case_id": "0_731967",
+    "fold_ids": [
+      0,
+      0,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      2,
+      2,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      1,
+      0,
+      0,
+      0,
+      1,
+      1,
+      1,
+      1,
+      0,
+      0,
+      2,
+      2,
+      2,
+      0,
+      0,
+      0,
+      0,
+      2,
+      2,
+      1,
+      1,
+      1,
+      2,
+      2,
+      2,
+      2,
+      1,
+      1,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2
+    ],
+    "fold_roles": [
+      "iid_group_holdout",
+      "iid_group_holdout",
+      "iid_group_holdout"
+    ],
+    "folds": [
+      {
+        "fold": 0,
+        "test": [
+          0,
+          1,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          20,
+          21,
+          22,
+          27,
+          28,
+          32,
+          33,
+          34,
+          35
+        ],
+        "test_groups": [
+          "g00",
+          "g04",
+          "g05",
+          "g07",
+          "g09",
+          "g11"
+        ],
+        "train": [
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          18,
+          19,
+          23,
+          24,
+          25,
+          26,
+          29,
+          30,
+          31,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53
+        ]
+      },
+      {
+        "fold": 1,
+        "test": [
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          18,
+          19,
+          23,
+          24,
+          25,
+          26,
+          38,
+          39,
+          40,
+          45,
+          46
+        ],
+        "test_groups": [
+          "g01",
+          "g02",
+          "g06",
+          "g08",
+          "g13",
+          "g15"
+        ],
+        "train": [
+          0,
+          1,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          20,
+          21,
+          22,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          41,
+          42,
+          43,
+          44,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53
+        ]
+      },
+      {
+        "fold": 2,
+        "test": [
+          9,
+          10,
+          29,
+          30,
+          31,
+          36,
+          37,
+          41,
+          42,
+          43,
+          44,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53
+        ],
+        "test_groups": [
+          "g03",
+          "g10",
+          "g12",
+          "g14",
+          "g16",
+          "g17"
+        ],
+        "train": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          32,
+          33,
+          34,
+          35,
+          38,
+          39,
+          40,
+          45,
+          46
+        ]
+      }
+    ],
+    "plan": {
+      "candidates": [
+        {
+          "family": "dummy",
+          "name": "dummy_mean",
+          "params": {
+            "strategy": "mean"
+          }
+        },
+        {
+          "family": "ridge",
+          "name": "ridge_alpha_0.1",
+          "params": {
+            "alpha": 0.1
+          }
+        },
+        {
+          "family": "ridge",
+          "name": "ridge_alpha_1",
+          "params": {
+            "alpha": 1.0
+          }
+        },
+        {
+          "family": "ridge",
+          "name": "ridge_alpha_10",
+          "params": {
+            "alpha": 10.0
+          }
+        },
+        {
+          "family": "extra_trees",
+          "name": "extra_trees_depth_6",
+          "params": {
+            "max_depth": 6,
+            "min_samples_leaf": 2,
+            "n_estimators": 64
+          }
+        },
+        {
+          "family": "extra_trees",
+          "name": "extra_trees_depth_none",
+          "params": {
+            "max_depth": null,
+            "min_samples_leaf": 2,
+            "n_estimators": 64
+          }
+        },
+        {
+          "family": "nystroem_ridge",
+          "name": "nystroem_ridge_alpha_0.1",
+          "params": {
+            "alpha": 0.1,
+            "rank_cap": 64
+          }
+        },
+        {
+          "family": "nystroem_ridge",
+          "name": "nystroem_ridge_alpha_1",
+          "params": {
+            "alpha": 1.0,
+            "rank_cap": 64
+          }
+        },
+        {
+          "family": "nystroem_ridge",
+          "name": "nystroem_ridge_alpha_10",
+          "params": {
+            "alpha": 10.0,
+            "rank_cap": 64
+          }
+        },
+        {
+          "family": "group_median",
+          "name": "group_median_lower",
+          "params": {}
+        }
+      ],
+      "capabilities": [
+        "group_median-v1",
+        "nystroem_ridge-v1"
+      ],
+      "config": {
+        "baselines": [
+          "dummy",
+          "ridge",
+          "extra_trees",
+          "nystroem_ridge",
+          "group_median"
+        ],
+        "categorical_encoding": "legacy-v1",
+        "features": [
+          "x",
+          "z"
+        ],
+        "group": "group",
+        "inner_splits": 2,
+        "outer_splits": 3,
+        "random_state": 731967,
+        "selection_objective": "group_mae",
+        "target": "y",
+        "threads": 1
+      },
+      "feature_schema": [
+        {
+          "dtype": "float64",
+          "missing_count": 0,
+          "name": "x"
+        },
+        {
+          "dtype": "float64",
+          "missing_count": 0,
+          "name": "z"
+        }
+      ],
+      "fit_budget": {
+        "full_data_family_refits": 0,
+        "inner_selection_fits": 60,
+        "outer_family_refits": 15,
+        "selected_extra_refits": 0,
+        "total_fits": 75,
+        "unit": "pipeline.fit calls"
+      },
+      "fits_performed": 0,
+      "groupbench_version": "0.3.0b7",
+      "kind": "execution_plan",
+      "limitations": [
+        "No models or preprocessing were fitted; no predictions, scores or result files were written.",
+        "Counts describe intended pipeline.fit calls if execution succeeds, not a hard resource budget or time/memory estimate.",
+        "Each pipeline fit includes preprocessing and one estimator; individual trees and preprocessing steps are not counted separately.",
+        "Every requested family is refitted once per selection, including dummy. The selected entry reuses its winning family refit, with no extra fit.",
+        "Schema and split validation do not establish training success, leakage absence, predictive performance or extrapolation safety.",
+        "This plan describes the current input and options; changing inputs, options or software can change later execution."
+      ],
+      "mode": "run",
+      "n_training_groups": 18,
+      "n_training_rows": 54,
+      "outer_folds": [
+        {
+          "fit_counts": {
+            "family_refits": 5,
+            "inner_selection_fits": 20,
+            "total_fits": 25
+          },
+          "fold": 0,
+          "inner_folds": [
+            {
+              "fold": 0,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            },
+            {
+              "fold": 1,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            }
+          ],
+          "inner_seed": 731968,
+          "overlap_count": 0,
+          "refit_families": [
+            "dummy",
+            "ridge",
+            "extra_trees",
+            "nystroem_ridge",
+            "group_median"
+          ],
+          "test_group_count": 6,
+          "test_rows": 18,
+          "train_group_count": 12,
+          "train_rows": 36
+        },
+        {
+          "fit_counts": {
+            "family_refits": 5,
+            "inner_selection_fits": 20,
+            "total_fits": 25
+          },
+          "fold": 1,
+          "inner_folds": [
+            {
+              "fold": 0,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            },
+            {
+              "fold": 1,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            }
+          ],
+          "inner_seed": 731969,
+          "overlap_count": 0,
+          "refit_families": [
+            "dummy",
+            "ridge",
+            "extra_trees",
+            "nystroem_ridge",
+            "group_median"
+          ],
+          "test_group_count": 6,
+          "test_rows": 18,
+          "train_group_count": 12,
+          "train_rows": 36
+        },
+        {
+          "fit_counts": {
+            "family_refits": 5,
+            "inner_selection_fits": 20,
+            "total_fits": 25
+          },
+          "fold": 2,
+          "inner_folds": [
+            {
+              "fold": 0,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            },
+            {
+              "fold": 1,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            }
+          ],
+          "inner_seed": 731970,
+          "overlap_count": 0,
+          "refit_families": [
+            "dummy",
+            "ridge",
+            "extra_trees",
+            "nystroem_ridge",
+            "group_median"
+          ],
+          "test_group_count": 6,
+          "test_rows": 18,
+          "train_group_count": 12,
+          "train_rows": 36
+        }
+      ],
+      "protocol": "nested-group-kfold-extended-families-v1",
+      "schema_version": "1.2",
+      "source_file_sha256": null
+    },
+    "root": 731967,
+    "scenario": "linear_iid",
+    "scenario_id": 0
+  },
+  {
+    "case_id": "1_731903",
+    "fold_ids": [
+      1,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      1,
+      1,
+      1,
+      1,
+      2,
+      2,
+      1,
+      1,
+      1,
+      2,
+      2,
+      2,
+      2,
+      0,
+      0,
+      2,
+      2,
+      2,
+      0,
+      0,
+      0,
+      0
+    ],
+    "fold_roles": [
+      "iid_group_holdout",
+      "iid_group_holdout",
+      "iid_group_holdout"
+    ],
+    "folds": [
+      {
+        "fold": 0,
+        "test": [
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          45,
+          46,
+          50,
+          51,
+          52,
+          53
+        ],
+        "test_groups": [
+          "g01",
+          "g02",
+          "g03",
+          "g04",
+          "g15",
+          "g17"
+        ],
+        "train": [
+          0,
+          1,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          47,
+          48,
+          49
+        ]
+      },
+      {
+        "fold": 1,
+        "test": [
+          0,
+          1,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          32,
+          33,
+          34,
+          35,
+          38,
+          39,
+          40
+        ],
+        "test_groups": [
+          "g00",
+          "g05",
+          "g06",
+          "g07",
+          "g11",
+          "g13"
+        ],
+        "train": [
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          36,
+          37,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53
+        ]
+      },
+      {
+        "fold": 2,
+        "test": [
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          36,
+          37,
+          41,
+          42,
+          43,
+          44,
+          47,
+          48,
+          49
+        ],
+        "test_groups": [
+          "g08",
+          "g09",
+          "g10",
+          "g12",
+          "g14",
+          "g16"
+        ],
+        "train": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          32,
+          33,
+          34,
+          35,
+          38,
+          39,
+          40,
+          45,
+          46,
+          50,
+          51,
+          52,
+          53
+        ]
+      }
+    ],
+    "plan": {
+      "candidates": [
+        {
+          "family": "dummy",
+          "name": "dummy_mean",
+          "params": {
+            "strategy": "mean"
+          }
+        },
+        {
+          "family": "ridge",
+          "name": "ridge_alpha_0.1",
+          "params": {
+            "alpha": 0.1
+          }
+        },
+        {
+          "family": "ridge",
+          "name": "ridge_alpha_1",
+          "params": {
+            "alpha": 1.0
+          }
+        },
+        {
+          "family": "ridge",
+          "name": "ridge_alpha_10",
+          "params": {
+            "alpha": 10.0
+          }
+        },
+        {
+          "family": "extra_trees",
+          "name": "extra_trees_depth_6",
+          "params": {
+            "max_depth": 6,
+            "min_samples_leaf": 2,
+            "n_estimators": 64
+          }
+        },
+        {
+          "family": "extra_trees",
+          "name": "extra_trees_depth_none",
+          "params": {
+            "max_depth": null,
+            "min_samples_leaf": 2,
+            "n_estimators": 64
+          }
+        },
+        {
+          "family": "nystroem_ridge",
+          "name": "nystroem_ridge_alpha_0.1",
+          "params": {
+            "alpha": 0.1,
+            "rank_cap": 64
+          }
+        },
+        {
+          "family": "nystroem_ridge",
+          "name": "nystroem_ridge_alpha_1",
+          "params": {
+            "alpha": 1.0,
+            "rank_cap": 64
+          }
+        },
+        {
+          "family": "nystroem_ridge",
+          "name": "nystroem_ridge_alpha_10",
+          "params": {
+            "alpha": 10.0,
+            "rank_cap": 64
+          }
+        },
+        {
+          "family": "group_median",
+          "name": "group_median_lower",
+          "params": {}
+        }
+      ],
+      "capabilities": [
+        "group_median-v1",
+        "nystroem_ridge-v1"
+      ],
+      "config": {
+        "baselines": [
+          "dummy",
+          "ridge",
+          "extra_trees",
+          "nystroem_ridge",
+          "group_median"
+        ],
+        "categorical_encoding": "legacy-v1",
+        "features": [
+          "x",
+          "z"
+        ],
+        "group": "group",
+        "inner_splits": 2,
+        "outer_splits": 3,
+        "random_state": 731903,
+        "selection_objective": "group_mae",
+        "target": "y",
+        "threads": 1
+      },
+      "feature_schema": [
+        {
+          "dtype": "float64",
+          "missing_count": 0,
+          "name": "x"
+        },
+        {
+          "dtype": "float64",
+          "missing_count": 0,
+          "name": "z"
+        }
+      ],
+      "fit_budget": {
+        "full_data_family_refits": 0,
+        "inner_selection_fits": 60,
+        "outer_family_refits": 15,
+        "selected_extra_refits": 0,
+        "total_fits": 75,
+        "unit": "pipeline.fit calls"
+      },
+      "fits_performed": 0,
+      "groupbench_version": "0.3.0b7",
+      "kind": "execution_plan",
+      "limitations": [
+        "No models or preprocessing were fitted; no predictions, scores or result files were written.",
+        "Counts describe intended pipeline.fit calls if execution succeeds, not a hard resource budget or time/memory estimate.",
+        "Each pipeline fit includes preprocessing and one estimator; individual trees and preprocessing steps are not counted separately.",
+        "Every requested family is refitted once per selection, including dummy. The selected entry reuses its winning family refit, with no extra fit.",
+        "Schema and split validation do not establish training success, leakage absence, predictive performance or extrapolation safety.",
+        "This plan describes the current input and options; changing inputs, options or software can change later execution."
+      ],
+      "mode": "run",
+      "n_training_groups": 18,
+      "n_training_rows": 54,
+      "outer_folds": [
+        {
+          "fit_counts": {
+            "family_refits": 5,
+            "inner_selection_fits": 20,
+            "total_fits": 25
+          },
+          "fold": 0,
+          "inner_folds": [
+            {
+              "fold": 0,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            },
+            {
+              "fold": 1,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            }
+          ],
+          "inner_seed": 731904,
+          "overlap_count": 0,
+          "refit_families": [
+            "dummy",
+            "ridge",
+            "extra_trees",
+            "nystroem_ridge",
+            "group_median"
+          ],
+          "test_group_count": 6,
+          "test_rows": 18,
+          "train_group_count": 12,
+          "train_rows": 36
+        },
+        {
+          "fit_counts": {
+            "family_refits": 5,
+            "inner_selection_fits": 20,
+            "total_fits": 25
+          },
+          "fold": 1,
+          "inner_folds": [
+            {
+              "fold": 0,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            },
+            {
+              "fold": 1,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            }
+          ],
+          "inner_seed": 731905,
+          "overlap_count": 0,
+          "refit_families": [
+            "dummy",
+            "ridge",
+            "extra_trees",
+            "nystroem_ridge",
+            "group_median"
+          ],
+          "test_group_count": 6,
+          "test_rows": 18,
+          "train_group_count": 12,
+          "train_rows": 36
+        },
+        {
+          "fit_counts": {
+            "family_refits": 5,
+            "inner_selection_fits": 20,
+            "total_fits": 25
+          },
+          "fold": 2,
+          "inner_folds": [
+            {
+              "fold": 0,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            },
+            {
+              "fold": 1,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            }
+          ],
+          "inner_seed": 731906,
+          "overlap_count": 0,
+          "refit_families": [
+            "dummy",
+            "ridge",
+            "extra_trees",
+            "nystroem_ridge",
+            "group_median"
+          ],
+          "test_group_count": 6,
+          "test_rows": 18,
+          "train_group_count": 12,
+          "train_rows": 36
+        }
+      ],
+      "protocol": "nested-group-kfold-extended-families-v1",
+      "schema_version": "1.2",
+      "source_file_sha256": null
+    },
+    "root": 731903,
+    "scenario": "smooth_iid",
+    "scenario_id": 1
+  },
+  {
+    "case_id": "1_731927",
+    "fold_ids": [
+      0,
+      0,
+      1,
+      1,
+      1,
+      2,
+      2,
+      2,
+      2,
+      0,
+      0,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      1,
+      0,
+      0,
+      0,
+      1,
+      1,
+      1,
+      1,
+      2,
+      2,
+      2,
+      2,
+      2,
+      0,
+      0,
+      0,
+      0,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2
+    ],
+    "fold_roles": [
+      "iid_group_holdout",
+      "iid_group_holdout",
+      "iid_group_holdout"
+    ],
+    "folds": [
+      {
+        "fold": 0,
+        "test": [
+          0,
+          1,
+          9,
+          10,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          29,
+          30,
+          31,
+          41,
+          42,
+          43,
+          44
+        ],
+        "test_groups": [
+          "g00",
+          "g03",
+          "g07",
+          "g08",
+          "g10",
+          "g14"
+        ],
+        "train": [
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          27,
+          28,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39,
+          40,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53
+        ]
+      },
+      {
+        "fold": 1,
+        "test": [
+          2,
+          3,
+          4,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          27,
+          28,
+          32,
+          33,
+          34,
+          35
+        ],
+        "test_groups": [
+          "g01",
+          "g04",
+          "g05",
+          "g06",
+          "g09",
+          "g11"
+        ],
+        "train": [
+          0,
+          1,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          29,
+          30,
+          31,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53
+        ]
+      },
+      {
+        "fold": 2,
+        "test": [
+          5,
+          6,
+          7,
+          8,
+          36,
+          37,
+          38,
+          39,
+          40,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53
+        ],
+        "test_groups": [
+          "g02",
+          "g12",
+          "g13",
+          "g15",
+          "g16",
+          "g17"
+        ],
+        "train": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          41,
+          42,
+          43,
+          44
+        ]
+      }
+    ],
+    "plan": {
+      "candidates": [
+        {
+          "family": "dummy",
+          "name": "dummy_mean",
+          "params": {
+            "strategy": "mean"
+          }
+        },
+        {
+          "family": "ridge",
+          "name": "ridge_alpha_0.1",
+          "params": {
+            "alpha": 0.1
+          }
+        },
+        {
+          "family": "ridge",
+          "name": "ridge_alpha_1",
+          "params": {
+            "alpha": 1.0
+          }
+        },
+        {
+          "family": "ridge",
+          "name": "ridge_alpha_10",
+          "params": {
+            "alpha": 10.0
+          }
+        },
+        {
+          "family": "extra_trees",
+          "name": "extra_trees_depth_6",
+          "params": {
+            "max_depth": 6,
+            "min_samples_leaf": 2,
+            "n_estimators": 64
+          }
+        },
+        {
+          "family": "extra_trees",
+          "name": "extra_trees_depth_none",
+          "params": {
+            "max_depth": null,
+            "min_samples_leaf": 2,
+            "n_estimators": 64
+          }
+        },
+        {
+          "family": "nystroem_ridge",
+          "name": "nystroem_ridge_alpha_0.1",
+          "params": {
+            "alpha": 0.1,
+            "rank_cap": 64
+          }
+        },
+        {
+          "family": "nystroem_ridge",
+          "name": "nystroem_ridge_alpha_1",
+          "params": {
+            "alpha": 1.0,
+            "rank_cap": 64
+          }
+        },
+        {
+          "family": "nystroem_ridge",
+          "name": "nystroem_ridge_alpha_10",
+          "params": {
+            "alpha": 10.0,
+            "rank_cap": 64
+          }
+        },
+        {
+          "family": "group_median",
+          "name": "group_median_lower",
+          "params": {}
+        }
+      ],
+      "capabilities": [
+        "group_median-v1",
+        "nystroem_ridge-v1"
+      ],
+      "config": {
+        "baselines": [
+          "dummy",
+          "ridge",
+          "extra_trees",
+          "nystroem_ridge",
+          "group_median"
+        ],
+        "categorical_encoding": "legacy-v1",
+        "features": [
+          "x",
+          "z"
+        ],
+        "group": "group",
+        "inner_splits": 2,
+        "outer_splits": 3,
+        "random_state": 731927,
+        "selection_objective": "group_mae",
+        "target": "y",
+        "threads": 1
+      },
+      "feature_schema": [
+        {
+          "dtype": "float64",
+          "missing_count": 0,
+          "name": "x"
+        },
+        {
+          "dtype": "float64",
+          "missing_count": 0,
+          "name": "z"
+        }
+      ],
+      "fit_budget": {
+        "full_data_family_refits": 0,
+        "inner_selection_fits": 60,
+        "outer_family_refits": 15,
+        "selected_extra_refits": 0,
+        "total_fits": 75,
+        "unit": "pipeline.fit calls"
+      },
+      "fits_performed": 0,
+      "groupbench_version": "0.3.0b7",
+      "kind": "execution_plan",
+      "limitations": [
+        "No models or preprocessing were fitted; no predictions, scores or result files were written.",
+        "Counts describe intended pipeline.fit calls if execution succeeds, not a hard resource budget or time/memory estimate.",
+        "Each pipeline fit includes preprocessing and one estimator; individual trees and preprocessing steps are not counted separately.",
+        "Every requested family is refitted once per selection, including dummy. The selected entry reuses its winning family refit, with no extra fit.",
+        "Schema and split validation do not establish training success, leakage absence, predictive performance or extrapolation safety.",
+        "This plan describes the current input and options; changing inputs, options or software can change later execution."
+      ],
+      "mode": "run",
+      "n_training_groups": 18,
+      "n_training_rows": 54,
+      "outer_folds": [
+        {
+          "fit_counts": {
+            "family_refits": 5,
+            "inner_selection_fits": 20,
+            "total_fits": 25
+          },
+          "fold": 0,
+          "inner_folds": [
+            {
+              "fold": 0,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            },
+            {
+              "fold": 1,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            }
+          ],
+          "inner_seed": 731928,
+          "overlap_count": 0,
+          "refit_families": [
+            "dummy",
+            "ridge",
+            "extra_trees",
+            "nystroem_ridge",
+            "group_median"
+          ],
+          "test_group_count": 6,
+          "test_rows": 18,
+          "train_group_count": 12,
+          "train_rows": 36
+        },
+        {
+          "fit_counts": {
+            "family_refits": 5,
+            "inner_selection_fits": 20,
+            "total_fits": 25
+          },
+          "fold": 1,
+          "inner_folds": [
+            {
+              "fold": 0,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            },
+            {
+              "fold": 1,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            }
+          ],
+          "inner_seed": 731929,
+          "overlap_count": 0,
+          "refit_families": [
+            "dummy",
+            "ridge",
+            "extra_trees",
+            "nystroem_ridge",
+            "group_median"
+          ],
+          "test_group_count": 6,
+          "test_rows": 18,
+          "train_group_count": 12,
+          "train_rows": 36
+        },
+        {
+          "fit_counts": {
+            "family_refits": 5,
+            "inner_selection_fits": 20,
+            "total_fits": 25
+          },
+          "fold": 2,
+          "inner_folds": [
+            {
+              "fold": 0,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            },
+            {
+              "fold": 1,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            }
+          ],
+          "inner_seed": 731930,
+          "overlap_count": 0,
+          "refit_families": [
+            "dummy",
+            "ridge",
+            "extra_trees",
+            "nystroem_ridge",
+            "group_median"
+          ],
+          "test_group_count": 6,
+          "test_rows": 18,
+          "train_group_count": 12,
+          "train_rows": 36
+        }
+      ],
+      "protocol": "nested-group-kfold-extended-families-v1",
+      "schema_version": "1.2",
+      "source_file_sha256": null
+    },
+    "root": 731927,
+    "scenario": "smooth_iid",
+    "scenario_id": 1
+  },
+  {
+    "case_id": "1_731939",
+    "fold_ids": [
+      1,
+      1,
+      1,
+      1,
+      1,
+      0,
+      0,
+      0,
+      0,
+      1,
+      1,
+      2,
+      2,
+      2,
+      1,
+      1,
+      1,
+      1,
+      2,
+      2,
+      1,
+      1,
+      1,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      0,
+      0,
+      0,
+      2,
+      2,
+      2,
+      2,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      1,
+      1,
+      1,
+      0,
+      0,
+      2,
+      2,
+      2,
+      0,
+      0,
+      0,
+      0
+    ],
+    "fold_roles": [
+      "iid_group_holdout",
+      "iid_group_holdout",
+      "iid_group_holdout"
+    ],
+    "folds": [
+      {
+        "fold": 0,
+        "test": [
+          5,
+          6,
+          7,
+          8,
+          29,
+          30,
+          31,
+          36,
+          37,
+          38,
+          39,
+          40,
+          45,
+          46,
+          50,
+          51,
+          52,
+          53
+        ],
+        "test_groups": [
+          "g02",
+          "g10",
+          "g12",
+          "g13",
+          "g15",
+          "g17"
+        ],
+        "train": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          32,
+          33,
+          34,
+          35,
+          41,
+          42,
+          43,
+          44,
+          47,
+          48,
+          49
+        ]
+      },
+      {
+        "fold": 1,
+        "test": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          9,
+          10,
+          14,
+          15,
+          16,
+          17,
+          20,
+          21,
+          22,
+          41,
+          42,
+          43,
+          44
+        ],
+        "test_groups": [
+          "g00",
+          "g01",
+          "g03",
+          "g05",
+          "g07",
+          "g14"
+        ],
+        "train": [
+          5,
+          6,
+          7,
+          8,
+          11,
+          12,
+          13,
+          18,
+          19,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39,
+          40,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53
+        ]
+      },
+      {
+        "fold": 2,
+        "test": [
+          11,
+          12,
+          13,
+          18,
+          19,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          32,
+          33,
+          34,
+          35,
+          47,
+          48,
+          49
+        ],
+        "test_groups": [
+          "g04",
+          "g06",
+          "g08",
+          "g09",
+          "g11",
+          "g16"
+        ],
+        "train": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          14,
+          15,
+          16,
+          17,
+          20,
+          21,
+          22,
+          29,
+          30,
+          31,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          50,
+          51,
+          52,
+          53
+        ]
+      }
+    ],
+    "plan": {
+      "candidates": [
+        {
+          "family": "dummy",
+          "name": "dummy_mean",
+          "params": {
+            "strategy": "mean"
+          }
+        },
+        {
+          "family": "ridge",
+          "name": "ridge_alpha_0.1",
+          "params": {
+            "alpha": 0.1
+          }
+        },
+        {
+          "family": "ridge",
+          "name": "ridge_alpha_1",
+          "params": {
+            "alpha": 1.0
+          }
+        },
+        {
+          "family": "ridge",
+          "name": "ridge_alpha_10",
+          "params": {
+            "alpha": 10.0
+          }
+        },
+        {
+          "family": "extra_trees",
+          "name": "extra_trees_depth_6",
+          "params": {
+            "max_depth": 6,
+            "min_samples_leaf": 2,
+            "n_estimators": 64
+          }
+        },
+        {
+          "family": "extra_trees",
+          "name": "extra_trees_depth_none",
+          "params": {
+            "max_depth": null,
+            "min_samples_leaf": 2,
+            "n_estimators": 64
+          }
+        },
+        {
+          "family": "nystroem_ridge",
+          "name": "nystroem_ridge_alpha_0.1",
+          "params": {
+            "alpha": 0.1,
+            "rank_cap": 64
+          }
+        },
+        {
+          "family": "nystroem_ridge",
+          "name": "nystroem_ridge_alpha_1",
+          "params": {
+            "alpha": 1.0,
+            "rank_cap": 64
+          }
+        },
+        {
+          "family": "nystroem_ridge",
+          "name": "nystroem_ridge_alpha_10",
+          "params": {
+            "alpha": 10.0,
+            "rank_cap": 64
+          }
+        },
+        {
+          "family": "group_median",
+          "name": "group_median_lower",
+          "params": {}
+        }
+      ],
+      "capabilities": [
+        "group_median-v1",
+        "nystroem_ridge-v1"
+      ],
+      "config": {
+        "baselines": [
+          "dummy",
+          "ridge",
+          "extra_trees",
+          "nystroem_ridge",
+          "group_median"
+        ],
+        "categorical_encoding": "legacy-v1",
+        "features": [
+          "x",
+          "z"
+        ],
+        "group": "group",
+        "inner_splits": 2,
+        "outer_splits": 3,
+        "random_state": 731939,
+        "selection_objective": "group_mae",
+        "target": "y",
+        "threads": 1
+      },
+      "feature_schema": [
+        {
+          "dtype": "float64",
+          "missing_count": 0,
+          "name": "x"
+        },
+        {
+          "dtype": "float64",
+          "missing_count": 0,
+          "name": "z"
+        }
+      ],
+      "fit_budget": {
+        "full_data_family_refits": 0,
+        "inner_selection_fits": 60,
+        "outer_family_refits": 15,
+        "selected_extra_refits": 0,
+        "total_fits": 75,
+        "unit": "pipeline.fit calls"
+      },
+      "fits_performed": 0,
+      "groupbench_version": "0.3.0b7",
+      "kind": "execution_plan",
+      "limitations": [
+        "No models or preprocessing were fitted; no predictions, scores or result files were written.",
+        "Counts describe intended pipeline.fit calls if execution succeeds, not a hard resource budget or time/memory estimate.",
+        "Each pipeline fit includes preprocessing and one estimator; individual trees and preprocessing steps are not counted separately.",
+        "Every requested family is refitted once per selection, including dummy. The selected entry reuses its winning family refit, with no extra fit.",
+        "Schema and split validation do not establish training success, leakage absence, predictive performance or extrapolation safety.",
+        "This plan describes the current input and options; changing inputs, options or software can change later execution."
+      ],
+      "mode": "run",
+      "n_training_groups": 18,
+      "n_training_rows": 54,
+      "outer_folds": [
+        {
+          "fit_counts": {
+            "family_refits": 5,
+            "inner_selection_fits": 20,
+            "total_fits": 25
+          },
+          "fold": 0,
+          "inner_folds": [
+            {
+              "fold": 0,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            },
+            {
+              "fold": 1,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            }
+          ],
+          "inner_seed": 731940,
+          "overlap_count": 0,
+          "refit_families": [
+            "dummy",
+            "ridge",
+            "extra_trees",
+            "nystroem_ridge",
+            "group_median"
+          ],
+          "test_group_count": 6,
+          "test_rows": 18,
+          "train_group_count": 12,
+          "train_rows": 36
+        },
+        {
+          "fit_counts": {
+            "family_refits": 5,
+            "inner_selection_fits": 20,
+            "total_fits": 25
+          },
+          "fold": 1,
+          "inner_folds": [
+            {
+              "fold": 0,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            },
+            {
+              "fold": 1,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            }
+          ],
+          "inner_seed": 731941,
+          "overlap_count": 0,
+          "refit_families": [
+            "dummy",
+            "ridge",
+            "extra_trees",
+            "nystroem_ridge",
+            "group_median"
+          ],
+          "test_group_count": 6,
+          "test_rows": 18,
+          "train_group_count": 12,
+          "train_rows": 36
+        },
+        {
+          "fit_counts": {
+            "family_refits": 5,
+            "inner_selection_fits": 20,
+            "total_fits": 25
+          },
+          "fold": 2,
+          "inner_folds": [
+            {
+              "fold": 0,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            },
+            {
+              "fold": 1,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            }
+          ],
+          "inner_seed": 731942,
+          "overlap_count": 0,
+          "refit_families": [
+            "dummy",
+            "ridge",
+            "extra_trees",
+            "nystroem_ridge",
+            "group_median"
+          ],
+          "test_group_count": 6,
+          "test_rows": 18,
+          "train_group_count": 12,
+          "train_rows": 36
+        }
+      ],
+      "protocol": "nested-group-kfold-extended-families-v1",
+      "schema_version": "1.2",
+      "source_file_sha256": null
+    },
+    "root": 731939,
+    "scenario": "smooth_iid",
+    "scenario_id": 1
+  },
+  {
+    "case_id": "1_731951",
+    "fold_ids": [
+      0,
+      0,
+      1,
+      1,
+      1,
+      2,
+      2,
+      2,
+      2,
+      1,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      2,
+      2,
+      2,
+      2,
+      2,
+      1,
+      1,
+      1,
+      1,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      0,
+      0,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "fold_roles": [
+      "iid_group_holdout",
+      "iid_group_holdout",
+      "iid_group_holdout"
+    ],
+    "folds": [
+      {
+        "fold": 0,
+        "test": [
+          0,
+          1,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          36,
+          37,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53
+        ],
+        "test_groups": [
+          "g00",
+          "g04",
+          "g05",
+          "g12",
+          "g16",
+          "g17"
+        ],
+        "train": [
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46
+        ]
+      },
+      {
+        "fold": 1,
+        "test": [
+          2,
+          3,
+          4,
+          9,
+          10,
+          23,
+          24,
+          25,
+          26,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46
+        ],
+        "test_groups": [
+          "g01",
+          "g03",
+          "g08",
+          "g13",
+          "g14",
+          "g15"
+        ],
+        "train": [
+          0,
+          1,
+          5,
+          6,
+          7,
+          8,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53
+        ]
+      },
+      {
+        "fold": 2,
+        "test": [
+          5,
+          6,
+          7,
+          8,
+          18,
+          19,
+          20,
+          21,
+          22,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35
+        ],
+        "test_groups": [
+          "g02",
+          "g06",
+          "g07",
+          "g09",
+          "g10",
+          "g11"
+        ],
+        "train": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          23,
+          24,
+          25,
+          26,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53
+        ]
+      }
+    ],
+    "plan": {
+      "candidates": [
+        {
+          "family": "dummy",
+          "name": "dummy_mean",
+          "params": {
+            "strategy": "mean"
+          }
+        },
+        {
+          "family": "ridge",
+          "name": "ridge_alpha_0.1",
+          "params": {
+            "alpha": 0.1
+          }
+        },
+        {
+          "family": "ridge",
+          "name": "ridge_alpha_1",
+          "params": {
+            "alpha": 1.0
+          }
+        },
+        {
+          "family": "ridge",
+          "name": "ridge_alpha_10",
+          "params": {
+            "alpha": 10.0
+          }
+        },
+        {
+          "family": "extra_trees",
+          "name": "extra_trees_depth_6",
+          "params": {
+            "max_depth": 6,
+            "min_samples_leaf": 2,
+            "n_estimators": 64
+          }
+        },
+        {
+          "family": "extra_trees",
+          "name": "extra_trees_depth_none",
+          "params": {
+            "max_depth": null,
+            "min_samples_leaf": 2,
+            "n_estimators": 64
+          }
+        },
+        {
+          "family": "nystroem_ridge",
+          "name": "nystroem_ridge_alpha_0.1",
+          "params": {
+            "alpha": 0.1,
+            "rank_cap": 64
+          }
+        },
+        {
+          "family": "nystroem_ridge",
+          "name": "nystroem_ridge_alpha_1",
+          "params": {
+            "alpha": 1.0,
+            "rank_cap": 64
+          }
+        },
+        {
+          "family": "nystroem_ridge",
+          "name": "nystroem_ridge_alpha_10",
+          "params": {
+            "alpha": 10.0,
+            "rank_cap": 64
+          }
+        },
+        {
+          "family": "group_median",
+          "name": "group_median_lower",
+          "params": {}
+        }
+      ],
+      "capabilities": [
+        "group_median-v1",
+        "nystroem_ridge-v1"
+      ],
+      "config": {
+        "baselines": [
+          "dummy",
+          "ridge",
+          "extra_trees",
+          "nystroem_ridge",
+          "group_median"
+        ],
+        "categorical_encoding": "legacy-v1",
+        "features": [
+          "x",
+          "z"
+        ],
+        "group": "group",
+        "inner_splits": 2,
+        "outer_splits": 3,
+        "random_state": 731951,
+        "selection_objective": "group_mae",
+        "target": "y",
+        "threads": 1
+      },
+      "feature_schema": [
+        {
+          "dtype": "float64",
+          "missing_count": 0,
+          "name": "x"
+        },
+        {
+          "dtype": "float64",
+          "missing_count": 0,
+          "name": "z"
+        }
+      ],
+      "fit_budget": {
+        "full_data_family_refits": 0,
+        "inner_selection_fits": 60,
+        "outer_family_refits": 15,
+        "selected_extra_refits": 0,
+        "total_fits": 75,
+        "unit": "pipeline.fit calls"
+      },
+      "fits_performed": 0,
+      "groupbench_version": "0.3.0b7",
+      "kind": "execution_plan",
+      "limitations": [
+        "No models or preprocessing were fitted; no predictions, scores or result files were written.",
+        "Counts describe intended pipeline.fit calls if execution succeeds, not a hard resource budget or time/memory estimate.",
+        "Each pipeline fit includes preprocessing and one estimator; individual trees and preprocessing steps are not counted separately.",
+        "Every requested family is refitted once per selection, including dummy. The selected entry reuses its winning family refit, with no extra fit.",
+        "Schema and split validation do not establish training success, leakage absence, predictive performance or extrapolation safety.",
+        "This plan describes the current input and options; changing inputs, options or software can change later execution."
+      ],
+      "mode": "run",
+      "n_training_groups": 18,
+      "n_training_rows": 54,
+      "outer_folds": [
+        {
+          "fit_counts": {
+            "family_refits": 5,
+            "inner_selection_fits": 20,
+            "total_fits": 25
+          },
+          "fold": 0,
+          "inner_folds": [
+            {
+              "fold": 0,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            },
+            {
+              "fold": 1,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            }
+          ],
+          "inner_seed": 731952,
+          "overlap_count": 0,
+          "refit_families": [
+            "dummy",
+            "ridge",
+            "extra_trees",
+            "nystroem_ridge",
+            "group_median"
+          ],
+          "test_group_count": 6,
+          "test_rows": 18,
+          "train_group_count": 12,
+          "train_rows": 36
+        },
+        {
+          "fit_counts": {
+            "family_refits": 5,
+            "inner_selection_fits": 20,
+            "total_fits": 25
+          },
+          "fold": 1,
+          "inner_folds": [
+            {
+              "fold": 0,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            },
+            {
+              "fold": 1,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            }
+          ],
+          "inner_seed": 731953,
+          "overlap_count": 0,
+          "refit_families": [
+            "dummy",
+            "ridge",
+            "extra_trees",
+            "nystroem_ridge",
+            "group_median"
+          ],
+          "test_group_count": 6,
+          "test_rows": 18,
+          "train_group_count": 12,
+          "train_rows": 36
+        },
+        {
+          "fit_counts": {
+            "family_refits": 5,
+            "inner_selection_fits": 20,
+            "total_fits": 25
+          },
+          "fold": 2,
+          "inner_folds": [
+            {
+              "fold": 0,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            },
+            {
+              "fold": 1,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            }
+          ],
+          "inner_seed": 731954,
+          "overlap_count": 0,
+          "refit_families": [
+            "dummy",
+            "ridge",
+            "extra_trees",
+            "nystroem_ridge",
+            "group_median"
+          ],
+          "test_group_count": 6,
+          "test_rows": 18,
+          "train_group_count": 12,
+          "train_rows": 36
+        }
+      ],
+      "protocol": "nested-group-kfold-extended-families-v1",
+      "schema_version": "1.2",
+      "source_file_sha256": null
+    },
+    "root": 731951,
+    "scenario": "smooth_iid",
+    "scenario_id": 1
+  },
+  {
+    "case_id": "1_731967",
+    "fold_ids": [
+      0,
+      0,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      2,
+      2,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      1,
+      0,
+      0,
+      0,
+      1,
+      1,
+      1,
+      1,
+      0,
+      0,
+      2,
+      2,
+      2,
+      0,
+      0,
+      0,
+      0,
+      2,
+      2,
+      1,
+      1,
+      1,
+      2,
+      2,
+      2,
+      2,
+      1,
+      1,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2
+    ],
+    "fold_roles": [
+      "iid_group_holdout",
+      "iid_group_holdout",
+      "iid_group_holdout"
+    ],
+    "folds": [
+      {
+        "fold": 0,
+        "test": [
+          0,
+          1,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          20,
+          21,
+          22,
+          27,
+          28,
+          32,
+          33,
+          34,
+          35
+        ],
+        "test_groups": [
+          "g00",
+          "g04",
+          "g05",
+          "g07",
+          "g09",
+          "g11"
+        ],
+        "train": [
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          18,
+          19,
+          23,
+          24,
+          25,
+          26,
+          29,
+          30,
+          31,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53
+        ]
+      },
+      {
+        "fold": 1,
+        "test": [
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          18,
+          19,
+          23,
+          24,
+          25,
+          26,
+          38,
+          39,
+          40,
+          45,
+          46
+        ],
+        "test_groups": [
+          "g01",
+          "g02",
+          "g06",
+          "g08",
+          "g13",
+          "g15"
+        ],
+        "train": [
+          0,
+          1,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          20,
+          21,
+          22,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          41,
+          42,
+          43,
+          44,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53
+        ]
+      },
+      {
+        "fold": 2,
+        "test": [
+          9,
+          10,
+          29,
+          30,
+          31,
+          36,
+          37,
+          41,
+          42,
+          43,
+          44,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53
+        ],
+        "test_groups": [
+          "g03",
+          "g10",
+          "g12",
+          "g14",
+          "g16",
+          "g17"
+        ],
+        "train": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          32,
+          33,
+          34,
+          35,
+          38,
+          39,
+          40,
+          45,
+          46
+        ]
+      }
+    ],
+    "plan": {
+      "candidates": [
+        {
+          "family": "dummy",
+          "name": "dummy_mean",
+          "params": {
+            "strategy": "mean"
+          }
+        },
+        {
+          "family": "ridge",
+          "name": "ridge_alpha_0.1",
+          "params": {
+            "alpha": 0.1
+          }
+        },
+        {
+          "family": "ridge",
+          "name": "ridge_alpha_1",
+          "params": {
+            "alpha": 1.0
+          }
+        },
+        {
+          "family": "ridge",
+          "name": "ridge_alpha_10",
+          "params": {
+            "alpha": 10.0
+          }
+        },
+        {
+          "family": "extra_trees",
+          "name": "extra_trees_depth_6",
+          "params": {
+            "max_depth": 6,
+            "min_samples_leaf": 2,
+            "n_estimators": 64
+          }
+        },
+        {
+          "family": "extra_trees",
+          "name": "extra_trees_depth_none",
+          "params": {
+            "max_depth": null,
+            "min_samples_leaf": 2,
+            "n_estimators": 64
+          }
+        },
+        {
+          "family": "nystroem_ridge",
+          "name": "nystroem_ridge_alpha_0.1",
+          "params": {
+            "alpha": 0.1,
+            "rank_cap": 64
+          }
+        },
+        {
+          "family": "nystroem_ridge",
+          "name": "nystroem_ridge_alpha_1",
+          "params": {
+            "alpha": 1.0,
+            "rank_cap": 64
+          }
+        },
+        {
+          "family": "nystroem_ridge",
+          "name": "nystroem_ridge_alpha_10",
+          "params": {
+            "alpha": 10.0,
+            "rank_cap": 64
+          }
+        },
+        {
+          "family": "group_median",
+          "name": "group_median_lower",
+          "params": {}
+        }
+      ],
+      "capabilities": [
+        "group_median-v1",
+        "nystroem_ridge-v1"
+      ],
+      "config": {
+        "baselines": [
+          "dummy",
+          "ridge",
+          "extra_trees",
+          "nystroem_ridge",
+          "group_median"
+        ],
+        "categorical_encoding": "legacy-v1",
+        "features": [
+          "x",
+          "z"
+        ],
+        "group": "group",
+        "inner_splits": 2,
+        "outer_splits": 3,
+        "random_state": 731967,
+        "selection_objective": "group_mae",
+        "target": "y",
+        "threads": 1
+      },
+      "feature_schema": [
+        {
+          "dtype": "float64",
+          "missing_count": 0,
+          "name": "x"
+        },
+        {
+          "dtype": "float64",
+          "missing_count": 0,
+          "name": "z"
+        }
+      ],
+      "fit_budget": {
+        "full_data_family_refits": 0,
+        "inner_selection_fits": 60,
+        "outer_family_refits": 15,
+        "selected_extra_refits": 0,
+        "total_fits": 75,
+        "unit": "pipeline.fit calls"
+      },
+      "fits_performed": 0,
+      "groupbench_version": "0.3.0b7",
+      "kind": "execution_plan",
+      "limitations": [
+        "No models or preprocessing were fitted; no predictions, scores or result files were written.",
+        "Counts describe intended pipeline.fit calls if execution succeeds, not a hard resource budget or time/memory estimate.",
+        "Each pipeline fit includes preprocessing and one estimator; individual trees and preprocessing steps are not counted separately.",
+        "Every requested family is refitted once per selection, including dummy. The selected entry reuses its winning family refit, with no extra fit.",
+        "Schema and split validation do not establish training success, leakage absence, predictive performance or extrapolation safety.",
+        "This plan describes the current input and options; changing inputs, options or software can change later execution."
+      ],
+      "mode": "run",
+      "n_training_groups": 18,
+      "n_training_rows": 54,
+      "outer_folds": [
+        {
+          "fit_counts": {
+            "family_refits": 5,
+            "inner_selection_fits": 20,
+            "total_fits": 25
+          },
+          "fold": 0,
+          "inner_folds": [
+            {
+              "fold": 0,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            },
+            {
+              "fold": 1,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            }
+          ],
+          "inner_seed": 731968,
+          "overlap_count": 0,
+          "refit_families": [
+            "dummy",
+            "ridge",
+            "extra_trees",
+            "nystroem_ridge",
+            "group_median"
+          ],
+          "test_group_count": 6,
+          "test_rows": 18,
+          "train_group_count": 12,
+          "train_rows": 36
+        },
+        {
+          "fit_counts": {
+            "family_refits": 5,
+            "inner_selection_fits": 20,
+            "total_fits": 25
+          },
+          "fold": 1,
+          "inner_folds": [
+            {
+              "fold": 0,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            },
+            {
+              "fold": 1,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            }
+          ],
+          "inner_seed": 731969,
+          "overlap_count": 0,
+          "refit_families": [
+            "dummy",
+            "ridge",
+            "extra_trees",
+            "nystroem_ridge",
+            "group_median"
+          ],
+          "test_group_count": 6,
+          "test_rows": 18,
+          "train_group_count": 12,
+          "train_rows": 36
+        },
+        {
+          "fit_counts": {
+            "family_refits": 5,
+            "inner_selection_fits": 20,
+            "total_fits": 25
+          },
+          "fold": 2,
+          "inner_folds": [
+            {
+              "fold": 0,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            },
+            {
+              "fold": 1,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            }
+          ],
+          "inner_seed": 731970,
+          "overlap_count": 0,
+          "refit_families": [
+            "dummy",
+            "ridge",
+            "extra_trees",
+            "nystroem_ridge",
+            "group_median"
+          ],
+          "test_group_count": 6,
+          "test_rows": 18,
+          "train_group_count": 12,
+          "train_rows": 36
+        }
+      ],
+      "protocol": "nested-group-kfold-extended-families-v1",
+      "schema_version": "1.2",
+      "source_file_sha256": null
+    },
+    "root": 731967,
+    "scenario": "smooth_iid",
+    "scenario_id": 1
+  },
+  {
+    "case_id": "2_731903",
+    "fold_ids": [
+      1,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      1,
+      1,
+      1,
+      1,
+      2,
+      2,
+      1,
+      1,
+      1,
+      2,
+      2,
+      2,
+      2,
+      0,
+      0,
+      2,
+      2,
+      2,
+      0,
+      0,
+      0,
+      0
+    ],
+    "fold_roles": [
+      "left_extrapolation",
+      "interpolation",
+      "right_extrapolation"
+    ],
+    "folds": [
+      {
+        "fold": 0,
+        "test": [
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          45,
+          46,
+          50,
+          51,
+          52,
+          53
+        ],
+        "test_groups": [
+          "g01",
+          "g02",
+          "g03",
+          "g04",
+          "g15",
+          "g17"
+        ],
+        "train": [
+          0,
+          1,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          47,
+          48,
+          49
+        ]
+      },
+      {
+        "fold": 1,
+        "test": [
+          0,
+          1,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          32,
+          33,
+          34,
+          35,
+          38,
+          39,
+          40
+        ],
+        "test_groups": [
+          "g00",
+          "g05",
+          "g06",
+          "g07",
+          "g11",
+          "g13"
+        ],
+        "train": [
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          36,
+          37,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53
+        ]
+      },
+      {
+        "fold": 2,
+        "test": [
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          36,
+          37,
+          41,
+          42,
+          43,
+          44,
+          47,
+          48,
+          49
+        ],
+        "test_groups": [
+          "g08",
+          "g09",
+          "g10",
+          "g12",
+          "g14",
+          "g16"
+        ],
+        "train": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          32,
+          33,
+          34,
+          35,
+          38,
+          39,
+          40,
+          45,
+          46,
+          50,
+          51,
+          52,
+          53
+        ]
+      }
+    ],
+    "plan": {
+      "candidates": [
+        {
+          "family": "dummy",
+          "name": "dummy_mean",
+          "params": {
+            "strategy": "mean"
+          }
+        },
+        {
+          "family": "ridge",
+          "name": "ridge_alpha_0.1",
+          "params": {
+            "alpha": 0.1
+          }
+        },
+        {
+          "family": "ridge",
+          "name": "ridge_alpha_1",
+          "params": {
+            "alpha": 1.0
+          }
+        },
+        {
+          "family": "ridge",
+          "name": "ridge_alpha_10",
+          "params": {
+            "alpha": 10.0
+          }
+        },
+        {
+          "family": "extra_trees",
+          "name": "extra_trees_depth_6",
+          "params": {
+            "max_depth": 6,
+            "min_samples_leaf": 2,
+            "n_estimators": 64
+          }
+        },
+        {
+          "family": "extra_trees",
+          "name": "extra_trees_depth_none",
+          "params": {
+            "max_depth": null,
+            "min_samples_leaf": 2,
+            "n_estimators": 64
+          }
+        },
+        {
+          "family": "nystroem_ridge",
+          "name": "nystroem_ridge_alpha_0.1",
+          "params": {
+            "alpha": 0.1,
+            "rank_cap": 64
+          }
+        },
+        {
+          "family": "nystroem_ridge",
+          "name": "nystroem_ridge_alpha_1",
+          "params": {
+            "alpha": 1.0,
+            "rank_cap": 64
+          }
+        },
+        {
+          "family": "nystroem_ridge",
+          "name": "nystroem_ridge_alpha_10",
+          "params": {
+            "alpha": 10.0,
+            "rank_cap": 64
+          }
+        },
+        {
+          "family": "group_median",
+          "name": "group_median_lower",
+          "params": {}
+        }
+      ],
+      "capabilities": [
+        "group_median-v1",
+        "nystroem_ridge-v1"
+      ],
+      "config": {
+        "baselines": [
+          "dummy",
+          "ridge",
+          "extra_trees",
+          "nystroem_ridge",
+          "group_median"
+        ],
+        "categorical_encoding": "legacy-v1",
+        "features": [
+          "x",
+          "z"
+        ],
+        "group": "group",
+        "inner_splits": 2,
+        "outer_splits": 3,
+        "random_state": 731903,
+        "selection_objective": "group_mae",
+        "target": "y",
+        "threads": 1
+      },
+      "feature_schema": [
+        {
+          "dtype": "float64",
+          "missing_count": 0,
+          "name": "x"
+        },
+        {
+          "dtype": "float64",
+          "missing_count": 0,
+          "name": "z"
+        }
+      ],
+      "fit_budget": {
+        "full_data_family_refits": 0,
+        "inner_selection_fits": 60,
+        "outer_family_refits": 15,
+        "selected_extra_refits": 0,
+        "total_fits": 75,
+        "unit": "pipeline.fit calls"
+      },
+      "fits_performed": 0,
+      "groupbench_version": "0.3.0b7",
+      "kind": "execution_plan",
+      "limitations": [
+        "No models or preprocessing were fitted; no predictions, scores or result files were written.",
+        "Counts describe intended pipeline.fit calls if execution succeeds, not a hard resource budget or time/memory estimate.",
+        "Each pipeline fit includes preprocessing and one estimator; individual trees and preprocessing steps are not counted separately.",
+        "Every requested family is refitted once per selection, including dummy. The selected entry reuses its winning family refit, with no extra fit.",
+        "Schema and split validation do not establish training success, leakage absence, predictive performance or extrapolation safety.",
+        "This plan describes the current input and options; changing inputs, options or software can change later execution."
+      ],
+      "mode": "run",
+      "n_training_groups": 18,
+      "n_training_rows": 54,
+      "outer_folds": [
+        {
+          "fit_counts": {
+            "family_refits": 5,
+            "inner_selection_fits": 20,
+            "total_fits": 25
+          },
+          "fold": 0,
+          "inner_folds": [
+            {
+              "fold": 0,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            },
+            {
+              "fold": 1,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            }
+          ],
+          "inner_seed": 731904,
+          "overlap_count": 0,
+          "refit_families": [
+            "dummy",
+            "ridge",
+            "extra_trees",
+            "nystroem_ridge",
+            "group_median"
+          ],
+          "test_group_count": 6,
+          "test_rows": 18,
+          "train_group_count": 12,
+          "train_rows": 36
+        },
+        {
+          "fit_counts": {
+            "family_refits": 5,
+            "inner_selection_fits": 20,
+            "total_fits": 25
+          },
+          "fold": 1,
+          "inner_folds": [
+            {
+              "fold": 0,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            },
+            {
+              "fold": 1,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            }
+          ],
+          "inner_seed": 731905,
+          "overlap_count": 0,
+          "refit_families": [
+            "dummy",
+            "ridge",
+            "extra_trees",
+            "nystroem_ridge",
+            "group_median"
+          ],
+          "test_group_count": 6,
+          "test_rows": 18,
+          "train_group_count": 12,
+          "train_rows": 36
+        },
+        {
+          "fit_counts": {
+            "family_refits": 5,
+            "inner_selection_fits": 20,
+            "total_fits": 25
+          },
+          "fold": 2,
+          "inner_folds": [
+            {
+              "fold": 0,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            },
+            {
+              "fold": 1,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            }
+          ],
+          "inner_seed": 731906,
+          "overlap_count": 0,
+          "refit_families": [
+            "dummy",
+            "ridge",
+            "extra_trees",
+            "nystroem_ridge",
+            "group_median"
+          ],
+          "test_group_count": 6,
+          "test_rows": 18,
+          "train_group_count": 12,
+          "train_rows": 36
+        }
+      ],
+      "protocol": "nested-group-kfold-extended-families-v1",
+      "schema_version": "1.2",
+      "source_file_sha256": null
+    },
+    "root": 731903,
+    "scenario": "linear_domain_holdout",
+    "scenario_id": 2
+  },
+  {
+    "case_id": "2_731927",
+    "fold_ids": [
+      0,
+      0,
+      1,
+      1,
+      1,
+      2,
+      2,
+      2,
+      2,
+      0,
+      0,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      1,
+      0,
+      0,
+      0,
+      1,
+      1,
+      1,
+      1,
+      2,
+      2,
+      2,
+      2,
+      2,
+      0,
+      0,
+      0,
+      0,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2
+    ],
+    "fold_roles": [
+      "left_extrapolation",
+      "interpolation",
+      "right_extrapolation"
+    ],
+    "folds": [
+      {
+        "fold": 0,
+        "test": [
+          0,
+          1,
+          9,
+          10,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          29,
+          30,
+          31,
+          41,
+          42,
+          43,
+          44
+        ],
+        "test_groups": [
+          "g00",
+          "g03",
+          "g07",
+          "g08",
+          "g10",
+          "g14"
+        ],
+        "train": [
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          27,
+          28,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39,
+          40,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53
+        ]
+      },
+      {
+        "fold": 1,
+        "test": [
+          2,
+          3,
+          4,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          27,
+          28,
+          32,
+          33,
+          34,
+          35
+        ],
+        "test_groups": [
+          "g01",
+          "g04",
+          "g05",
+          "g06",
+          "g09",
+          "g11"
+        ],
+        "train": [
+          0,
+          1,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          29,
+          30,
+          31,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53
+        ]
+      },
+      {
+        "fold": 2,
+        "test": [
+          5,
+          6,
+          7,
+          8,
+          36,
+          37,
+          38,
+          39,
+          40,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53
+        ],
+        "test_groups": [
+          "g02",
+          "g12",
+          "g13",
+          "g15",
+          "g16",
+          "g17"
+        ],
+        "train": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          41,
+          42,
+          43,
+          44
+        ]
+      }
+    ],
+    "plan": {
+      "candidates": [
+        {
+          "family": "dummy",
+          "name": "dummy_mean",
+          "params": {
+            "strategy": "mean"
+          }
+        },
+        {
+          "family": "ridge",
+          "name": "ridge_alpha_0.1",
+          "params": {
+            "alpha": 0.1
+          }
+        },
+        {
+          "family": "ridge",
+          "name": "ridge_alpha_1",
+          "params": {
+            "alpha": 1.0
+          }
+        },
+        {
+          "family": "ridge",
+          "name": "ridge_alpha_10",
+          "params": {
+            "alpha": 10.0
+          }
+        },
+        {
+          "family": "extra_trees",
+          "name": "extra_trees_depth_6",
+          "params": {
+            "max_depth": 6,
+            "min_samples_leaf": 2,
+            "n_estimators": 64
+          }
+        },
+        {
+          "family": "extra_trees",
+          "name": "extra_trees_depth_none",
+          "params": {
+            "max_depth": null,
+            "min_samples_leaf": 2,
+            "n_estimators": 64
+          }
+        },
+        {
+          "family": "nystroem_ridge",
+          "name": "nystroem_ridge_alpha_0.1",
+          "params": {
+            "alpha": 0.1,
+            "rank_cap": 64
+          }
+        },
+        {
+          "family": "nystroem_ridge",
+          "name": "nystroem_ridge_alpha_1",
+          "params": {
+            "alpha": 1.0,
+            "rank_cap": 64
+          }
+        },
+        {
+          "family": "nystroem_ridge",
+          "name": "nystroem_ridge_alpha_10",
+          "params": {
+            "alpha": 10.0,
+            "rank_cap": 64
+          }
+        },
+        {
+          "family": "group_median",
+          "name": "group_median_lower",
+          "params": {}
+        }
+      ],
+      "capabilities": [
+        "group_median-v1",
+        "nystroem_ridge-v1"
+      ],
+      "config": {
+        "baselines": [
+          "dummy",
+          "ridge",
+          "extra_trees",
+          "nystroem_ridge",
+          "group_median"
+        ],
+        "categorical_encoding": "legacy-v1",
+        "features": [
+          "x",
+          "z"
+        ],
+        "group": "group",
+        "inner_splits": 2,
+        "outer_splits": 3,
+        "random_state": 731927,
+        "selection_objective": "group_mae",
+        "target": "y",
+        "threads": 1
+      },
+      "feature_schema": [
+        {
+          "dtype": "float64",
+          "missing_count": 0,
+          "name": "x"
+        },
+        {
+          "dtype": "float64",
+          "missing_count": 0,
+          "name": "z"
+        }
+      ],
+      "fit_budget": {
+        "full_data_family_refits": 0,
+        "inner_selection_fits": 60,
+        "outer_family_refits": 15,
+        "selected_extra_refits": 0,
+        "total_fits": 75,
+        "unit": "pipeline.fit calls"
+      },
+      "fits_performed": 0,
+      "groupbench_version": "0.3.0b7",
+      "kind": "execution_plan",
+      "limitations": [
+        "No models or preprocessing were fitted; no predictions, scores or result files were written.",
+        "Counts describe intended pipeline.fit calls if execution succeeds, not a hard resource budget or time/memory estimate.",
+        "Each pipeline fit includes preprocessing and one estimator; individual trees and preprocessing steps are not counted separately.",
+        "Every requested family is refitted once per selection, including dummy. The selected entry reuses its winning family refit, with no extra fit.",
+        "Schema and split validation do not establish training success, leakage absence, predictive performance or extrapolation safety.",
+        "This plan describes the current input and options; changing inputs, options or software can change later execution."
+      ],
+      "mode": "run",
+      "n_training_groups": 18,
+      "n_training_rows": 54,
+      "outer_folds": [
+        {
+          "fit_counts": {
+            "family_refits": 5,
+            "inner_selection_fits": 20,
+            "total_fits": 25
+          },
+          "fold": 0,
+          "inner_folds": [
+            {
+              "fold": 0,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            },
+            {
+              "fold": 1,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            }
+          ],
+          "inner_seed": 731928,
+          "overlap_count": 0,
+          "refit_families": [
+            "dummy",
+            "ridge",
+            "extra_trees",
+            "nystroem_ridge",
+            "group_median"
+          ],
+          "test_group_count": 6,
+          "test_rows": 18,
+          "train_group_count": 12,
+          "train_rows": 36
+        },
+        {
+          "fit_counts": {
+            "family_refits": 5,
+            "inner_selection_fits": 20,
+            "total_fits": 25
+          },
+          "fold": 1,
+          "inner_folds": [
+            {
+              "fold": 0,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            },
+            {
+              "fold": 1,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            }
+          ],
+          "inner_seed": 731929,
+          "overlap_count": 0,
+          "refit_families": [
+            "dummy",
+            "ridge",
+            "extra_trees",
+            "nystroem_ridge",
+            "group_median"
+          ],
+          "test_group_count": 6,
+          "test_rows": 18,
+          "train_group_count": 12,
+          "train_rows": 36
+        },
+        {
+          "fit_counts": {
+            "family_refits": 5,
+            "inner_selection_fits": 20,
+            "total_fits": 25
+          },
+          "fold": 2,
+          "inner_folds": [
+            {
+              "fold": 0,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            },
+            {
+              "fold": 1,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            }
+          ],
+          "inner_seed": 731930,
+          "overlap_count": 0,
+          "refit_families": [
+            "dummy",
+            "ridge",
+            "extra_trees",
+            "nystroem_ridge",
+            "group_median"
+          ],
+          "test_group_count": 6,
+          "test_rows": 18,
+          "train_group_count": 12,
+          "train_rows": 36
+        }
+      ],
+      "protocol": "nested-group-kfold-extended-families-v1",
+      "schema_version": "1.2",
+      "source_file_sha256": null
+    },
+    "root": 731927,
+    "scenario": "linear_domain_holdout",
+    "scenario_id": 2
+  },
+  {
+    "case_id": "2_731939",
+    "fold_ids": [
+      1,
+      1,
+      1,
+      1,
+      1,
+      0,
+      0,
+      0,
+      0,
+      1,
+      1,
+      2,
+      2,
+      2,
+      1,
+      1,
+      1,
+      1,
+      2,
+      2,
+      1,
+      1,
+      1,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      0,
+      0,
+      0,
+      2,
+      2,
+      2,
+      2,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      1,
+      1,
+      1,
+      0,
+      0,
+      2,
+      2,
+      2,
+      0,
+      0,
+      0,
+      0
+    ],
+    "fold_roles": [
+      "left_extrapolation",
+      "interpolation",
+      "right_extrapolation"
+    ],
+    "folds": [
+      {
+        "fold": 0,
+        "test": [
+          5,
+          6,
+          7,
+          8,
+          29,
+          30,
+          31,
+          36,
+          37,
+          38,
+          39,
+          40,
+          45,
+          46,
+          50,
+          51,
+          52,
+          53
+        ],
+        "test_groups": [
+          "g02",
+          "g10",
+          "g12",
+          "g13",
+          "g15",
+          "g17"
+        ],
+        "train": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          32,
+          33,
+          34,
+          35,
+          41,
+          42,
+          43,
+          44,
+          47,
+          48,
+          49
+        ]
+      },
+      {
+        "fold": 1,
+        "test": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          9,
+          10,
+          14,
+          15,
+          16,
+          17,
+          20,
+          21,
+          22,
+          41,
+          42,
+          43,
+          44
+        ],
+        "test_groups": [
+          "g00",
+          "g01",
+          "g03",
+          "g05",
+          "g07",
+          "g14"
+        ],
+        "train": [
+          5,
+          6,
+          7,
+          8,
+          11,
+          12,
+          13,
+          18,
+          19,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39,
+          40,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53
+        ]
+      },
+      {
+        "fold": 2,
+        "test": [
+          11,
+          12,
+          13,
+          18,
+          19,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          32,
+          33,
+          34,
+          35,
+          47,
+          48,
+          49
+        ],
+        "test_groups": [
+          "g04",
+          "g06",
+          "g08",
+          "g09",
+          "g11",
+          "g16"
+        ],
+        "train": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          14,
+          15,
+          16,
+          17,
+          20,
+          21,
+          22,
+          29,
+          30,
+          31,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          50,
+          51,
+          52,
+          53
+        ]
+      }
+    ],
+    "plan": {
+      "candidates": [
+        {
+          "family": "dummy",
+          "name": "dummy_mean",
+          "params": {
+            "strategy": "mean"
+          }
+        },
+        {
+          "family": "ridge",
+          "name": "ridge_alpha_0.1",
+          "params": {
+            "alpha": 0.1
+          }
+        },
+        {
+          "family": "ridge",
+          "name": "ridge_alpha_1",
+          "params": {
+            "alpha": 1.0
+          }
+        },
+        {
+          "family": "ridge",
+          "name": "ridge_alpha_10",
+          "params": {
+            "alpha": 10.0
+          }
+        },
+        {
+          "family": "extra_trees",
+          "name": "extra_trees_depth_6",
+          "params": {
+            "max_depth": 6,
+            "min_samples_leaf": 2,
+            "n_estimators": 64
+          }
+        },
+        {
+          "family": "extra_trees",
+          "name": "extra_trees_depth_none",
+          "params": {
+            "max_depth": null,
+            "min_samples_leaf": 2,
+            "n_estimators": 64
+          }
+        },
+        {
+          "family": "nystroem_ridge",
+          "name": "nystroem_ridge_alpha_0.1",
+          "params": {
+            "alpha": 0.1,
+            "rank_cap": 64
+          }
+        },
+        {
+          "family": "nystroem_ridge",
+          "name": "nystroem_ridge_alpha_1",
+          "params": {
+            "alpha": 1.0,
+            "rank_cap": 64
+          }
+        },
+        {
+          "family": "nystroem_ridge",
+          "name": "nystroem_ridge_alpha_10",
+          "params": {
+            "alpha": 10.0,
+            "rank_cap": 64
+          }
+        },
+        {
+          "family": "group_median",
+          "name": "group_median_lower",
+          "params": {}
+        }
+      ],
+      "capabilities": [
+        "group_median-v1",
+        "nystroem_ridge-v1"
+      ],
+      "config": {
+        "baselines": [
+          "dummy",
+          "ridge",
+          "extra_trees",
+          "nystroem_ridge",
+          "group_median"
+        ],
+        "categorical_encoding": "legacy-v1",
+        "features": [
+          "x",
+          "z"
+        ],
+        "group": "group",
+        "inner_splits": 2,
+        "outer_splits": 3,
+        "random_state": 731939,
+        "selection_objective": "group_mae",
+        "target": "y",
+        "threads": 1
+      },
+      "feature_schema": [
+        {
+          "dtype": "float64",
+          "missing_count": 0,
+          "name": "x"
+        },
+        {
+          "dtype": "float64",
+          "missing_count": 0,
+          "name": "z"
+        }
+      ],
+      "fit_budget": {
+        "full_data_family_refits": 0,
+        "inner_selection_fits": 60,
+        "outer_family_refits": 15,
+        "selected_extra_refits": 0,
+        "total_fits": 75,
+        "unit": "pipeline.fit calls"
+      },
+      "fits_performed": 0,
+      "groupbench_version": "0.3.0b7",
+      "kind": "execution_plan",
+      "limitations": [
+        "No models or preprocessing were fitted; no predictions, scores or result files were written.",
+        "Counts describe intended pipeline.fit calls if execution succeeds, not a hard resource budget or time/memory estimate.",
+        "Each pipeline fit includes preprocessing and one estimator; individual trees and preprocessing steps are not counted separately.",
+        "Every requested family is refitted once per selection, including dummy. The selected entry reuses its winning family refit, with no extra fit.",
+        "Schema and split validation do not establish training success, leakage absence, predictive performance or extrapolation safety.",
+        "This plan describes the current input and options; changing inputs, options or software can change later execution."
+      ],
+      "mode": "run",
+      "n_training_groups": 18,
+      "n_training_rows": 54,
+      "outer_folds": [
+        {
+          "fit_counts": {
+            "family_refits": 5,
+            "inner_selection_fits": 20,
+            "total_fits": 25
+          },
+          "fold": 0,
+          "inner_folds": [
+            {
+              "fold": 0,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            },
+            {
+              "fold": 1,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            }
+          ],
+          "inner_seed": 731940,
+          "overlap_count": 0,
+          "refit_families": [
+            "dummy",
+            "ridge",
+            "extra_trees",
+            "nystroem_ridge",
+            "group_median"
+          ],
+          "test_group_count": 6,
+          "test_rows": 18,
+          "train_group_count": 12,
+          "train_rows": 36
+        },
+        {
+          "fit_counts": {
+            "family_refits": 5,
+            "inner_selection_fits": 20,
+            "total_fits": 25
+          },
+          "fold": 1,
+          "inner_folds": [
+            {
+              "fold": 0,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            },
+            {
+              "fold": 1,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            }
+          ],
+          "inner_seed": 731941,
+          "overlap_count": 0,
+          "refit_families": [
+            "dummy",
+            "ridge",
+            "extra_trees",
+            "nystroem_ridge",
+            "group_median"
+          ],
+          "test_group_count": 6,
+          "test_rows": 18,
+          "train_group_count": 12,
+          "train_rows": 36
+        },
+        {
+          "fit_counts": {
+            "family_refits": 5,
+            "inner_selection_fits": 20,
+            "total_fits": 25
+          },
+          "fold": 2,
+          "inner_folds": [
+            {
+              "fold": 0,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            },
+            {
+              "fold": 1,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            }
+          ],
+          "inner_seed": 731942,
+          "overlap_count": 0,
+          "refit_families": [
+            "dummy",
+            "ridge",
+            "extra_trees",
+            "nystroem_ridge",
+            "group_median"
+          ],
+          "test_group_count": 6,
+          "test_rows": 18,
+          "train_group_count": 12,
+          "train_rows": 36
+        }
+      ],
+      "protocol": "nested-group-kfold-extended-families-v1",
+      "schema_version": "1.2",
+      "source_file_sha256": null
+    },
+    "root": 731939,
+    "scenario": "linear_domain_holdout",
+    "scenario_id": 2
+  },
+  {
+    "case_id": "2_731951",
+    "fold_ids": [
+      0,
+      0,
+      1,
+      1,
+      1,
+      2,
+      2,
+      2,
+      2,
+      1,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      2,
+      2,
+      2,
+      2,
+      2,
+      1,
+      1,
+      1,
+      1,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      0,
+      0,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "fold_roles": [
+      "left_extrapolation",
+      "interpolation",
+      "right_extrapolation"
+    ],
+    "folds": [
+      {
+        "fold": 0,
+        "test": [
+          0,
+          1,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          36,
+          37,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53
+        ],
+        "test_groups": [
+          "g00",
+          "g04",
+          "g05",
+          "g12",
+          "g16",
+          "g17"
+        ],
+        "train": [
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46
+        ]
+      },
+      {
+        "fold": 1,
+        "test": [
+          2,
+          3,
+          4,
+          9,
+          10,
+          23,
+          24,
+          25,
+          26,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46
+        ],
+        "test_groups": [
+          "g01",
+          "g03",
+          "g08",
+          "g13",
+          "g14",
+          "g15"
+        ],
+        "train": [
+          0,
+          1,
+          5,
+          6,
+          7,
+          8,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53
+        ]
+      },
+      {
+        "fold": 2,
+        "test": [
+          5,
+          6,
+          7,
+          8,
+          18,
+          19,
+          20,
+          21,
+          22,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35
+        ],
+        "test_groups": [
+          "g02",
+          "g06",
+          "g07",
+          "g09",
+          "g10",
+          "g11"
+        ],
+        "train": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          23,
+          24,
+          25,
+          26,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53
+        ]
+      }
+    ],
+    "plan": {
+      "candidates": [
+        {
+          "family": "dummy",
+          "name": "dummy_mean",
+          "params": {
+            "strategy": "mean"
+          }
+        },
+        {
+          "family": "ridge",
+          "name": "ridge_alpha_0.1",
+          "params": {
+            "alpha": 0.1
+          }
+        },
+        {
+          "family": "ridge",
+          "name": "ridge_alpha_1",
+          "params": {
+            "alpha": 1.0
+          }
+        },
+        {
+          "family": "ridge",
+          "name": "ridge_alpha_10",
+          "params": {
+            "alpha": 10.0
+          }
+        },
+        {
+          "family": "extra_trees",
+          "name": "extra_trees_depth_6",
+          "params": {
+            "max_depth": 6,
+            "min_samples_leaf": 2,
+            "n_estimators": 64
+          }
+        },
+        {
+          "family": "extra_trees",
+          "name": "extra_trees_depth_none",
+          "params": {
+            "max_depth": null,
+            "min_samples_leaf": 2,
+            "n_estimators": 64
+          }
+        },
+        {
+          "family": "nystroem_ridge",
+          "name": "nystroem_ridge_alpha_0.1",
+          "params": {
+            "alpha": 0.1,
+            "rank_cap": 64
+          }
+        },
+        {
+          "family": "nystroem_ridge",
+          "name": "nystroem_ridge_alpha_1",
+          "params": {
+            "alpha": 1.0,
+            "rank_cap": 64
+          }
+        },
+        {
+          "family": "nystroem_ridge",
+          "name": "nystroem_ridge_alpha_10",
+          "params": {
+            "alpha": 10.0,
+            "rank_cap": 64
+          }
+        },
+        {
+          "family": "group_median",
+          "name": "group_median_lower",
+          "params": {}
+        }
+      ],
+      "capabilities": [
+        "group_median-v1",
+        "nystroem_ridge-v1"
+      ],
+      "config": {
+        "baselines": [
+          "dummy",
+          "ridge",
+          "extra_trees",
+          "nystroem_ridge",
+          "group_median"
+        ],
+        "categorical_encoding": "legacy-v1",
+        "features": [
+          "x",
+          "z"
+        ],
+        "group": "group",
+        "inner_splits": 2,
+        "outer_splits": 3,
+        "random_state": 731951,
+        "selection_objective": "group_mae",
+        "target": "y",
+        "threads": 1
+      },
+      "feature_schema": [
+        {
+          "dtype": "float64",
+          "missing_count": 0,
+          "name": "x"
+        },
+        {
+          "dtype": "float64",
+          "missing_count": 0,
+          "name": "z"
+        }
+      ],
+      "fit_budget": {
+        "full_data_family_refits": 0,
+        "inner_selection_fits": 60,
+        "outer_family_refits": 15,
+        "selected_extra_refits": 0,
+        "total_fits": 75,
+        "unit": "pipeline.fit calls"
+      },
+      "fits_performed": 0,
+      "groupbench_version": "0.3.0b7",
+      "kind": "execution_plan",
+      "limitations": [
+        "No models or preprocessing were fitted; no predictions, scores or result files were written.",
+        "Counts describe intended pipeline.fit calls if execution succeeds, not a hard resource budget or time/memory estimate.",
+        "Each pipeline fit includes preprocessing and one estimator; individual trees and preprocessing steps are not counted separately.",
+        "Every requested family is refitted once per selection, including dummy. The selected entry reuses its winning family refit, with no extra fit.",
+        "Schema and split validation do not establish training success, leakage absence, predictive performance or extrapolation safety.",
+        "This plan describes the current input and options; changing inputs, options or software can change later execution."
+      ],
+      "mode": "run",
+      "n_training_groups": 18,
+      "n_training_rows": 54,
+      "outer_folds": [
+        {
+          "fit_counts": {
+            "family_refits": 5,
+            "inner_selection_fits": 20,
+            "total_fits": 25
+          },
+          "fold": 0,
+          "inner_folds": [
+            {
+              "fold": 0,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            },
+            {
+              "fold": 1,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            }
+          ],
+          "inner_seed": 731952,
+          "overlap_count": 0,
+          "refit_families": [
+            "dummy",
+            "ridge",
+            "extra_trees",
+            "nystroem_ridge",
+            "group_median"
+          ],
+          "test_group_count": 6,
+          "test_rows": 18,
+          "train_group_count": 12,
+          "train_rows": 36
+        },
+        {
+          "fit_counts": {
+            "family_refits": 5,
+            "inner_selection_fits": 20,
+            "total_fits": 25
+          },
+          "fold": 1,
+          "inner_folds": [
+            {
+              "fold": 0,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            },
+            {
+              "fold": 1,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            }
+          ],
+          "inner_seed": 731953,
+          "overlap_count": 0,
+          "refit_families": [
+            "dummy",
+            "ridge",
+            "extra_trees",
+            "nystroem_ridge",
+            "group_median"
+          ],
+          "test_group_count": 6,
+          "test_rows": 18,
+          "train_group_count": 12,
+          "train_rows": 36
+        },
+        {
+          "fit_counts": {
+            "family_refits": 5,
+            "inner_selection_fits": 20,
+            "total_fits": 25
+          },
+          "fold": 2,
+          "inner_folds": [
+            {
+              "fold": 0,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            },
+            {
+              "fold": 1,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            }
+          ],
+          "inner_seed": 731954,
+          "overlap_count": 0,
+          "refit_families": [
+            "dummy",
+            "ridge",
+            "extra_trees",
+            "nystroem_ridge",
+            "group_median"
+          ],
+          "test_group_count": 6,
+          "test_rows": 18,
+          "train_group_count": 12,
+          "train_rows": 36
+        }
+      ],
+      "protocol": "nested-group-kfold-extended-families-v1",
+      "schema_version": "1.2",
+      "source_file_sha256": null
+    },
+    "root": 731951,
+    "scenario": "linear_domain_holdout",
+    "scenario_id": 2
+  },
+  {
+    "case_id": "2_731967",
+    "fold_ids": [
+      0,
+      0,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      2,
+      2,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      1,
+      0,
+      0,
+      0,
+      1,
+      1,
+      1,
+      1,
+      0,
+      0,
+      2,
+      2,
+      2,
+      0,
+      0,
+      0,
+      0,
+      2,
+      2,
+      1,
+      1,
+      1,
+      2,
+      2,
+      2,
+      2,
+      1,
+      1,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2
+    ],
+    "fold_roles": [
+      "left_extrapolation",
+      "interpolation",
+      "right_extrapolation"
+    ],
+    "folds": [
+      {
+        "fold": 0,
+        "test": [
+          0,
+          1,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          20,
+          21,
+          22,
+          27,
+          28,
+          32,
+          33,
+          34,
+          35
+        ],
+        "test_groups": [
+          "g00",
+          "g04",
+          "g05",
+          "g07",
+          "g09",
+          "g11"
+        ],
+        "train": [
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          18,
+          19,
+          23,
+          24,
+          25,
+          26,
+          29,
+          30,
+          31,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53
+        ]
+      },
+      {
+        "fold": 1,
+        "test": [
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          18,
+          19,
+          23,
+          24,
+          25,
+          26,
+          38,
+          39,
+          40,
+          45,
+          46
+        ],
+        "test_groups": [
+          "g01",
+          "g02",
+          "g06",
+          "g08",
+          "g13",
+          "g15"
+        ],
+        "train": [
+          0,
+          1,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          20,
+          21,
+          22,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          41,
+          42,
+          43,
+          44,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53
+        ]
+      },
+      {
+        "fold": 2,
+        "test": [
+          9,
+          10,
+          29,
+          30,
+          31,
+          36,
+          37,
+          41,
+          42,
+          43,
+          44,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53
+        ],
+        "test_groups": [
+          "g03",
+          "g10",
+          "g12",
+          "g14",
+          "g16",
+          "g17"
+        ],
+        "train": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          32,
+          33,
+          34,
+          35,
+          38,
+          39,
+          40,
+          45,
+          46
+        ]
+      }
+    ],
+    "plan": {
+      "candidates": [
+        {
+          "family": "dummy",
+          "name": "dummy_mean",
+          "params": {
+            "strategy": "mean"
+          }
+        },
+        {
+          "family": "ridge",
+          "name": "ridge_alpha_0.1",
+          "params": {
+            "alpha": 0.1
+          }
+        },
+        {
+          "family": "ridge",
+          "name": "ridge_alpha_1",
+          "params": {
+            "alpha": 1.0
+          }
+        },
+        {
+          "family": "ridge",
+          "name": "ridge_alpha_10",
+          "params": {
+            "alpha": 10.0
+          }
+        },
+        {
+          "family": "extra_trees",
+          "name": "extra_trees_depth_6",
+          "params": {
+            "max_depth": 6,
+            "min_samples_leaf": 2,
+            "n_estimators": 64
+          }
+        },
+        {
+          "family": "extra_trees",
+          "name": "extra_trees_depth_none",
+          "params": {
+            "max_depth": null,
+            "min_samples_leaf": 2,
+            "n_estimators": 64
+          }
+        },
+        {
+          "family": "nystroem_ridge",
+          "name": "nystroem_ridge_alpha_0.1",
+          "params": {
+            "alpha": 0.1,
+            "rank_cap": 64
+          }
+        },
+        {
+          "family": "nystroem_ridge",
+          "name": "nystroem_ridge_alpha_1",
+          "params": {
+            "alpha": 1.0,
+            "rank_cap": 64
+          }
+        },
+        {
+          "family": "nystroem_ridge",
+          "name": "nystroem_ridge_alpha_10",
+          "params": {
+            "alpha": 10.0,
+            "rank_cap": 64
+          }
+        },
+        {
+          "family": "group_median",
+          "name": "group_median_lower",
+          "params": {}
+        }
+      ],
+      "capabilities": [
+        "group_median-v1",
+        "nystroem_ridge-v1"
+      ],
+      "config": {
+        "baselines": [
+          "dummy",
+          "ridge",
+          "extra_trees",
+          "nystroem_ridge",
+          "group_median"
+        ],
+        "categorical_encoding": "legacy-v1",
+        "features": [
+          "x",
+          "z"
+        ],
+        "group": "group",
+        "inner_splits": 2,
+        "outer_splits": 3,
+        "random_state": 731967,
+        "selection_objective": "group_mae",
+        "target": "y",
+        "threads": 1
+      },
+      "feature_schema": [
+        {
+          "dtype": "float64",
+          "missing_count": 0,
+          "name": "x"
+        },
+        {
+          "dtype": "float64",
+          "missing_count": 0,
+          "name": "z"
+        }
+      ],
+      "fit_budget": {
+        "full_data_family_refits": 0,
+        "inner_selection_fits": 60,
+        "outer_family_refits": 15,
+        "selected_extra_refits": 0,
+        "total_fits": 75,
+        "unit": "pipeline.fit calls"
+      },
+      "fits_performed": 0,
+      "groupbench_version": "0.3.0b7",
+      "kind": "execution_plan",
+      "limitations": [
+        "No models or preprocessing were fitted; no predictions, scores or result files were written.",
+        "Counts describe intended pipeline.fit calls if execution succeeds, not a hard resource budget or time/memory estimate.",
+        "Each pipeline fit includes preprocessing and one estimator; individual trees and preprocessing steps are not counted separately.",
+        "Every requested family is refitted once per selection, including dummy. The selected entry reuses its winning family refit, with no extra fit.",
+        "Schema and split validation do not establish training success, leakage absence, predictive performance or extrapolation safety.",
+        "This plan describes the current input and options; changing inputs, options or software can change later execution."
+      ],
+      "mode": "run",
+      "n_training_groups": 18,
+      "n_training_rows": 54,
+      "outer_folds": [
+        {
+          "fit_counts": {
+            "family_refits": 5,
+            "inner_selection_fits": 20,
+            "total_fits": 25
+          },
+          "fold": 0,
+          "inner_folds": [
+            {
+              "fold": 0,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            },
+            {
+              "fold": 1,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            }
+          ],
+          "inner_seed": 731968,
+          "overlap_count": 0,
+          "refit_families": [
+            "dummy",
+            "ridge",
+            "extra_trees",
+            "nystroem_ridge",
+            "group_median"
+          ],
+          "test_group_count": 6,
+          "test_rows": 18,
+          "train_group_count": 12,
+          "train_rows": 36
+        },
+        {
+          "fit_counts": {
+            "family_refits": 5,
+            "inner_selection_fits": 20,
+            "total_fits": 25
+          },
+          "fold": 1,
+          "inner_folds": [
+            {
+              "fold": 0,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            },
+            {
+              "fold": 1,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            }
+          ],
+          "inner_seed": 731969,
+          "overlap_count": 0,
+          "refit_families": [
+            "dummy",
+            "ridge",
+            "extra_trees",
+            "nystroem_ridge",
+            "group_median"
+          ],
+          "test_group_count": 6,
+          "test_rows": 18,
+          "train_group_count": 12,
+          "train_rows": 36
+        },
+        {
+          "fit_counts": {
+            "family_refits": 5,
+            "inner_selection_fits": 20,
+            "total_fits": 25
+          },
+          "fold": 2,
+          "inner_folds": [
+            {
+              "fold": 0,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            },
+            {
+              "fold": 1,
+              "overlap_count": 0,
+              "test_group_count": 6,
+              "test_rows": 18,
+              "train_group_count": 6,
+              "train_rows": 18
+            }
+          ],
+          "inner_seed": 731970,
+          "overlap_count": 0,
+          "refit_families": [
+            "dummy",
+            "ridge",
+            "extra_trees",
+            "nystroem_ridge",
+            "group_median"
+          ],
+          "test_group_count": 6,
+          "test_rows": 18,
+          "train_group_count": 12,
+          "train_rows": 36
+        }
+      ],
+      "protocol": "nested-group-kfold-extended-families-v1",
+      "schema_version": "1.2",
+      "source_file_sha256": null
+    },
+    "root": 731967,
+    "scenario": "linear_domain_holdout",
+    "scenario_id": 2
+  }
+]

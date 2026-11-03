@@ -1,0 +1,13 @@
+{
+  "child_cpu_seconds": 15.623958,
+  "child_rusage_max_rss_kib": 136640,
+  "io_scope": "explicit driver artifact/source reads and writes; excludes Python/dependency loader OS traffic",
+  "managed_artifact_io_bytes_observed": 4499875,
+  "returncode": 0,
+  "sampled_peak_rss_bytes": 0,
+  "status": "SEALED",
+  "stop_reason": null,
+  "supervisor_cpu_seconds": 0.05430810099999994,
+  "topology": "single worker process; unexpected descendants stop the attempt",
+  "wall_seconds": 15.683630268002162
+}

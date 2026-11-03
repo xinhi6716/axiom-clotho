@@ -1,0 +1,10 @@
+{
+  "case_id": "0_731939",
+  "files": {
+    "data.npz": "27d9a32500b4de5f22be1790b848f3125a87492da0bf8b46cd52368632a1a039",
+    "manifest.json": "90be532da84457374232dadef3fe868b476e9b133507838d34056b35fc7dcfcd",
+    "predictions.csv": "88b88cbf63b672d6effea71c92d2a06879a14d601d1b6ce9cdb9bc059d8680b9",
+    "summary.json": "76a906e84fb06d648344ab814beac19a35f29a0b0414c6e41169b9dc81f0f60a"
+  },
+  "fits_completed": 75
+}

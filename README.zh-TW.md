@@ -226,3 +226,5 @@ mlcalc plan-group-forward-windows examples/group_forward_window_metadata.json
 ### 固定時序基線評估（僅 Python）
 
 獨立的[整群時序評估 API](docs/GROUP_FORWARD_BASELINE_EVALUATION.md)先預覽，再依預先宣告的型別化計畫執行兩種固定迴歸基線。前處理只使用各視窗的訓練資料，明確列出已測與未測覆蓋範圍；不選模、不以全資料重訓，也不新增 CLI 或儲存套件格式。執行必須符合預覽綁定，且所有資料列（含未測列）都要有有限的已觀測目標值。宣告與雜湊不證明因果有效性、來源真實性或無資料洩漏。
+
+固定合成比較：[可選分組模型](examples/optional_grouped_study_v1/README.md)，完整保留負面的外插結果及資源監控限制。

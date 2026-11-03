@@ -1,0 +1,58 @@
+{
+  "artifact_io_bytes": 134217728,
+  "categorical_encoding": "legacy-v1",
+  "families": [
+    "dummy",
+    "ridge",
+    "extra_trees",
+    "nystroem_ridge",
+    "group_median"
+  ],
+  "features": [
+    "x",
+    "z"
+  ],
+  "group": "group",
+  "inner_splits": 2,
+  "main_cpu_seconds": 200,
+  "max_rss_bytes": 536870912,
+  "objective": "group_mae",
+  "outer_splits": 3,
+  "retained_bytes": 16777216,
+  "roots": [
+    731903,
+    731927,
+    731939,
+    731951,
+    731967
+  ],
+  "scenarios": [
+    "linear_iid",
+    "smooth_iid",
+    "linear_domain_holdout"
+  ],
+  "sizes": [
+    2,
+    3,
+    4,
+    2,
+    3,
+    4,
+    2,
+    3,
+    4,
+    2,
+    3,
+    4,
+    2,
+    3,
+    4,
+    2,
+    3,
+    4
+  ],
+  "study_id": "CLOTHO-OPTIONAL-GROUPED-SYNTH-V1",
+  "target": "y",
+  "total_cpu_seconds": 300,
+  "wall_seconds": 900
+}
