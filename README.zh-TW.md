@@ -205,3 +205,20 @@ b7 更新 Clotho 圖像、報告呈現與文件；保留 b6 拒絕已擬合迴�
 預設行為不變，外層仍是群組留出，不代表領域轉移效能。詳見
 [虛構資料命令列範例](examples/domain-inner-tabular/README.md)。
 本次未擴充 measurement 或 FET 設定結構。
+
+### 僅用中繼資料規劃整組前向時間窗
+
+目前原始碼提供獨立、不擬合的 Python 規劃器與嚴格 JSON 命令列介面，
+依事先宣告的時間窗列出整組訓練、測試及未使用成員，並明示部分測試覆蓋。
+以下使用微型虛構中繼資料，只將計畫印至標準輸出：
+
+```bash
+mlcalc plan-group-forward-windows examples/group_forward_window_metadata.json
+```
+
+`groupbench` 別名與 `clotho tabular plan-group-forward-windows` 提供相同指令。
+沒有輸出檔案選項，不讀特徵或目標、不擬合也不計分。時間宣告不證明因果、
+來源真實性或群組獨立性，也不替後續模型排除特徵或限制前處理。
+輸出保留提供的群組識別碼與時間中繼資料，分享前請先檢查。
+這不是完整的時間序列機器學習評估，也不在已凍結的 b7 下載檔內。
+詳見[嚴格格式、資源限制與 Python API](docs/GROUP_FORWARD_WINDOW_PLAN.md)。

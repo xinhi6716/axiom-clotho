@@ -17,7 +17,7 @@ SOURCE_FILES = (
     "__init__.py", "__main__.py", "baselines.py", "binary/__init__.py", "binary/cli.py",
     "binary/data.py", "binary/metrics.py", "binary/model.py", "binary/report.py", "binary/saved_evaluation.py",
     "binary/workflow.py", "budget_comparison.py", "categorical.py", "cli.py",
-    "data.py", "domain_selection.py", "evaluation.py", "evaluation_schema.py", "feature_manifest.py", "group_time_plan.py", "input_support.py",
+    "data.py", "domain_selection.py", "evaluation.py", "evaluation_schema.py", "feature_manifest.py", "group_time_json.py", "group_time_plan.py", "input_support.py",
     "interval_evaluation.py", "kernel.py", "metrics.py", "model.py", "observed_history.py", "package_source.py",
     "planning.py", "prediction.py", "prediction_schema.py", "quantity_contract.py", "report.py", "saved_scoring.py",
     "splitting.py", "verification.py",

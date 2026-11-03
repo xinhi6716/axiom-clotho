@@ -243,6 +243,9 @@ def _read_training(args):
 
 def main(argv=None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] == "plan-group-forward-windows":
+        from .group_time_json import main as plan_group_windows
+        return plan_group_windows(argv[1:])
     if argv and argv[0] == "compare-predictions":
         from .saved_scoring import compare_main
         return compare_main(argv[1:])
@@ -269,6 +272,7 @@ def main(argv=None) -> int:
   Synthetic results do not establish performance on real materials.
 
 Working with your own data:
+  mlcalc plan-group-forward-windows --help  Plan declared whole-group time windows; stdout JSON, zero fits.
   mlcalc plan run --help     See how to preview fit counts without fitting.
   mlcalc run --help          Evaluate a local regression CSV.
   mlcalc predict --help      Fit on training data and predict new rows.
@@ -283,6 +287,8 @@ The groupbench command is an alias for the same CLI.""",
     )
     parser.add_argument("--version", action="version", version=__version__)
     sub = parser.add_subparsers(dest="command", required=True)
+    sub.add_parser("plan-group-forward-windows", add_help=False,
+                   help="Plan declared whole-group forward windows; strict metadata JSON, stdout JSON, zero fits")
     sub.add_parser("compare-predictions", add_help=False,
                    help="Compare saved regression predictions on a complete common query cohort; stdout JSON, no fitting")
     sub.add_parser("evaluate-binary", add_help=False,

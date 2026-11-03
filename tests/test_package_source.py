@@ -47,13 +47,14 @@ class PackageSourceTests(unittest.TestCase):
         installed = Path(source.__file__).parent
         self.assertEqual(tuple(sorted(source.SOURCE_FILES)), source.SOURCE_FILES)
         self.assertEqual(set(source.SOURCE_FILES), {p.relative_to(installed).as_posix() for p in installed.rglob("*.py")})
-        self.assertEqual(len(set(source.SOURCE_FILES)), 35)
+        self.assertEqual(len(set(source.SOURCE_FILES)), 36)
         self.assertIn("baselines.py", source.SOURCE_FILES)
         self.assertIn("kernel.py", source.SOURCE_FILES)
         self.assertIn("binary/saved_evaluation.py", source.SOURCE_FILES)
         self.assertIn("saved_scoring.py", source.SOURCE_FILES)
         self.assertIn("quantity_contract.py", source.SOURCE_FILES)
         self.assertIn("domain_selection.py", source.SOURCE_FILES)
+        self.assertIn("group_time_json.py", source.SOURCE_FILES)
         self.assertIn("group_time_plan.py", source.SOURCE_FILES)
 
     def test_canonical_digest_is_explicit_and_stable(self):
@@ -189,10 +190,13 @@ class SourceFallbackAndRenderingTests(unittest.TestCase):
         from test_prediction_schema import manifest, write_bundle
 
         descriptors = [None]
-        for omitted in ({"baselines.py", "kernel.py", "binary/saved_evaluation.py", "saved_scoring.py", "quantity_contract.py", "domain_selection.py", "group_time_plan.py"},
-                        {"kernel.py", "binary/saved_evaluation.py", "saved_scoring.py", "quantity_contract.py", "domain_selection.py", "group_time_plan.py"},
-                        {"binary/saved_evaluation.py", "saved_scoring.py", "quantity_contract.py", "domain_selection.py", "group_time_plan.py"},
-                        {"saved_scoring.py", "quantity_contract.py", "domain_selection.py", "group_time_plan.py"}, {"quantity_contract.py", "domain_selection.py", "group_time_plan.py"}, {"domain_selection.py", "group_time_plan.py"}, {"group_time_plan.py"}, set()):
+        for omitted in ({"baselines.py", "kernel.py", "binary/saved_evaluation.py", "saved_scoring.py", "quantity_contract.py", "domain_selection.py", "group_time_plan.py", "group_time_json.py"},
+                        {"kernel.py", "binary/saved_evaluation.py", "saved_scoring.py", "quantity_contract.py", "domain_selection.py", "group_time_plan.py", "group_time_json.py"},
+                        {"binary/saved_evaluation.py", "saved_scoring.py", "quantity_contract.py", "domain_selection.py", "group_time_plan.py", "group_time_json.py"},
+                        {"saved_scoring.py", "quantity_contract.py", "domain_selection.py", "group_time_plan.py", "group_time_json.py"},
+                        {"quantity_contract.py", "domain_selection.py", "group_time_plan.py", "group_time_json.py"},
+                        {"domain_selection.py", "group_time_plan.py", "group_time_json.py"},
+                        {"group_time_plan.py", "group_time_json.py"}, {"group_time_json.py"}, set()):
             names = [name for name in source.SOURCE_FILES
                      if name not in omitted]
             files = {name: hashlib.sha256(("invented source: " + name).encode()).hexdigest()
@@ -202,7 +206,7 @@ class SourceFallbackAndRenderingTests(unittest.TestCase):
             canonical = json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
             descriptors.append({**body, "status": "available",
                                 "sha256": hashlib.sha256(canonical).hexdigest()})
-        self.assertEqual([len(item["files"]) for item in descriptors[1:]], [28, 29, 30, 31, 32, 33, 34, 35])
+        self.assertEqual([len(item["files"]) for item in descriptors[1:]], [28, 29, 30, 31, 32, 33, 34, 35, 36])
         with tempfile.TemporaryDirectory() as temp, patch.object(source, "observe_package_source", side_effect=AssertionError("saved verification must not recapture installed source")):
             for version in ("1.0", "1.1", "1.2"):
                 for index, descriptor in enumerate(descriptors):
@@ -300,7 +304,7 @@ class ResultSourceMetadataTests(unittest.TestCase):
                                 saved.manifest.pop("package_source", None)
                             else:
                                 files = {name: hashlib.sha256(("invented legacy source: " + name).encode()).hexdigest()
-                                         for name in source.SOURCE_FILES if name not in {"baselines.py", "kernel.py", "binary/saved_evaluation.py", "saved_scoring.py", "quantity_contract.py", "domain_selection.py", "group_time_plan.py"}}
+                                         for name in source.SOURCE_FILES if name not in {"baselines.py", "kernel.py", "binary/saved_evaluation.py", "saved_scoring.py", "quantity_contract.py", "domain_selection.py", "group_time_plan.py", "group_time_json.py"}}
                                 self.assertEqual(len(files), 28)
                                 body = {"schema_version": "1.0", "algorithm": "sha256",
                                         "scope": "fixed_groupbench_python_sources_v1", "files": files}

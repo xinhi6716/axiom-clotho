@@ -296,8 +296,17 @@ or FET configuration schemas.
 
 ### Metadata-only whole-group time windows
 
-Current source provides a standalone no-fit Python planner for predeclared
-forward windows, with whole-group train/test/unused memberships and partial
-test coverage. Timing declarations do not prove causality or enforce downstream
-feature exclusion or preprocessing. It is not a CLI or temporal-ML benchmark
-route. See the [contract and invented example](docs/GROUP_FORWARD_WINDOW_PLAN.md).
+Current source provides a standalone no-fit Python planner and strict JSON CLI
+for predeclared forward windows, with whole-group train/test/unused memberships
+and partial test coverage. Print the tiny invented metadata plan to stdout:
+
+```bash
+mlcalc plan-group-forward-windows examples/group_forward_window_metadata.json
+```
+
+The `groupbench` alias and `clotho tabular plan-group-forward-windows` expose the
+same command. There is no output-file option, fitting or scoring. Timing
+declarations do not prove causality or enforce downstream feature exclusion or
+preprocessing. Output retains supplied identities and timing metadata; review it
+before sharing. This is not a temporal-ML benchmark or part of the frozen b7
+download. See the [strict contract, resource limits and Python API](docs/GROUP_FORWARD_WINDOW_PLAN.md).

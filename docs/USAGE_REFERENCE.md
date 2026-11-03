@@ -226,6 +226,30 @@ print(plan["fit_budget"])
 plan = plan_prediction(training, new_rows, target="response", group="batch")
 ```
 
+### Plan whole-group forward windows from metadata
+
+Current source adds a separate metadata-only route, not a regression fit-budget
+plan or the measurement `clotho plan` command:
+
+```bash
+mlcalc plan-group-forward-windows examples/group_forward_window_metadata.json
+```
+
+The `groupbench` alias and `clotho tabular plan-group-forward-windows` use the
+same strict JSON input and stdout-only output. The command reads no features or
+targets, performs zero fits and produces no scores or predictions. Every field,
+including clock/unit labels and gap, must be explicit. Integer and string group
+identities remain distinct; downstream JSON readers must preserve signed-64
+integers exactly. The separately versioned output records memberships,
+exclusions and intentional partial test coverage, with supplied identities and
+timing metadata retained. Review it before sharing.
+
+No `--out`, `--output` or `--overwrite` mode is available. Shell redirection can
+truncate a destination before the command starts, including the input; it is
+not protected by the CLI. See the [input/output contracts and bounded resource
+preflight](GROUP_FORWARD_WINDOW_PLAN.md). This is current-source functionality,
+not part of the frozen b7 download or a temporal-ML evaluation guarantee.
+
 ### Predict new rows
 
 First evaluate the procedure with `run`. Then supply a second CSV containing **exactly the feature columns**, without target or group columns:
