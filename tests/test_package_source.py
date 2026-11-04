@@ -62,6 +62,7 @@ HISTORICAL_SOURCE_ADDITIONS = (
     'group_time_plan.py',
     'group_time_json.py',
     'group_time_evaluation.py',
+    'group_time_saved.py',
 )
 HISTORICAL_SOURCE_INVENTORIES = {
     28 + count: tuple(sorted(LEGACY_SOURCE_FILES_28 + HISTORICAL_SOURCE_ADDITIONS[:count]))
@@ -96,7 +97,8 @@ class PackageSourceTests(unittest.TestCase):
         installed = Path(source.__file__).parent
         self.assertEqual(tuple(sorted(source.SOURCE_FILES)), source.SOURCE_FILES)
         self.assertEqual(set(source.SOURCE_FILES), {p.relative_to(installed).as_posix() for p in installed.rglob("*.py")})
-        self.assertEqual(len(set(source.SOURCE_FILES)), 38)
+        self.assertEqual(len(set(source.SOURCE_FILES)), 39)
+        self.assertIn("process_contract.py", source.SOURCE_FILES)
         self.assertIn("baselines.py", source.SOURCE_FILES)
         self.assertIn("kernel.py", source.SOURCE_FILES)
         self.assertIn("binary/saved_evaluation.py", source.SOURCE_FILES)
@@ -236,20 +238,20 @@ class PackageSourceTests(unittest.TestCase):
 
 class SourceFallbackAndRenderingTests(unittest.TestCase):
     def test_historical_inventory_memberships_are_pinned(self):
-        self.assertEqual(tuple(HISTORICAL_SOURCE_INVENTORIES), tuple(range(28, 38)))
+        self.assertEqual(tuple(HISTORICAL_SOURCE_INVENTORIES), tuple(range(28, 39)))
         previous = set(LEGACY_SOURCE_FILES_28)
         self.assertEqual(len(previous), 28)
         for count, names in HISTORICAL_SOURCE_INVENTORIES.items():
             with self.subTest(inventory=count):
                 self.assertEqual(len(names), count)
                 self.assertEqual(names, tuple(sorted(set(names))))
-                self.assertNotIn("group_time_saved.py", names)
+                self.assertNotIn("process_contract.py", names)
                 self.assertEqual(set(names), previous)
-            if count < 37:
+            if count < 38:
                 previous.add(HISTORICAL_SOURCE_ADDITIONS[count - 28])
         self.assertEqual(
             set(source.SOURCE_FILES),
-            set(HISTORICAL_SOURCE_INVENTORIES[37]) | {"group_time_saved.py"},
+            set(HISTORICAL_SOURCE_INVENTORIES[38]) | {"process_contract.py"},
         )
 
     @unittest.skipUnless(source._SAFE_OPEN_SUPPORTED, "Requires POSIX bundle verification")
@@ -267,7 +269,7 @@ class SourceFallbackAndRenderingTests(unittest.TestCase):
             canonical = json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
             descriptors.append({**body, "status": "available",
                                 "sha256": hashlib.sha256(canonical).hexdigest()})
-        self.assertEqual([len(item["files"]) for item in descriptors[1:]], [28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38])
+        self.assertEqual([len(item["files"]) for item in descriptors[1:]], [28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39])
         with tempfile.TemporaryDirectory() as temp, patch.object(source, "observe_package_source", side_effect=AssertionError("saved verification must not recapture installed source")):
             for version in ("1.0", "1.1", "1.2"):
                 for index, descriptor in enumerate(descriptors):

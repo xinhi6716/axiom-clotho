@@ -51,4 +51,10 @@ Both utilities print descriptive JSON. If you redirect it to a file, choose a ne
 
 ## Before using real data
 
+For ALD process records, the [declaration preview](ald-contract-preview/README.md)
+checks temperature roles, average-versus-slope target definitions, explicit
+feature timing, and thickness/cycle arithmetic using invented in-memory cases.
+It uses only the standard library, fits no models, and does not admit data to
+training or verify scientific claims.
+
 Read the selected input contract. Some examples accept only their fixed invented data. Decide the units, physical grouping, feature timing and evaluation split before looking at outcomes. Software checks cannot establish those scientific choices. [Evaluation rules and limits](../docs/USAGE_REFERENCE.md#limits-to-understand-before-trusting-a-result).

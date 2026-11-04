@@ -1555,8 +1555,8 @@ class SeparationSideEffectsAndCompatibilityTests(SavedFixtureTestCase):
                      "write_group_forward_evaluation_bundle", "validate_group_forward_evaluation_bundle"):
             self.assertIs(getattr(groupbench, name), getattr(saved, name))
         self.assertEqual(package_source.SOURCE_FILES, tuple(sorted(package_source.SOURCE_FILES)))
-        self.assertEqual(len(package_source.SOURCE_FILES), 38)
-        self.assertEqual(set(package_source.SOURCE_FILES), set(HISTORIC_37_FILES) | {"group_time_saved.py"})
+        self.assertEqual(len(package_source.SOURCE_FILES), 39)
+        self.assertEqual(set(package_source.SOURCE_FILES), set(HISTORIC_37_FILES) | {"group_time_saved.py", "process_contract.py"})
         self.assertTrue(Path(saved.__file__).resolve().is_relative_to(Path(__file__).resolve().parents[1]))
 
     def test_historic_source_maps_are_retained_without_current_source_observation(self):
