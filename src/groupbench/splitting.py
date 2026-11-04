@@ -15,6 +15,8 @@ class GroupKFold:
 
     Largest groups are assigned first; ties are shuffled using random_state.
     The same row order, group labels, and seed produce the same assignment.
+    Supplied X and y must match the number of group rows. Only lengths are
+    checked: target values and pandas index labels never determine the folds.
     This is not a temporal, stratified, or multi-axis holdout splitter.
     """
 
@@ -30,6 +32,8 @@ class GroupKFold:
         g = validate_groups(groups, len(groups))
         if X is not None and len(X) != len(g):
             raise ValueError("X and groups must contain the same number of rows.")
+        if y is not None and len(y) != len(g):
+            raise ValueError("y and groups must contain the same number of rows.")
         ids, unique = pd.factorize(g, sort=False)
         if len(unique) < self.n_splits:
             raise ValueError(f"Need at least {self.n_splits} distinct groups; found {len(unique)}.")
