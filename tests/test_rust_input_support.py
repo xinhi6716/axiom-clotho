@@ -27,6 +27,34 @@ class RustSupportParityTests(unittest.TestCase):
         self.assertIn("large_inventory", cases)
         self.assertEqual(source.count("#[test]"), len(cases))
 
+    def test_numeric_byte_golden_coverage_is_separate(self):
+        source, cases = self.parity.generated_numeric_byte_tests()
+        self.assertGreaterEqual(len(cases), 24)
+        self.assertEqual(len(set(cases)), len(cases))
+        self.assertEqual(source.count("#[test]"), len(cases))
+        for name in ("bytes_all_missing", "bytes_all_missing_query", "bytes_row_limit",
+                     "bytes_nan_payloads", "bytes_extreme_binary64", "bytes_signed_zero_subnormal",
+                     "bytes_feature_limit", "bytes_random_bits_15"):
+            self.assertIn(name, cases)
+
+    def test_surrogate_literals_fail_clearly_without_narrowing_python(self):
+        import pandas as pd
+        for surrogate in ("\ud800", "\udfff"):
+            frame = pd.DataFrame({surrogate: [surrogate]})
+            validated = self.parity.validate_features(frame)
+            report = self.parity.prediction_input_support(validated, frame)
+            self.assertEqual(report["features"][0]["name"], surrogate)
+            self.assertEqual(report["features"][0]["unseen_category_count"], 0)
+            with self.assertRaisesRegex(ValueError, "Unpaired surrogate"):
+                self.parity._rust_string(surrogate)
+            with self.assertRaisesRegex(ValueError, "Unpaired surrogate"):
+                self.parity._columns(validated)
+            with self.assertRaisesRegex(ValueError, "Unpaired surrogate"):
+                self.parity._expected(report)
+            with self.assertRaisesRegex(ValueError, "Unpaired surrogate"):
+                self.parity._columns(pd.DataFrame({"valid_name": [surrogate]}))
+        self.assertEqual(self.parity._rust_string("𝄞"), '\"𝄞\"')
+
     def test_rust_matches_every_python_report_field(self):
         compiler = os.environ.get("RUSTC") or shutil.which("rustc")
         if not compiler:
@@ -36,6 +64,8 @@ class RustSupportParityTests(unittest.TestCase):
         result = self.parity.check_parity(compiler)
         self.assertEqual(result["status"], "pass")
         self.assertEqual(result["golden_cases"], 43)
+        self.assertEqual(result["numeric_byte_cases"], len(list(self.parity.numeric_byte_cases())))
+        self.assertEqual(result["total_cases"], 43 + result["numeric_byte_cases"])
 
     def test_python_oracle_schema_drift_fails_closed(self):
         _, training, incoming = list(self.parity.golden_cases())[1]

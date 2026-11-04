@@ -181,7 +181,9 @@ Current source additionally offers explicit `nystroem_ridge`, `group_median` and
 
 An experimental [Rust core](docs/RUST_CORE.md) ports source-feature support
 diagnostics with exact Python parity checks. It does not yet fit models or
-replace the Python workflow. No Rust compiler is required to use Clotho.
+replace the Python workflow. No Rust compiler is required for ordinary Clotho use.
+A separate [optional numeric diagnostic](docs/RUST_NATIVE_NUMERIC_SUPPORT.md)
+can be built explicitly; it does not change default planning or prediction.
 
 Version b7 refreshes the Clotho artwork, report presentation and documentation. It retains the b6 check that rejects nonfinite fitted regression ExtraTrees state; workflows, models, splits and metrics are unchanged. [Release notes](docs/RELEASE_NOTES_0.3.0b7.md). Broader domain modules remain on the [roadmap](ROADMAP.md).
 

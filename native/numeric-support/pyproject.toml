@@ -1,0 +1,23 @@
+[build-system]
+requires = ["maturin>=1.9.4,<2"]
+build-backend = "maturin"
+
+[project]
+name = "clotho-numeric-support"
+version = "0.1.0"
+description = "Opt-in numeric source-support diagnostics for Clotho"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+dependencies = ["ml-super-calculator>=0.3.0b7"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Programming Language :: Rust",
+  "Programming Language :: Python :: Implementation :: CPython",
+]
+
+[tool.maturin]
+python-source = "python"
+module-name = "clotho_numeric_support._native"
+include = [{ path = "tests/*.py", format = "sdist" }]

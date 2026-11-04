@@ -11,3 +11,4 @@ runs/
 *.joblib
 .env
 /rust/target/
+/native/numeric-support/target/

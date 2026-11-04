@@ -1,0 +1,165 @@
+{
+  "kind": "synthetic_explicit_numeric_diagnostic",
+  "fits_performed": 0,
+  "warmup_calls_per_backend": 2,
+  "repetitions": 11,
+  "measurement_order": "alternating_python_native_and_native_python",
+  "environment": {
+    "python": "3.12.14",
+    "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+    "numpy": "2.3.5",
+    "pandas": "2.2.3",
+    "optional_package": "0.1.0",
+    "thread_settings": {
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1"
+    }
+  },
+  "sha256": {
+    "benchmark": "ccf0f3465c92ccffb7ac5c5fce52152f91f35844fed99991aebf8a8b5ef12c3b",
+    "python_diagnostic": "3de84cba23e81db713e10d6c3ea61be168bb68f07d047fcf0b947ff35b1a8a3d",
+    "optional_wrapper": "4d56996a1e4a8a8a977b47ba06c8951279fdec5f5da0cd74104c351ea7dcbbf4",
+    "native_binary": "f3451713699fb2a3a8ac20e0eef04bc9f40868bcbb636364a3cba56672915bf7"
+  },
+  "cases": [
+    {
+      "name": "small",
+      "training_rows": 288,
+      "prediction_rows": 32,
+      "numeric_features": 12,
+      "python": {
+        "median_ms": 4.537241,
+        "min_ms": 4.322354,
+        "max_ms": 6.410322,
+        "samples_ms": [
+          5.041886,
+          4.513379,
+          4.464075,
+          5.958028,
+          4.537241,
+          4.478823,
+          5.883973,
+          6.410322,
+          5.576989,
+          4.322354,
+          4.393867
+        ]
+      },
+      "native": {
+        "median_ms": 2.979227,
+        "min_ms": 2.414282,
+        "max_ms": 4.637147,
+        "samples_ms": [
+          2.701113,
+          4.637147,
+          3.575011,
+          2.979227,
+          2.414282,
+          2.56052,
+          3.191388,
+          3.488362,
+          3.000116,
+          2.757018,
+          2.439443
+        ]
+      },
+      "all_report_fields_exact": true,
+      "inputs_unchanged": true
+    },
+    {
+      "name": "large",
+      "training_rows": 20000,
+      "prediction_rows": 2000,
+      "numeric_features": 100,
+      "python": {
+        "median_ms": 66.035221,
+        "min_ms": 59.443782,
+        "max_ms": 85.075705,
+        "samples_ms": [
+          67.484061,
+          66.035221,
+          60.723985,
+          61.07274,
+          70.254933,
+          61.596699,
+          64.900443,
+          59.443782,
+          69.810169,
+          85.075705,
+          67.355787
+        ]
+      },
+      "native": {
+        "median_ms": 31.307981,
+        "min_ms": 30.602828,
+        "max_ms": 37.363385,
+        "samples_ms": [
+          31.788547,
+          31.207771,
+          30.602828,
+          31.088567,
+          31.206757,
+          30.922917,
+          37.363385,
+          35.571012,
+          35.879757,
+          31.307981,
+          35.387618
+        ]
+      },
+      "all_report_fields_exact": true,
+      "inputs_unchanged": true
+    },
+    {
+      "name": "bounded-max",
+      "training_rows": 20000,
+      "prediction_rows": 20000,
+      "numeric_features": 100,
+      "python": {
+        "median_ms": 89.158156,
+        "min_ms": 81.560765,
+        "max_ms": 117.552391,
+        "samples_ms": [
+          91.204822,
+          84.540441,
+          89.23825,
+          88.189311,
+          105.895377,
+          92.936609,
+          84.293077,
+          82.730496,
+          81.560765,
+          117.552391,
+          89.158156
+        ]
+      },
+      "native": {
+        "median_ms": 61.243283,
+        "min_ms": 54.429546,
+        "max_ms": 72.845546,
+        "samples_ms": [
+          61.743396,
+          55.712271,
+          61.699993,
+          65.434958,
+          72.845546,
+          54.804257,
+          56.391823,
+          63.432459,
+          54.429546,
+          61.243283,
+          55.938766
+        ]
+      },
+      "all_report_fields_exact": true,
+      "inputs_unchanged": true
+    }
+  ],
+  "limitations": [
+    "Warm synthetic host-specific timings, not model accuracy or model-training speed.",
+    "The existing planning and prediction routes do not select this backend.",
+    "Costs include raw query validation, immutable snapshots and report construction.",
+    "Native import and source-build time are excluded; timing varies with host load."
+  ]
+}

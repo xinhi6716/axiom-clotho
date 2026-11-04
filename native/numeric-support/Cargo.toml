@@ -1,0 +1,19 @@
+[package]
+name = "clotho-numeric-support"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+license = "MIT"
+description = "Explicit optional numeric source-support adapter for Clotho"
+publish = false
+
+[lib]
+name = "_native"
+crate-type = ["cdylib"]
+
+# Separate resolution/lockfile; the core workspace remains dependency-free.
+[workspace]
+
+[dependencies]
+clotho-core = { path = "../../rust/clotho-core" }
+pyo3 = { version = "=0.30.1", features = ["extension-module"] }

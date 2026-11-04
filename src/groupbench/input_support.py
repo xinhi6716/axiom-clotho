@@ -8,6 +8,11 @@ import pandas as pd
 from .data import validate_prediction_features, _align_normalized_prediction_features
 
 
+# Explicit handshake for the separate optional numeric-only extension package.
+# Defining the contract does not import, build, or select a native backend.
+NUMERIC_SUPPORT_PROTOCOL = "numeric-source-support-v1"
+
+
 def prediction_input_support(training: pd.DataFrame, new_rows: pd.DataFrame) -> dict:
     """Compare new rows with validated, normalized training features only.
 

@@ -20,3 +20,14 @@ recursive-include rust/clotho-core/tests *.rs
 # Read-only synthetic preflight timing; included for reproducible source checks.
 include benchmarks/prediction_preflight.py
 include benchmarks/prediction_preflight/reference/timings.json
+
+# Optional native package sources, without compiler output or binary modules.
+include native/numeric-support/Cargo.toml native/numeric-support/Cargo.lock
+include native/numeric-support/pyproject.toml native/numeric-support/README.md native/numeric-support/LICENSE
+recursive-include native/numeric-support/src *.rs
+recursive-include native/numeric-support/python *.py
+recursive-include native/numeric-support/tests *.py
+
+# Explicit optional numeric-backend benchmark and host-specific reference.
+include benchmarks/native_numeric_support.py
+include benchmarks/native_numeric_support/reference/timings.json
