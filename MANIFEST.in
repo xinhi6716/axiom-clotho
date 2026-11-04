@@ -31,3 +31,6 @@ recursive-include native/numeric-support/tests *.py
 # Explicit optional numeric-backend benchmark and host-specific reference.
 include benchmarks/native_numeric_support.py
 include benchmarks/native_numeric_support/reference/timings.json
+
+# Paired synthetic public regression-workflow timing, with no file writes.
+include benchmarks/grouped_metric_positions.py

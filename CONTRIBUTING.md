@@ -28,6 +28,12 @@ For a read-only synthetic prediction-preflight timing check, run
 It fits no models and writes no files. See the [validation contract and measured
 scope](docs/PREDICTION_PREFLIGHT_VALIDATION.md) before interpreting the timings.
 
+To compare grouped regression scoring inside the public prediction workflow,
+run `PYTHONPATH=src python benchmarks/grouped_metric_positions.py --case all --repeats 9`.
+This separate benchmark **fits synthetic dummy/ridge models** and prints paired
+timings, exact-result checks and raw samples. Read its [scope, thread settings
+and fallback conditions](docs/GROUPED_METRIC_POSITIONS.md); it is not a timing gate.
+
 ### Keep source and download documentation separate
 
 Before changing version guidance, run this standard-library-only, read-only check:

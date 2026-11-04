@@ -1,7 +1,7 @@
 """No-fit parity with the prior mask-per-group algorithm, not timing gates."""
 import json
 import unittest
-from unittest.mock import patch
+from unittest.mock import PropertyMock, patch
 
 import numpy as np
 import pandas as pd
@@ -89,6 +89,20 @@ class GroupedMetricPositionTests(unittest.TestCase):
             grouped_metrics([1, 2, 3], [3, 2, 1], ['b', 'a', 'b'])
         self.assertEqual(calls, [([1., 3.], [3., 1.]), ([2.], [2.]),
                                  ([1., 2., 3.], [3., 2., 1.])])
+
+    def test_memberships_do_not_materialize_labeled_group_indexes(self):
+        groupby_type = type(pd.Series([0, 1]).groupby(['b', 'a'], sort=False))
+        with patch.object(groupby_type, 'groups', new_callable=PropertyMock,
+                          side_effect=AssertionError('Unnecessary labeled group indexes')) as labeled:
+            self.assertParity([1., 2., 3.], [3., 2., 1.], ['b', 'a', 'b'])
+            labeled.assert_not_called()
+
+    def test_many_interleaved_groups_preserve_all_rows_and_exact_scores(self):
+        rng = np.random.default_rng(619)
+        for rows, count in ((2000, 500), (2000, 2000)):
+            y, pred = rng.normal(size=rows), rng.normal(size=rows)
+            groups = np.array([f'group-{i % count}' for i in rng.permutation(rows)], dtype=object)
+            self.assertParity(y, pred, groups)
 
 
 if __name__ == '__main__':
