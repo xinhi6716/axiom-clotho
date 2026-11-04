@@ -23,6 +23,11 @@ and `PYTHONPATH=src python tools/check_rust_parity.py`. Set
 `CLOTHO_REQUIRE_RUST=1` for the complete Python suite to require, rather than
 skip, cross-language parity. See [scope and verification](docs/RUST_CORE.md).
 
+For a read-only synthetic prediction-preflight timing check, run
+`PYTHONPATH=src python benchmarks/prediction_preflight.py --case all --repeats 9`.
+It fits no models and writes no files. See the [validation contract and measured
+scope](docs/PREDICTION_PREFLIGHT_VALIDATION.md) before interpreting the timings.
+
 ### Keep source and download documentation separate
 
 Before changing version guidance, run this standard-library-only, read-only check:

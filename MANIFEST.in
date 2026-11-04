@@ -16,3 +16,7 @@ include tools/check_rust_parity.py
 include rust/Cargo.toml rust/Cargo.lock rust/clotho-core/Cargo.toml
 recursive-include rust/clotho-core/src *.rs
 recursive-include rust/clotho-core/tests *.rs
+
+# Read-only synthetic preflight timing; included for reproducible source checks.
+include benchmarks/prediction_preflight.py
+include benchmarks/prediction_preflight/reference/timings.json

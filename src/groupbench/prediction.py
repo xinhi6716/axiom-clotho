@@ -19,9 +19,10 @@ from .data import validate_source_sha256
 from .package_source import observe_package_source
 from .categorical import LEGACY, DISTINCT, encoding_options, preprocessing_description
 from .data import (_prediction_column_details, data_fingerprint, duplicate_diagnostics, prepare_data,
-                   validate_features, validate_prediction_features)
+                   validate_features, validate_prediction_features, _align_normalized_prediction_features)
 from .model import GroupBenchRegressor, selection_plan, optional_capabilities
 from .input_support import prediction_input_support
+from .input_support import _prediction_input_support_normalized
 
 
 @dataclass
@@ -60,7 +61,7 @@ def _prepare_prediction(frame, new_rows, *, target, group, features, inner_split
                          + _prediction_column_details(incoming.columns, X.columns))
     # No imputation/encoding is fitted; match the estimator's prediction type
     # rules, including its all-missing-column accommodation, before training.
-    validate_prediction_features(incoming, X.columns, [str(X[c].dtype) for c in X])
+    _align_normalized_prediction_features(incoming, X.columns, [str(X[c].dtype) for c in X])
     plan = selection_plan(X, groups, baselines=baselines, inner_splits=inner_splits,
                           random_state=random_state, objective=objective, categorical_encoding=categorical_encoding, inner_strategy=inner_strategy, domains=domains)
     return X, y, groups, incoming, plan
@@ -103,7 +104,7 @@ def fit_predict(frame: pd.DataFrame, new_rows: pd.DataFrame, *, target: str, gro
         "selected_candidate": estimator.best_candidate_, "selected_family": estimator.best_family_,
         "inner_selection": estimator.selection_results_, "inner_folds": estimator.inner_audit_,
         "data_diagnostics": duplicate_diagnostics(X, y, groups),
-        "input_support": prediction_input_support(X, incoming),
+        "input_support": _prediction_input_support_normalized(X, incoming),
         "environment": {"python": platform.python_version(), "numpy": np.__version__, "pandas": pd.__version__, "scikit_learn": sklearn.__version__},
         "limitations": [
             "These are new-row predictions from a full-data refit, not held-out evaluation metrics.",

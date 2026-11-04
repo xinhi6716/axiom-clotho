@@ -154,7 +154,7 @@ class PredictionSupportIntegrationTests(unittest.TestCase):
         actual_calls = calls.copy()
         calls.clear()
         with patch("groupbench.model.make_pipeline", side_effect=factory), patch(
-            "groupbench.prediction.prediction_input_support", return_value={"not_computed": True}):
+            "groupbench.prediction._prediction_input_support_normalized", return_value={"not_computed": True}):
             without_diagnostics = fit_predict(self.training, self.new, **self.options)
         self.assertEqual(actual_calls, calls)
         self.assertEqual(len(calls), 15)  # 6 candidates * 2 folds + 3 family refits.

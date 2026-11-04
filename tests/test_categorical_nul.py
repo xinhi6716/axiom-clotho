@@ -83,8 +83,8 @@ class CategoricalNULTests(unittest.TestCase):
                      (plan_binary_benchmark, False), (benchmark_binary, False),
                      (plan_binary_prediction, True), (fit_predict_binary, True))
         blocked = ("groupbench.model.make_pipeline", "groupbench.binary.model.binary_pipeline",
-                   "groupbench.splitting.pd.factorize", "groupbench.prediction.prediction_input_support",
-                   "groupbench.planning.prediction_input_support", "groupbench.binary.workflow.prediction_input_support",
+                   "groupbench.splitting.pd.factorize", "groupbench.prediction._prediction_input_support_normalized",
+                   "groupbench.planning._prediction_input_support_normalized", "groupbench.binary.workflow.prediction_input_support",
                    "groupbench.prediction.data_fingerprint", "groupbench.evaluation.data_fingerprint",
                    "groupbench.binary.workflow.data_fingerprint", "groupbench.report.write_payloads")
         for encoding in ("legacy-v1", "distinct-v2"):

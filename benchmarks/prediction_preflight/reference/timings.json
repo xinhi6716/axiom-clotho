@@ -1,0 +1,145 @@
+{
+  "scope": "One-host synthetic warm no-fit prediction planning; not model-training or predictive-performance evidence.",
+  "base_commit": "7edaaabf0da95ac938cb7daf59a1ca6bede48544",
+  "environment": {
+    "python": "3.12.14",
+    "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+    "numpy": "2.3.5",
+    "pandas": "2.2.3",
+    "scikit_learn": "1.8.0",
+    "thread_settings": {
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1"
+    }
+  },
+  "warmup_calls": 2,
+  "repetitions": 9,
+  "execution_order": "base then candidate, separate processes",
+  "source_observations": {
+    "base": "a2eb036185441b4b2cdbaf49a662df06240463250f4d49a984a1c5ac1c553fbf",
+    "candidate": "482cdeb4bba2c3a18cb47b8d34c8b7b45f8b18fad35626cc620efdbdc1327fe4"
+  },
+  "cases": [
+    {
+      "name": "small",
+      "training_rows": 288,
+      "prediction_rows": 32,
+      "features": 12,
+      "categorical_features": 4,
+      "base_plan": {
+        "median_ms": 14.202246,
+        "min_ms": 12.522814,
+        "max_ms": 15.925299,
+        "samples_ms": [
+          14.662372,
+          15.925299,
+          14.758153,
+          13.060929,
+          14.119702,
+          14.202246,
+          14.859565,
+          12.522814,
+          13.835483
+        ]
+      },
+      "candidate_plan": {
+        "median_ms": 9.778401,
+        "min_ms": 9.029525,
+        "max_ms": 11.341387,
+        "samples_ms": [
+          9.250318,
+          10.704718,
+          9.778401,
+          9.726349,
+          9.029525,
+          9.812406,
+          9.660184,
+          10.30573,
+          11.341387
+        ]
+      },
+      "diagnostics_and_fit_budget_exactly_equal": true
+    },
+    {
+      "name": "large",
+      "training_rows": 20000,
+      "prediction_rows": 2000,
+      "features": 32,
+      "categorical_features": 8,
+      "base_plan": {
+        "median_ms": 160.220588,
+        "min_ms": 157.49758,
+        "max_ms": 173.884,
+        "samples_ms": [
+          160.220588,
+          165.149419,
+          161.269048,
+          157.49758,
+          163.334677,
+          157.50629,
+          159.109145,
+          158.36529,
+          173.884
+        ]
+      },
+      "candidate_plan": {
+        "median_ms": 139.864828,
+        "min_ms": 131.675882,
+        "max_ms": 145.537118,
+        "samples_ms": [
+          132.097299,
+          145.537118,
+          140.530697,
+          139.864828,
+          141.297298,
+          141.470764,
+          137.987305,
+          131.984061,
+          131.675882
+        ]
+      },
+      "diagnostics_and_fit_budget_exactly_equal": true
+    },
+    {
+      "name": "bounded-max",
+      "training_rows": 20000,
+      "prediction_rows": 20000,
+      "features": 100,
+      "categorical_features": 20,
+      "base_plan": {
+        "median_ms": 785.898723,
+        "min_ms": 768.03107,
+        "max_ms": 809.986688,
+        "samples_ms": [
+          777.062242,
+          775.158501,
+          791.577042,
+          768.03107,
+          803.60789,
+          772.163115,
+          785.898723,
+          789.946558,
+          809.986688
+        ]
+      },
+      "candidate_plan": {
+        "median_ms": 473.125016,
+        "min_ms": 468.653903,
+        "max_ms": 515.639101,
+        "samples_ms": [
+          483.418916,
+          468.653903,
+          470.475302,
+          469.346112,
+          473.125016,
+          515.639101,
+          480.934451,
+          472.119561,
+          488.246142
+        ]
+      },
+      "diagnostics_and_fit_budget_exactly_equal": true
+    }
+  ]
+}

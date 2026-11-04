@@ -113,7 +113,18 @@ def _prediction_column_details(actual, expected):
 
 def validate_prediction_features(X, feature_names, feature_types):
     """Use the same stateless schema/type checks before planning and inference."""
-    X = validate_features(X)
+    return _align_normalized_prediction_features(validate_features(X), feature_names, feature_types)
+
+
+def _align_normalized_prediction_features(X, feature_names, feature_types):
+    """Align an internal normalized copy without repeating raw-value validation.
+
+    Only call with the unchanged result of ``validate_features``. This is not
+    a public admission boundary: raw dtype/precision, infinity and category
+    checks must already have run. Column selection creates a separate frame,
+    so all-missing type accommodation never changes the normalized input used
+    for historical prediction fingerprints.
+    """
     if set(X.columns) != set(feature_names):
         raise ValueError("Prediction columns must exactly match training feature names. "
                          + _prediction_column_details(X.columns, feature_names))

@@ -11,6 +11,7 @@ from .categorical import LEGACY, DISTINCT, encoding_options
 from .evaluation import _prepare_benchmark
 from .prediction import _prepare_prediction
 from .input_support import prediction_input_support
+from .input_support import _prediction_input_support_normalized
 from .splitting import audit_split
 from .model import optional_capabilities
 
@@ -128,7 +129,7 @@ def plan_prediction(frame: pd.DataFrame, new_rows: pd.DataFrame, *, target: str,
     result = _base_report(X, groups, plan, mode="predict", target=target,
                           group=group, source_sha256=source_sha256)
     result["schema_version"] = "1.1"
-    result["input_support"] = prediction_input_support(X, incoming)
+    result["input_support"] = _prediction_input_support_normalized(X, incoming)
     result["limitations"].append(
         "Input-support flags describe individual source features only, not uncertainty, calibration, multivariate support or prediction reliability; no flags is not evidence of safety.")
     result["config"]["random_state"] = plan.seed

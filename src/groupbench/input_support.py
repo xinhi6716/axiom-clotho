@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from .data import validate_prediction_features
+from .data import validate_prediction_features, _align_normalized_prediction_features
 
 
 def prediction_input_support(training: pd.DataFrame, new_rows: pd.DataFrame) -> dict:
@@ -22,6 +22,22 @@ def prediction_input_support(training: pd.DataFrame, new_rows: pd.DataFrame) -> 
     """
     incoming = validate_prediction_features(
         new_rows, training.columns, [str(training[c].dtype) for c in training])
+    return _input_support_aligned(training, incoming)
+
+
+def _prediction_input_support_normalized(training, new_rows):
+    """Internal fast path for unchanged ``validate_features`` output only.
+
+    Public diagnostics always validate raw inputs above. Planning and inference
+    already own normalized copies; repeat only schema/type alignment here.
+    """
+    incoming = _align_normalized_prediction_features(
+        new_rows, training.columns, [str(training[c].dtype) for c in training])
+    return _input_support_aligned(training, incoming)
+
+
+def _input_support_aligned(training, incoming):
+    """Count support against normalized training and aligned prediction copies."""
     flags = {name: np.zeros(len(incoming), dtype=bool) for name in (
         "missing_value", "numeric_outside_training_range", "unseen_category",
         "non_missing_value_in_all_missing_training_feature")}
