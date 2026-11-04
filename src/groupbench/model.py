@@ -239,7 +239,9 @@ class GroupBenchRegressor(RegressorMixin, BaseEstimator):
         if isinstance(domains, pd.Series) and not domains.index.equals(X.index):
             raise ValueError("Domain Series index must exactly align with X.")
         if domains is not None:
-            domains = np.asarray(domains) if not np.ma.isMaskedArray(domains) else domains
+            # Preserve scalar types until the exact-string domain check. NumPy
+            # inference can silently stringify mixed text/numeric/bytes labels.
+            domains = np.asarray(domains, dtype=object) if not np.ma.isMaskedArray(domains) else domains
         X = validate_features(X)
         if (isinstance(self.baselines, Sequence) and not isinstance(self.baselines, (str, bytes))
                 and "group_balanced_ridge" in self.baselines):

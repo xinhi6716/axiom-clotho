@@ -27,6 +27,14 @@ control characters. Every dependency group must belong to one domain, and every
 training partition must retain at least two domains. The domain column must differ
 from target/group. Invalid metadata is rejected before fitting.
 
+The direct `GroupBenchRegressor.fit(..., domains=...)` API uses the same
+exact-string rule. Python sequences that mix text with numbers, booleans or
+bytes are rejected rather than converted into labels or merged with existing
+text domains. Supply explicitly reviewed string labels. If the caller already
+converted mixed values into a NumPy string array, their original types cannot
+be recovered. Aligned pandas Series, string arrays and ordinary string lists
+retain their exact labels and existing domain splits.
+
 Default group selection still uses three inner folds and unchanged output schemas.
 Opt-in evaluation uses schema 1.3; prediction uses 1.4. No-fit plans omit raw group
 and domain labels, but saved fitted bundles include group/domain metadata. Review
