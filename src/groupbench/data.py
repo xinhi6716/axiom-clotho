@@ -265,6 +265,11 @@ def prepare_data(frame: pd.DataFrame, target: str, group: str, features=None):
         raise ValueError("The target and grouping column cannot be input features.")
     if len(names) != len(set(names)) or any(c not in frame for c in names):
         raise ValueError("features must be unique existing column names.")
+    # Frame-based workflows emit feature names in saved bundle metadata. Keep
+    # admission compatible with that reader before any fitting or writing;
+    # standalone diagnostics and in-memory estimators have no bundle contract.
+    if any(isinstance(c, str) and (not c or "\x00" in c) for c in names):
+        raise ValueError("Selected feature names must be nonempty strings without NUL (U+0000) characters; explicitly rename the source columns before use.")
     X = validate_features(frame[names])
     y = validate_target(frame[target], len(X))
     groups = validate_groups(frame[group], len(X))
