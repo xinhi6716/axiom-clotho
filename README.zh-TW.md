@@ -173,6 +173,8 @@ manifest、校驗碼與驗證方式見[報告指南](docs/USAGE_REFERENCE.md#out
 
 目前原始碼另提供明確選用的 `nystroem_ridge` 與 `group_median` 迴歸比較器，保留各訓練切分內的擬合與擬合資訊；預設模型不變。這些新增功能不在已凍結的 b7 下載檔內。[選用模型、擬合次數與讀取相容性](docs/OPTIONAL_REGRESSION_FAMILIES.md)。
 
+實驗性的 [Rust 核心](docs/RUST_CORE.md) 先移植輸入特徵支援範圍診斷，並以 Python 結果逐欄精確比對。它尚未執行模型擬合，也未取代 Python 工作流程；使用 Clotho 不需要 Rust 編譯器。
+
 b7 更新 Clotho 圖像、報告呈現與文件；保留 b6 拒絕已擬合迴歸 ExtraTrees 中非有限數值的檢查。既有流程、模型、切分與指標維持不變。[版本說明](docs/RELEASE_NOTES_0.3.0b7.md)。更多領域模組仍屬[規劃工作](ROADMAP.md)。
 
 ## 下一步

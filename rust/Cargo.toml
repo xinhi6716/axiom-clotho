@@ -1,0 +1,3 @@
+[workspace]
+members = ["clotho-core"]
+resolver = "2"

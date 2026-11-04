@@ -179,6 +179,10 @@ See the [report guide](docs/USAGE_REFERENCE.md#outputs) for manifests, checksums
 
 Current source additionally offers explicit `nystroem_ridge`, `group_median` and `group_balanced_ridge` regression comparators with fold-local fitting and recorded fit details; defaults stay unchanged. Group-balanced Ridge weights only the final squared-loss estimator, not preprocessing, and makes no group-MAE improvement guarantee. These additions are not in frozen b7 downloads. [Optional families, budgets and reader compatibility](docs/OPTIONAL_REGRESSION_FAMILIES.md).
 
+An experimental [Rust core](docs/RUST_CORE.md) ports source-feature support
+diagnostics with exact Python parity checks. It does not yet fit models or
+replace the Python workflow. No Rust compiler is required to use Clotho.
+
 Version b7 refreshes the Clotho artwork, report presentation and documentation. It retains the b6 check that rejects nonfinite fitted regression ExtraTrees state; workflows, models, splits and metrics are unchanged. [Release notes](docs/RELEASE_NOTES_0.3.0b7.md). Broader domain modules remain on the [roadmap](ROADMAP.md).
 
 ## Find your next step

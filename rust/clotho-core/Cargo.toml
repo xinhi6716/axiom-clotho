@@ -1,0 +1,10 @@
+[package]
+name = "clotho-core"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.70"
+license = "MIT"
+description = "Opt-in, dependency-free source-feature diagnostics for Clotho"
+publish = false
+
+[dependencies]

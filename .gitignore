@@ -10,3 +10,4 @@ runs/
 *.pkl
 *.joblib
 .env
+/rust/target/

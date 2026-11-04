@@ -10,3 +10,9 @@ include examples/numeric-unit-equivalence/reference/SHA256SUMS
 
 # Offline maintainer version-table check, also used by its source tests.
 include tools/check_doc_versions.py tools/doc_version_contract.json
+
+# Optional Rust source and its no-download parity check; never include target/.
+include tools/check_rust_parity.py
+include rust/Cargo.toml rust/Cargo.lock rust/clotho-core/Cargo.toml
+recursive-include rust/clotho-core/src *.rs
+recursive-include rust/clotho-core/tests *.rs

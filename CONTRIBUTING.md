@@ -14,6 +14,15 @@ mlcalc demo --out runs/contribution-check
 
 With dependencies already installed, use `PYTHONPATH=src` instead of installing. Do not add runtime network calls or install/download model weights during tests.
 
+### Check the optional Rust core
+
+The first Rust migration slice is a dependency-free source-feature diagnostic;
+it does not replace Python fitting or prediction. With a Rust toolchain already
+installed, run `cargo test --manifest-path rust/Cargo.toml --offline --locked`
+and `PYTHONPATH=src python tools/check_rust_parity.py`. Set
+`CLOTHO_REQUIRE_RUST=1` for the complete Python suite to require, rather than
+skip, cross-language parity. See [scope and verification](docs/RUST_CORE.md).
+
 ### Keep source and download documentation separate
 
 Before changing version guidance, run this standard-library-only, read-only check:
