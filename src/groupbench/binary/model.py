@@ -108,6 +108,9 @@ def binary_pipeline(X, candidate, seed, categorical_encoding=LEGACY):
 
 
 def _fit_pipeline(X, y, candidate, seed, context, categorical_encoding=LEGACY):
+    # Import only on execution: no-fit binary plans need no regression model.
+    from ..model import _validate_fitted_numeric_state
+
     pipeline = binary_pipeline(X, candidate, seed, **encoding_options(categorical_encoding))
     try:
         with warnings.catch_warnings():
@@ -116,6 +119,9 @@ def _fit_pipeline(X, y, candidate, seed, context, categorical_encoding=LEGACY):
             pipeline.fit(X, y)
     except (ConvergenceWarning, RuntimeWarning, ValueError, FloatingPointError) as exc:
         raise ValueError(f"Binary fit failed for {candidate.name} at {context} ({type(exc).__name__}); no candidate is skipped or retried.") from exc
+    # A caller's np.errstate(ignore) can suppress overflow warnings entirely.
+    # Finite probabilities (especially from Dummy) do not certify learned state.
+    _validate_fitted_numeric_state(pipeline)
     return pipeline
 
 

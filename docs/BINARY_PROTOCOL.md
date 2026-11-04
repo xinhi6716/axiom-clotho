@@ -74,6 +74,23 @@ No objective, candidate-grid, class-weight, calibration, or threshold adaptation
 
 ## Metrics and precision
 
+Current source checks learned numeric imputation and scaling state after every
+binary pipeline fit, including inner fits and final family refits. Non-finite
+imputer statistics or scaler mean, variance, or scale abort before probabilities
+from that fit are used or a new fitted state is published. This reuses the
+regression guard and does not depend on NumPy emitting a warning: caller
+`np.errstate(...='ignore')` can suppress floating-point warnings entirely.
+Rescale extreme numeric inputs to practical units rather than treating finite
+Dummy probabilities as proof that preprocessing succeeded. Existing warning and
+nonconvergence failures still abort without candidate fallback. No-fit plans
+remain structural checks and do not certify future fitted state.
+
+The regression is demonstrated with invented finite values of magnitude
+`2**600` (inner-fit overflow) and `2**510` (only final-refit overflow) on the
+tested environment. These are numerical robustness fixtures, not semiconductor
+measurements or evidence that ordinary-range classification results were wrong.
+See [NumPy's floating-point error settings](https://numpy.org/doc/stable/reference/generated/numpy.seterr.html).
+
 The mathematical binary Brier score is `(p1-y)^2` averaged over rows, on [0,1], not the two-column squared-error sum on [0,2]. `group_brier` averages each group's Brier equally. This is the fixed primary; its mathematical propriety is not a claim of empirical calibration, a population sampling design, or exact float64 ranking.
 
 Secondary `log_loss_clipped` uses a metric-only copy `q=clip(p1, eps, 1-eps)`, with float64 epsilon 2.220446049250313e-16. For label 1 use `-log(q)`; for label 0 use `-log1p(-q)`, with natural logarithms. Report pooled, group-balanced and worst-group versions, clipping counts and raw endpoint counts. Clipping ties distinct extreme probabilities, so this finite diagnostic is not claimed strictly proper across the entire raw interval. Raw probabilities are unchanged in the output.
