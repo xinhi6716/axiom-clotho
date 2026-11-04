@@ -43,6 +43,20 @@ class BenchmarkResult:
         return write_report(self, output_dir, overwrite=overwrite)
 
 
+def _evaluation_run_key(fingerprint, config):
+    """Hash the historical canonical config without mutating saved metadata.
+
+    legacy-v1 predates an explicit encoding field. Extended-family and domain
+    manifests later made that default explicit, but their historical keys still
+    omitted it. Keep that recipe for all supported schemas; distinct-v2 remains
+    part of the hash. This is configuration identity, not execution proof.
+    """
+    canonical = dict(config)
+    if canonical.get("categorical_encoding") == LEGACY:
+        canonical.pop("categorical_encoding")
+    return hashlib.sha256((fingerprint + json.dumps(canonical, sort_keys=True)).encode()).hexdigest()
+
+
 def _prepare_benchmark(frame, *, target, group, features, outer_splits,
                        inner_splits, random_state, baselines, objective, categorical_encoding=LEGACY, inner_strategy=GROUP, domain=None):
     """Shared no-fit validation and exact seeded nested schedule."""
@@ -129,8 +143,10 @@ def benchmark(frame: pd.DataFrame, *, target: str, group: str, features=None,
                       inner_splits_per_outer=[len(plan.splits) for _, _, plan in schedule],
                       **domain_metadata(frame[domain].to_numpy(), groups))
     config.update(encoding_options(categorical_encoding))
+    if optional_capabilities(baselines) or inner_strategy == DOMAIN:
+        config["categorical_encoding"] = categorical_encoding
     fingerprint = data_fingerprint(X, y, groups)
-    run_key = hashlib.sha256((fingerprint + json.dumps(config, sort_keys=True)).encode()).hexdigest()
+    run_key = _evaluation_run_key(fingerprint, config)
     diagnostics = duplicate_diagnostics(X, y, groups)
     warnings = [
         "Synthetic examples validate plumbing, not scientific predictive performance.",
@@ -170,13 +186,11 @@ def benchmark(frame: pd.DataFrame, *, target: str, group: str, features=None,
     if optional_capabilities(baselines):
         manifest.update(schema_version="1.2", protocol="nested-group-kfold-extended-families-v1",
                         capabilities=optional_capabilities(baselines))
-        config["categorical_encoding"] = categorical_encoding
         summary.update(schema_version="1.2", protocol=manifest["protocol"],
                        capabilities=optional_capabilities(baselines))
     if inner_strategy == DOMAIN:
         manifest.update(schema_version="1.3", protocol="nested-group-outer-domain-inner-v1",
                         capabilities=optional_capabilities(baselines))
-        config["categorical_encoding"] = categorical_encoding
         summary.update(schema_version="1.3", protocol=manifest["protocol"], capabilities=optional_capabilities(baselines))
     if "group_balanced_ridge" in baselines:
         manifest.update(schema_version="1.4", protocol="nested-group-kfold-extended-families-v2")

@@ -532,6 +532,37 @@ An evaluation run writes five local files:
 
 The run key hashes normalized ordered data and protocol configuration; it is not a cryptographic proof of execution. Versions are separately recorded. Repeated runs with identical input order, configuration, and dependency versions are deterministic in the tested environment. Timestamps and elapsed time naturally differ; bitwise agreement across platforms or dependency versions is not guaranteed.
 
+For regression evaluation schemas 1.0 through 1.4, the hash input is the ASCII
+hexadecimal `data_sha256` immediately followed by Python's
+`json.dumps(canonical_config, sort_keys=True)` text, encoded as UTF-8. Keep that
+serializer's default separators and ASCII escaping. The canonical configuration
+is a copy of the complete saved `config`, with `categorical_encoding` omitted
+only when its value is `"legacy-v1"`. That historical default was implicit before
+extended-family and domain manifests began recording it explicitly. Keep
+`"distinct-v2"` in the hash. Hashing the unmodified saved configuration therefore
+does not reconstruct a legacy-encoding extended-family or domain run key.
+
+To reconstruct the saved configuration identity without fitting:
+
+```python
+import hashlib
+import json
+
+canonical_config = dict(manifest["config"])
+if canonical_config.get("categorical_encoding") == "legacy-v1":
+    canonical_config.pop("categorical_encoding")
+reconstructed_key = hashlib.sha256(
+    (manifest["data_sha256"] + json.dumps(canonical_config, sort_keys=True))
+    .encode("utf-8")
+).hexdigest()
+assert reconstructed_key == manifest["run_key"]
+```
+
+This preserves historical keys and does not rewrite any saved bundle. It checks
+only consistency with the supplied data digest and configuration, not source
+data, execution or scientific validity. The byte verifier and optional evaluation
+consistency reader do not perform this run-key check.
+
 For CLI CSV inputs, `source_file_sha256` and, in prediction mode, `prediction_source_file_sha256` hash the exact byte stream read for validation, including any UTF-8 BOM, original line endings, and ignored blank lines. Each input is opened once and hashed incrementally before decoding; the CLI does not reopen its pathname to compute provenance after parsing. A later file replacement cannot change the recorded hash. This is not a filesystem-atomic snapshot or lock: avoid modifying inputs while they are being read, and note that the training and new-row files are read separately. The DataFrame API's optional source hashes remain caller-supplied provenance, not independently verified file hashes.
 
 Existing files are preserved unless `--overwrite` is explicit. Atomic per-file no-clobber writes protect against a racing writer; the multi-file bundle is not a filesystem transaction. An interrupted final write may leave a partial bundle, which must be checked against `checksums.json`. The CLI refuses to overwrite either input through a direct, symlink, or hardlink output alias. Prediction mode refuses an evaluation output directory even with overwrite enabled, so an old report cannot be mistaken for the new predictions.
