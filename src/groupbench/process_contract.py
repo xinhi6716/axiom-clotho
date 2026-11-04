@@ -1,4 +1,4 @@
-"""Opt-in ALD declaration checks, not scientific validation or ML admission.
+"""Opt-in process declaration checks, not scientific validation or ML admission.
 
 No I/O, fitting, repairs, row dropping, physical inference or source retrieval.
 Only caller-declared roles, identities, availability and bounded exact arithmetic
@@ -17,6 +17,8 @@ MAX_RECORDS = 20_000
 MAX_FEATURES = 100
 MAX_ISSUES = 1_000
 MAX_CYCLES = 1_000_000_000
+MAX_QUARANTINE_SCOPES = 1_000
+MAX_SCOPE_REFERENCES = 20_000
 _ROLES = frozenset({"substrate", "stage", "precursor_vessel", "reactor"})
 _BASES = frozenset({"measured", "setpoint", "reported_unspecified"})
 _METHODS = frozenset({"steady_growth_slope", "total_thickness_div_cycles"})
@@ -267,5 +269,119 @@ def preview_ald_contract(records, *, contract):
             "Exact declared identities do not establish independent samples or detect source aliases.",
             "Arithmetic agreement does not establish steady-state growth, measurement uncertainty or accuracy.",
             "No rows are repaired, dropped, admitted to training, or assigned inferred groups.",
+        ],
+    }
+
+
+@dataclass(frozen=True)
+class ObservationEvidenceKey:
+    """Metadata only; no quantity values or implied specimen identity."""
+
+    source_id: str
+    recipe_group_id: str
+    endpoint_name: str
+
+
+@dataclass(frozen=True)
+class QuarantineScope:
+    """One caller-declared unresolved conflict, not a general source issue.
+
+    The named endpoints apply to every named recipe group in this source.
+    None means the endpoint mapping is unknown, never an empty quarantine.
+    Split nonrectangular scopes into separate declarations.
+    """
+
+    source_id: str
+    recipe_group_ids: tuple[str, ...]
+    endpoint_names: tuple[str, ...] | None
+
+
+def preview_evidence_quarantine(observations, *, unresolved_scopes):
+    """Check whether exact declared quarantined quantities remain in inventory.
+
+    This checks the supplied inventory regardless of downstream ML admission.
+    Scope selection and endpoint mapping are explicit caller decisions. It does
+    not read values, resolve evidence, infer aliases, remove rows, or establish
+    provenance, paired specimens, independent samples or training eligibility.
+    """
+    if type(observations) not in (list, tuple) or len(observations) > MAX_RECORDS:
+        raise ValueError("Observation metadata must be a list or tuple of at most 20,000 rows.")
+    if type(unresolved_scopes) not in (list, tuple) or len(unresolved_scopes) > MAX_QUARANTINE_SCOPES:
+        raise ValueError("Unresolved scopes must be an explicit list or tuple of at most 1,000 declarations.")
+
+    # Validate everything before constructing any report. No arbitrary object,
+    # iterator, mapping, or dataclass subclass can supply inferred identities.
+    missing = object()  # Distinct from an explicitly unknown endpoint mapping.
+    for row in observations:
+        if (type(row) is not ObservationEvidenceKey
+                or not all(_identity(getattr(row, field, missing)) for field in
+                           ("source_id", "recipe_group_id", "endpoint_name"))):
+            raise ValueError("Observation evidence keys require bounded explicit source, recipe group and endpoint identities.")
+    references = 0
+    for scope in unresolved_scopes:
+        if type(scope) is not QuarantineScope or not _identity(getattr(scope, "source_id", missing)):
+            raise ValueError("Each unresolved scope requires a QuarantineScope with an explicit source identity.")
+        for field in ("recipe_group_ids", "endpoint_names"):
+            values = getattr(scope, field, missing)
+            if field == "endpoint_names" and values is None:
+                continue
+            if (type(values) is not tuple or not 1 <= len(values) <= MAX_SCOPE_REFERENCES
+                    or not all(_identity(value) for value in values)):
+                raise ValueError("Scope members must be nonempty bounded tuples of explicit identities; only endpoint mapping may be None.")
+            if len(set(values)) != len(values):
+                raise ValueError("Members within each scope declaration must be unique.")
+            references += len(values)
+            if references > MAX_SCOPE_REFERENCES:
+                raise ValueError("The total declared group and endpoint references must not exceed 20,000.")
+
+    # Index only observed keys. Never expand a group x endpoint Cartesian product.
+    indexed = defaultdict(lambda: defaultdict(list))
+    for position, row in enumerate(observations):
+        indexed[(row.source_id, row.recipe_group_id)][row.endpoint_name].append(position)
+
+    issues, counts = [], Counter()
+    matched_rows, potential_rows = set(), set()
+    unmapped_scopes = 0
+
+    def add(code, field, scope_position, row_position=None):
+        counts[code] += 1
+        if len(issues) < MAX_ISSUES:
+            issues.append({"code": code, "field": field, "scope_position": scope_position,
+                           "row_position": row_position})
+
+    for scope_position, scope in enumerate(unresolved_scopes):
+        if scope.endpoint_names is None:
+            unmapped_scopes += 1
+            add("scope_endpoint_mapping_not_established", "scope.endpoint_names", scope_position)
+            for group in scope.recipe_group_ids:
+                for positions in indexed.get((scope.source_id, group), {}).values():
+                    potential_rows.update(positions)
+            continue
+        endpoints = set(scope.endpoint_names)
+        for group in scope.recipe_group_ids:
+            for endpoint, positions in indexed.get((scope.source_id, group), {}).items():
+                if endpoint in endpoints:
+                    for position in positions:
+                        matched_rows.add(position)
+                        add("quarantined_observation_present", "observation_evidence_key", scope_position, position)
+
+    total = sum(counts.values())
+    status = ("quarantine_violation_found" if matched_rows else
+              "mapping_not_established" if unmapped_scopes else "no_declared_quarantine_matches")
+    return {
+        "schema_version": "1.0", "kind": "evidence_quarantine_preview",
+        "action": "audit_only_no_data_changes", "training_admission": "not_performed",
+        "status": status, "n_observation_rows": len(observations),
+        "n_unresolved_scopes": len(unresolved_scopes), "n_unmapped_scopes": unmapped_scopes,
+        "n_rows_with_quarantine_matches": len(matched_rows),
+        "n_rows_in_unmapped_scope_groups": len(potential_rows),
+        "issue_count": total, "issue_counts": dict(sorted(counts.items())), "issues": issues,
+        "issues_truncated": total > len(issues), "max_returned_issues": MAX_ISSUES,
+        "limitations": [
+            "Only supplied unresolved scopes and exact identities are checked; registry completeness and source truth are not verified.",
+            "Scope membership and endpoint mapping are caller declarations, not inferred from text or quantity values.",
+            "Unmapped scope groups indicate potential relevance, not confirmed quarantined quantities or safe remaining rows.",
+            "Counts describe metadata rows and declared conflict matches, not independent specimens or scientifically admissible samples.",
+            "No rows are repaired, removed, admitted to training, or linked as paired physical specimens.",
         ],
     }

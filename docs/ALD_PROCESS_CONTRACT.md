@@ -178,3 +178,8 @@ Review flagged declarations and source evidence yourself. Establish uncertainty,
 batch/replicate structure, leakage controls, physical assumptions, and a held-out
 evaluation design before deciding which observations belong in a study. A
 conflict-free preview makes none of those decisions for you.
+
+For an already reviewed unresolved source conflict, the separate
+[evidence-quarantine preview](EVIDENCE_QUARANTINE.md) checks exact
+source/recipe-group/endpoint isolation without reading quantity values. It is
+not run automatically by this ALD helper and does not resolve source evidence.

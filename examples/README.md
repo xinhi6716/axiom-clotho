@@ -57,4 +57,9 @@ feature timing, and thickness/cycle arithmetic using invented in-memory cases.
 It uses only the standard library, fits no models, and does not admit data to
 training or verify scientific claims.
 
+The [evidence-quarantine preview](evidence-quarantine/README.md) checks whether
+explicitly quarantined source/group/endpoint keys remain in an observation
+inventory, while leaving unrelated quantities separate. It uses metadata only
+and preserves unknown endpoint mappings rather than guessing them.
+
 Read the selected input contract. Some examples accept only their fixed invented data. Decide the units, physical grouping, feature timing and evaluation split before looking at outcomes. Software checks cannot establish those scientific choices. [Evaluation rules and limits](../docs/USAGE_REFERENCE.md#limits-to-understand-before-trusting-a-result).
