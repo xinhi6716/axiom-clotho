@@ -73,7 +73,11 @@ def prepare_domain_data(frame, target, group, features, domain, strategy, inner_
         raise ValueError("domain must name a separate declared metadata column.")
     if not frame.columns.is_unique:
         raise ValueError("Column names must be unique.")
-    if features is not None and domain in features:
-        raise ValueError("Domain metadata cannot be a predictor.")
+    if features is not None and not isinstance(features, (str, bytes)):
+        # Membership consumes a one-shot iterator. Retain its names and order
+        # for prepare_data; bare strings/bytes still reach its common guard.
+        features = list(features)
+        if domain in features:
+            raise ValueError("Domain metadata cannot be a predictor.")
     X, y, groups = prepare_data(frame.drop(columns=[domain]), target, group, features)
     return X, y, groups, domain_vector(frame[domain], groups, len(X))

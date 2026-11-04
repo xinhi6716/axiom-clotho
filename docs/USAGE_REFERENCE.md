@@ -711,6 +711,16 @@ because the number of folds is determined separately by each training partition'
 domains. Without the new options, group-kfold selection still defaults to three
 inner folds and existing outputs are unchanged.
 
+The corresponding Python APIs accept finite ordered feature-name collections,
+including a one-shot iterator or generator, just like ordinary group mode.
+Domain mode materializes that collection once, checks that it excludes the
+domain column, and preserves its selection order. Use a fresh iterator for
+each call; an already-exhausted iterator is an empty selection and is rejected.
+An exception raised while collecting iterator names propagates before model
+work. Bare strings/bytes remain invalid, not character-wise feature lists. Target,
+group and domain metadata still cannot be predictors; this does not change
+splits, model selection or the declared domain-validation limits.
+
 See the [complete invented example](../examples/domain-inner-tabular/README.md)
 for commands, exact-string label rules, no-fit/fit-count behavior, privacy and
 limitations. Outer evaluation remains group-held-out, not domain-held-out.
