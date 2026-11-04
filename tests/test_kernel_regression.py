@@ -275,11 +275,31 @@ class KernelRegressionTests(unittest.TestCase):
             transform.assert_not_called()
 
     def test_sparse_original_matrix_is_not_densified(self):
-        X = sparse.csr_matrix(self.X)
-        with patch.object(sparse.csr_matrix, "toarray", side_effect=AssertionError("raw densification")):
-            model = self.fresh().fit(X, self.y)
+        # A rank-limited Gram product may legitimately become dense (including
+        # inside sklearn 1.4). Its width differs from this raw feature space.
+        width = kernel.MAX_RANK + 1
+        rank = self.fresh().rank_cap
+        X = sparse.csr_matrix(np.arange(8 * width, dtype=float).reshape(8, width) / (8 * width))
+        target = np.arange(8, dtype=float)
+        original = sparse.csr_matrix.toarray
+        dense_shapes = []
+        def guarded(matrix, *args, **kwargs):
+            if matrix.shape[1] == width:
+                raise AssertionError("raw densification")
+            self.assertLessEqual(matrix.shape[1], rank)
+            dense_shapes.append(matrix.shape)
+            return original(matrix, *args, **kwargs)
+        with patch.object(sparse.csr_matrix, "toarray", guarded):
+            # Prove the trap still rejects raw data and copies/subsets of it.
+            for raw in (X, X.copy(), X[:2]):
+                with self.assertRaisesRegex(AssertionError, "raw densification"):
+                    raw.toarray()
+            model = self.fresh().fit(X, target)
             prediction = model.predict(X[:2])
         self.assertEqual(prediction.shape, (2,))
+        self.assertTrue(np.isfinite(prediction).all())
+        self.assertTrue(sparse.issparse(model.mapper_.components_))
+        self.assertTrue(all(columns <= rank for _, columns in dense_shapes))
 
     def test_noncanonical_csr_is_equivalent_without_mutating_caller_storage(self):
         X = sparse.csr_matrix((np.array([1., 2., 4., 5., 6.]),

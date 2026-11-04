@@ -150,7 +150,12 @@ class NumericUnitExampleTests(unittest.TestCase):
     def test_wrong_pipeline_refused_without_output(self):
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "new"
-            with patch.object(example, "MODEL_SOURCE_SHA256", "0" * 64):
+            # Isolate the source-hash guard from the earlier version guard.
+            # The real reference example remains pinned to its original version.
+            with patch.object(example.sklearn, "__version__", example.REFERENCE_SKLEARN), \
+                 patch.object(example, "MODEL_SOURCE_SHA256", "0" * 64), \
+                 patch.object(example, "generate", side_effect=AssertionError("must not generate")), \
+                 patch.object(example, "train_predict", side_effect=AssertionError("must not fit")):
                 with self.assertRaisesRegex(ValueError, "pipeline source differs"):
                     example.run(output)
             self.assertFalse(output.exists())

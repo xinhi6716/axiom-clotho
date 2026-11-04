@@ -83,7 +83,17 @@ python -m venv --system-site-packages --without-pip "$check_env/venv"
 )
 ```
 
-Installed-wheel validation has been run on Linux with Python 3.12.14 only. Other operating systems, Python versions, and minimum dependency versions remain unverified. A `py3-none-any` wheel tag is not a cross-platform test result.
+The suite above starts against the installed package, but some tests deliberately
+launch subprocesses with the checkout's `src` directory on `PYTHONPATH`. It is
+mixed installed/source coverage, not a fully isolated wheel test. Use a separate
+`python -I` smoke check outside the checkout to establish installed-package behavior.
+
+Linux checks now also cover Python 3.10.22 with the four exact minimum direct
+runtime dependencies. See the [recorded environment, commands and scope](docs/MINIMUM_RUNTIME_CHECK.md).
+This is two tested Linux environments, not a full supported-version CI matrix.
+Windows/macOS, other Python/dependency combinations and the optional native
+adapter on Python 3.10 remain unverified. A `py3-none-any` wheel tag is not a
+cross-platform test result.
 
 ## Good contributions
 

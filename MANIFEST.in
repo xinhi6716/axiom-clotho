@@ -34,3 +34,6 @@ include benchmarks/native_numeric_support/reference/timings.json
 
 # Paired synthetic public regression-workflow timing, with no file writes.
 include benchmarks/grouped_metric_positions.py
+
+# Platform-specific dependency lock for the recorded minimum-runtime check.
+include docs/minimum-runtime-requirements.txt

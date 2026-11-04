@@ -45,7 +45,7 @@ Synthetic examples demonstrate workflow, not real-world accuracy.
 
 ## Run the demo
 
-Python 3.10+ is declared; the verified development environment is Python 3.12.14, NumPy 2.3.5, pandas 2.2.3, and scikit-learn 1.8.0. Other supported versions have not yet been tested in a CI matrix.
+Python 3.10+ is declared. Linux source suites have been checked with Python 3.12.14, NumPy 2.3.5, pandas 2.2.3 and scikit-learn 1.8.0, and with Python 3.10.22 and the four exact minimum direct runtime dependencies. See the [minimum-runtime check and its limits](MINIMUM_RUNTIME_CHECK.md). These two environments are not a full supported-version CI matrix.
 
 From this checkout:
 

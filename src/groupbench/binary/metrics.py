@@ -47,6 +47,14 @@ def _probability_array(values):
     _reject_active_masks(values, "Probabilities")
     _reject_boolean_probabilities(values)
     original = np.asarray(values)
+    # pandas 2.0 exposes nullable numeric arrays as object even without missing
+    # values. Preserve their declared native dtype, not generic object contents.
+    # Missing entries still reject; Boolean/string/custom extension arrays do
+    # not enter this conversion, and range checks run before float64 narrowing.
+    if original.dtype.kind == "O":
+        array = values.array if isinstance(values, (pd.Series, pd.Index)) else values
+        if type(array) in (pd.arrays.FloatingArray, pd.arrays.IntegerArray) and not array.isna().any():
+            original = array.to_numpy(dtype=array.dtype.numpy_dtype)
     # Only real numeric types representable without narrowing are supported.
     # In particular, do not discard imaginary components or narrow longdouble
     # values outside [0,1] into valid-looking endpoints.

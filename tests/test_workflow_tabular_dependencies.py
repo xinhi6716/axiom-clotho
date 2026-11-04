@@ -1,9 +1,10 @@
 """Unavailable delegated ML imports get safe guidance, never implicit repairs."""
 import builtins
-from contextlib import ExitStack, redirect_stderr, redirect_stdout
+from contextlib import ExitStack, contextmanager, redirect_stderr, redirect_stdout
 import io
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -14,6 +15,18 @@ from unittest.mock import Mock, patch
 from mlworkflow import cli
 
 SOURCE = str(Path(cli.__file__).resolve().parents[1])
+
+
+@contextmanager
+def package_only_path():
+    # SOURCE is the whole site-packages directory for an installed wheel.
+    # Exposing it under -S would also re-enable the supposedly absent ML deps.
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        for name in ("mlworkflow", "groupbench"):
+            shutil.copytree(Path(SOURCE) / name, root / name,
+                            ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+        yield str(root)
 
 
 class TabularDependencyGuidanceTests(unittest.TestCase):
@@ -83,21 +96,35 @@ class TabularDependencyGuidanceTests(unittest.TestCase):
                 self.assertIs(raised.exception, failure)
 
     def test_real_stdlib_only_entrypoint_fails_cleanly_without_output_files(self):
-        with tempfile.TemporaryDirectory() as directory:
+        with package_only_path() as package_root, tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             sentinel = root / "KEEP"
             sentinel.write_bytes(b"unchanged")
+            env = dict(os.environ, PYTHONPATH=package_root, PYTHONDONTWRITEBYTECODE="1")
+            script = """import importlib.util, sys
+from pathlib import Path
+absent = tuple(importlib.util.find_spec(n) is None for n in ('numpy', 'pandas', 'sklearn'))
+owned = tuple(Path(importlib.util.find_spec(n).origin).resolve().is_relative_to(Path(sys.argv[1]).resolve())
+              for n in ('mlworkflow', 'groupbench'))
+print(absent + owned)
+"""
+            probe = subprocess.run(
+                [sys.executable, "-S", "-c", script, package_root],
+                cwd=directory, env=env, capture_output=True, text=True, timeout=15)
+            self.assertEqual((probe.returncode, probe.stdout, probe.stderr),
+                             (0, "(True, True, True, True, True)\n", ""))
             for args in (("--help",), ("binary", "--help"), ("run", "PRIVATE.csv", "--out", "PRIVATE_OUT")):
                 with self.subTest(command=args[0]):
                     result = subprocess.run(
                         [sys.executable, "-S", "-m", "mlworkflow", "tabular", *args],
-                        cwd=directory, env=dict(os.environ, PYTHONPATH=SOURCE, PYTHONDONTWRITEBYTECODE="1"),
+                        cwd=directory, env=env,
                         capture_output=True, text=True, timeout=15)
                     self.assert_safe_failure((result.returncode, result.stdout, result.stderr))
                     self.assertEqual(list(root.iterdir()), [sentinel])
                     self.assertEqual(sentinel.read_bytes(), b"unchanged")
                     self.assertNotIn(directory, result.stderr)
                     self.assertNotIn(SOURCE, result.stderr)
+                    self.assertNotIn(package_root, result.stderr)
 
     def test_workflow_help_remains_stdlib_only_and_explains_tabular_boundary(self):
         script = """import sys
@@ -108,9 +135,9 @@ except SystemExit as error:
     assert error.code == 0
 assert not any(name in sys.modules for name in ('groupbench', 'numpy', 'pandas', 'sklearn'))
 """
-        with tempfile.TemporaryDirectory() as directory:
+        with package_only_path() as package_root, tempfile.TemporaryDirectory() as directory:
             result = subprocess.run([sys.executable, "-S", "-c", script], cwd=directory,
-                env=dict(os.environ, PYTHONPATH=SOURCE, PYTHONDONTWRITEBYTECODE="1"),
+                env=dict(os.environ, PYTHONPATH=package_root, PYTHONDONTWRITEBYTECODE="1"),
                 capture_output=True, text=True, timeout=15)
             self.assertEqual((result.returncode, result.stderr), (0, ""))
             self.assertIn("Most delegated tabular commands, including general tabular help", result.stdout)

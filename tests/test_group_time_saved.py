@@ -1557,7 +1557,7 @@ class SeparationSideEffectsAndCompatibilityTests(SavedFixtureTestCase):
         self.assertEqual(package_source.SOURCE_FILES, tuple(sorted(package_source.SOURCE_FILES)))
         self.assertEqual(len(package_source.SOURCE_FILES), 39)
         self.assertEqual(set(package_source.SOURCE_FILES), set(HISTORIC_37_FILES) | {"group_time_saved.py", "process_contract.py"})
-        self.assertTrue(Path(saved.__file__).resolve().is_relative_to(Path(__file__).resolve().parents[1]))
+        self.assertEqual(Path(saved.__file__).resolve().parent, Path(groupbench.__file__).resolve().parent)
 
     def test_historic_source_maps_are_retained_without_current_source_observation(self):
         # Full exact 28--37 legacy memberships and source-absent legacy records
