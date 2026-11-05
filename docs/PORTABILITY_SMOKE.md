@@ -15,7 +15,11 @@ of a release-asset download/verification blocker.
 
 - Builds a new wheel from the dispatched checkout; installs it in a fresh venv;
   invokes it outside the checkout. No editable install or source `PYTHONPATH`.
-- Tests all four installed CLI version commands and pinned component integrity.
+- Reads the expected project version from the newly built wheel metadata, then
+  tests the installed distribution and all four CLI version commands against it.
+  Rejects missing, duplicate or wrong-project metadata. This uses only Python
+  3.10-compatible standard-library modules and avoids a stale release constant.
+- Tests pinned component integrity.
 - Reuses only `examples/measurement-regression/fixtures`: 18 invented devices,
   12 training and 6 prediction, dummy/ridge candidates. A copied config tightens
   `max_fits` to 40; plan must report exactly 40 planned fits and zero performed.
