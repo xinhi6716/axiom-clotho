@@ -124,6 +124,13 @@ Only Linux x86-64 CPython 3.12 was exercised; adapter Rust 1.85 and stable 1.99.
 and core Rust 1.70 and stable 1.99.1, were compiled. Other supported-version
 combinations are not established by these checks.
 
+## Explicit repeated-query support
+
+For successive numeric batches against the same training data, opt into
+`NumericSupportReference(training).compare(query)`. It retains a frozen Rust
+summary, not a training frame or payload. The one-shot API above is unchanged.
+See [construction cost, snapshot semantics and checks](RUST_NUMERIC_REFERENCE.md).
+
 ## Scientific and privacy limits
 
 This remains a marginal diagnostic, not an OOD detector, uncertainty estimate,

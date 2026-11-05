@@ -30,6 +30,8 @@ class RustSupportParityTests(unittest.TestCase):
     def test_numeric_byte_golden_coverage_is_separate(self):
         source, cases = self.parity.generated_numeric_byte_tests()
         self.assertGreaterEqual(len(cases), 24)
+        self.assertEqual(source.count("NumericSupportReference::from_training"), len(cases))
+        self.assertEqual(source.count("reference.compare(&incoming)"), 2 * len(cases))
         self.assertEqual(len(set(cases)), len(cases))
         self.assertEqual(source.count("#[test]"), len(cases))
         for name in ("bytes_all_missing", "bytes_all_missing_query", "bytes_row_limit",

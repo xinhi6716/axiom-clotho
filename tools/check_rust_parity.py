@@ -214,7 +214,10 @@ def generated_numeric_byte_tests():
                      f"let t = {_byte_storage(source)};\nlet q = {_byte_storage(query)};\n"
                      f"let training = {columns(source, 't')};\nlet incoming = {columns(query, 'q')};\n"
                      f"let expected = {_expected(report)};\n"
-                     "assert_eq!(prediction_input_support_bytes(&training, &incoming).unwrap(), expected);\n}\n")
+                     "assert_eq!(prediction_input_support_bytes(&training, &incoming).unwrap(), expected);\n"
+                     "let reference = NumericSupportReference::from_training(&training).unwrap();\n"
+                     "assert_eq!(reference.compare(&incoming).unwrap(), expected);\n"
+                     "assert_eq!(reference.compare(&incoming).unwrap(), expected);\n}\n")
         cases.append(name)
     return '\n'.join(tests), cases
 

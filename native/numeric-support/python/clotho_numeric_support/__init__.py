@@ -6,6 +6,7 @@ does not fit models, read targets, encode categories, or change default routes.
 """
 
 import importlib
+from dataclasses import dataclass
 import sys
 import sysconfig
 
@@ -16,7 +17,7 @@ from groupbench.data import MAX_FEATURES, MAX_ROWS, validate_prediction_features
 from groupbench import input_support as _python_support
 
 
-__all__ = ["prediction_input_support_numeric"]
+__all__ = ["prediction_input_support_numeric", "NumericSupportReference"]
 _PROTOCOL = "numeric-source-support-v1"
 _BAD_NATIVE = "Malformed native numeric-support result; no report was produced."
 
@@ -53,7 +54,11 @@ def _count(value, limit):
 
 
 def _report(result, training, incoming):
-    n, m, p = len(training), len(incoming), len(training.columns)
+    return _report_dimensions(result, training.columns, len(training), len(incoming))
+
+
+def _report_dimensions(result, names, n, m):
+    p = len(names)
     if type(result) is not tuple or len(result) != 5:
         raise RuntimeError(_BAD_NATIVE)
     nt, nq, any_flag, flags, rows = result
@@ -64,7 +69,7 @@ def _report(result, training, incoming):
             or type(rows) is not list or len(rows) != p):
         raise RuntimeError(_BAD_NATIVE)
     features = []
-    for name, counts in zip(training.columns, rows):
+    for name, counts in zip(names, rows):
         if type(counts) is not tuple or len(counts) != 5:
             raise RuntimeError(_BAD_NATIVE)
         source_missing, query_missing, unsupported, below, above = counts
@@ -125,3 +130,47 @@ def prediction_input_support_numeric(training, new_rows):
     source_bytes = tuple(training[name].to_numpy(dtype="<f8", copy=False).tobytes() for name in training)
     query_bytes = tuple(incoming[name].to_numpy(dtype="<f8", copy=False).tobytes() for name in incoming)
     return _report(native.counts(source_bytes, query_bytes), training, incoming)
+
+
+@dataclass(frozen=True, slots=True, init=False, repr=False, eq=False)
+class NumericSupportReference:
+    """Explicit immutable numeric support snapshot for repeated query batches.
+
+    Use normalized float64 training features, exactly as for the one-shot API.
+    Rust retains only support bounds and counts; no DataFrame, training bytes,
+    targets or fitted model are retained. Rebuild explicitly when the training
+    reference changes. This is a diagnostic, not a predictor or an OOD gate.
+    Keep inputs stable while creating the snapshot or each query's byte copies.
+    """
+
+    _reference: object
+    _names: tuple
+    _n_training_rows: int
+
+    def __init__(self, training):
+        if hasattr(self, "_reference"):
+            raise TypeError("NumericSupportReference is already initialized; construct a new reference explicitly.")
+        _training_schema(training)
+        native = _load_native()
+        if getattr(native, "REFERENCE_PROTOCOL", None) != "numeric-source-reference-v1":
+            raise RuntimeError("The installed native extension does not support this training-reference protocol; rebuild the matching optional package.")
+        names = tuple(training.columns)
+        source_bytes = tuple(training[name].to_numpy(dtype="<f8", copy=False).tobytes() for name in names)
+        reference = native.NumericReference(source_bytes)
+        object.__setattr__(self, "_names", names)
+        object.__setattr__(self, "_n_training_rows", len(training))
+        object.__setattr__(self, "_reference", reference)
+
+    def compare(self, new_rows):
+        """Return the existing complete report for this batch only, without fitting.
+
+        Admission, alignment and all-missing query accommodation use Clotho's
+        existing validator. Previous queries never expand the reference.
+        """
+        incoming = validate_prediction_features(new_rows, self._names, ["float64"] * len(self._names))
+        query_bytes = tuple(incoming[name].to_numpy(dtype="<f8", copy=False).tobytes() for name in incoming)
+        return _report_dimensions(self._reference.counts(query_bytes), self._names,
+                                  self._n_training_rows, len(incoming))
+
+    def __reduce_ex__(self, protocol):
+        raise TypeError("NumericSupportReference has no persistence format; rebuild from trusted normalized training features.")

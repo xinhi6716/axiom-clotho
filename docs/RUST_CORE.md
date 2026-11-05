@@ -60,6 +60,12 @@ the test literal emitter rejects those rather than replacing them. The optional
 Python numeric adapter preserves all names in Python and uses positional Rust
 identifiers, avoiding this string-domain difference.
 
+## Repeated numeric query batches
+
+The explicit `numeric_bytes::NumericSupportReference` owns a bounded training
+summary and can compare multiple batches without rescanning training bytes.
+No default route uses it. See [ownership, parity and limits](RUST_NUMERIC_REFERENCE.md).
+
 ## Verification
 
 With an installed Rust toolchain and the existing Python dependencies, from the

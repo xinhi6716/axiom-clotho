@@ -28,6 +28,7 @@ class NativeNumericSupportTests(unittest.TestCase):
         expected = prediction_input_support(normalized, query)
         actual = adapter.prediction_input_support_numeric(normalized, query)
         self.assertEqual(actual, expected)
+        self.assertEqual(adapter.NumericSupportReference(normalized).compare(query), expected)
         self.assertEqual(json.loads(json.dumps(actual, allow_nan=False)), expected)
         return actual
 

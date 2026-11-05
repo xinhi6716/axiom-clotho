@@ -1,0 +1,274 @@
+{
+  "kind": "synthetic_explicit_numeric_reference",
+  "fits_performed": 0,
+  "batches_per_sample": 10,
+  "repetitions": 9,
+  "warmup_calls_per_path": 2,
+  "measurement_order": "rotating_four_paths",
+  "environment": {
+    "python": "3.12.14",
+    "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+    "numpy": "2.3.5",
+    "pandas": "2.2.3",
+    "thread_settings": {
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1"
+    }
+  },
+  "sha256": {
+    "benchmark": "da501774f8325abbec4fedc5f9437d1baebeaa27ca1bef4c05a2b1e9738a67f7",
+    "python_diagnostic": "3de84cba23e81db713e10d6c3ea61be168bb68f07d047fcf0b947ff35b1a8a3d",
+    "optional_wrapper": "a81b8d4f57b20505dca465e110be29fff8cb7d9bbb7a2d767864ef646773989e",
+    "native_binary": "33e529964393b8fc265497c4f2769b8d9878fd50b8d01d04d2fd99d823df7d7f"
+  },
+  "cases": [
+    {
+      "name": "small",
+      "training_rows": 288,
+      "query_rows_per_batch": 32,
+      "features": 12,
+      "all_report_fields_exact": true,
+      "inputs_unchanged": true,
+      "timings": {
+        "python_one_shot_batches": {
+          "median_ms": 59.328665,
+          "samples_ms": [
+            54.989811,
+            55.028429,
+            66.939428,
+            56.405408,
+            64.274784,
+            62.568669,
+            50.722093,
+            73.103307,
+            59.328665
+          ]
+        },
+        "native_one_shot_batches": {
+          "median_ms": 37.516196,
+          "samples_ms": [
+            36.242631,
+            45.615401,
+            35.102443,
+            38.241857,
+            32.450259,
+            32.281183,
+            37.761183,
+            37.516196,
+            50.325353
+          ]
+        },
+        "reference_including_creation": {
+          "median_ms": 31.863558,
+          "samples_ms": [
+            33.46863,
+            33.769281,
+            30.736279,
+            29.914874,
+            31.204169,
+            31.863558,
+            33.153171,
+            29.041417,
+            33.041349
+          ]
+        },
+        "reference_queries_only": {
+          "median_ms": 31.36481,
+          "samples_ms": [
+            28.781448,
+            29.342847,
+            31.36481,
+            35.118659,
+            33.224215,
+            35.62096,
+            29.318343,
+            30.842056,
+            34.640288
+          ]
+        },
+        "reference_creation_only": {
+          "median_ms": 0.103031,
+          "samples_ms": [
+            0.102968,
+            0.109995,
+            0.084033,
+            0.191691,
+            0.122298,
+            0.116331,
+            0.089649,
+            0.103031,
+            0.102944
+          ]
+        }
+      }
+    },
+    {
+      "name": "repeated-small-query",
+      "training_rows": 20000,
+      "query_rows_per_batch": 128,
+      "features": 100,
+      "all_report_fields_exact": true,
+      "inputs_unchanged": true,
+      "timings": {
+        "python_one_shot_batches": {
+          "median_ms": 817.124085,
+          "samples_ms": [
+            788.710438,
+            817.124085,
+            810.014715,
+            791.913268,
+            904.680927,
+            829.557139,
+            864.113042,
+            932.581025,
+            781.423064
+          ]
+        },
+        "native_one_shot_batches": {
+          "median_ms": 386.676986,
+          "samples_ms": [
+            374.85351,
+            392.315347,
+            367.800152,
+            416.001179,
+            375.249554,
+            376.313864,
+            534.318835,
+            386.676986,
+            395.215285
+          ]
+        },
+        "reference_including_creation": {
+          "median_ms": 254.165102,
+          "samples_ms": [
+            262.233136,
+            240.700196,
+            280.953274,
+            246.794135,
+            248.915388,
+            246.965229,
+            305.564041,
+            266.822824,
+            254.165102
+          ]
+        },
+        "reference_queries_only": {
+          "median_ms": 224.400841,
+          "samples_ms": [
+            257.976436,
+            224.400841,
+            242.622878,
+            247.46783,
+            215.295645,
+            218.097999,
+            218.97372,
+            341.049135,
+            219.40378
+          ]
+        },
+        "reference_creation_only": {
+          "median_ms": 22.584795,
+          "samples_ms": [
+            28.380813,
+            20.118635,
+            17.909618,
+            34.795575,
+            22.584795,
+            22.20169,
+            21.197784,
+            24.656485,
+            23.929905
+          ]
+        }
+      }
+    },
+    {
+      "name": "bounded-max",
+      "training_rows": 20000,
+      "query_rows_per_batch": 20000,
+      "features": 100,
+      "all_report_fields_exact": true,
+      "inputs_unchanged": true,
+      "timings": {
+        "python_one_shot_batches": {
+          "median_ms": 1264.937524,
+          "samples_ms": [
+            1451.704067,
+            1383.028397,
+            1160.126385,
+            1129.022288,
+            1112.944155,
+            1391.320813,
+            1290.772633,
+            1264.937524,
+            1125.31827
+          ]
+        },
+        "native_one_shot_batches": {
+          "median_ms": 786.066328,
+          "samples_ms": [
+            773.174574,
+            786.066328,
+            759.913002,
+            787.755121,
+            755.535973,
+            847.793379,
+            852.23874,
+            791.851422,
+            755.759411
+          ]
+        },
+        "reference_including_creation": {
+          "median_ms": 559.292564,
+          "samples_ms": [
+            559.292564,
+            557.878638,
+            808.187884,
+            559.604022,
+            626.398421,
+            618.979289,
+            554.875701,
+            551.02515,
+            538.586752
+          ]
+        },
+        "reference_queries_only": {
+          "median_ms": 547.194753,
+          "samples_ms": [
+            540.264085,
+            643.377145,
+            555.462436,
+            514.546239,
+            547.194753,
+            747.317381,
+            555.828108,
+            535.338042,
+            500.081274
+          ]
+        },
+        "reference_creation_only": {
+          "median_ms": 20.377978,
+          "samples_ms": [
+            28.451984,
+            30.672487,
+            16.664706,
+            19.071834,
+            25.704395,
+            22.232538,
+            18.24301,
+            20.377978,
+            19.26421
+          ]
+        }
+      }
+    }
+  ],
+  "limitations": [
+    "Synthetic host-specific warm timings; no accuracy, estimator training or default-runtime improvement is claimed.",
+    "Each reference_including_creation sample creates a fresh reference and then evaluates every batch.",
+    "reference_queries_only excludes creation, reported separately; import and compilation are excluded.",
+    "All returned fields are checked exactly after each measured call; correctness comparisons are outside timed intervals.",
+    "No RSS or cross-platform measurements; caller-owned frames and query snapshots still consume memory."
+  ]
+}

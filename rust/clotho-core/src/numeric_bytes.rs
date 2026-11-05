@@ -173,3 +173,146 @@ pub fn prediction_input_support_bytes(
         features,
     })
 }
+
+/// Owned numeric training summary for repeated, explicit diagnostic queries.
+///
+/// Construction scans validated training bytes once, retaining only names,
+/// missing counts and extrema, never input buffers. No targets or fitted model
+/// state are consumed. There is no serialization or automatic global cache.
+/// Fields are private and no Debug implementation exposes the stored extrema.
+pub struct NumericSupportReference {
+    n_training_rows: usize,
+    features: Vec<NumericReferenceFeature>,
+}
+
+struct NumericReferenceFeature {
+    name: String,
+    missing: usize,
+    bounds: Option<(f64, f64)>,
+}
+
+impl NumericSupportReference {
+    /// Snapshot the training support. Infinities fail before a reference exists.
+    pub fn from_training(training: &[NumericBytesColumn<'_>]) -> Result<Self, NumericBytesError> {
+        let n_training_rows = validate_table(training)?;
+        let mut features = Vec::with_capacity(training.len());
+        for source in training {
+            let mut missing = 0;
+            let mut minimum = f64::INFINITY;
+            let mut maximum = f64::NEG_INFINITY;
+            for chunk in source.values.chunks_exact(8) {
+                let value = decode(chunk);
+                if value.is_nan() {
+                    missing += 1;
+                } else if value.is_finite() {
+                    minimum = minimum.min(value);
+                    maximum = maximum.max(value);
+                } else {
+                    return Err(NumericBytesError::InfiniteNumeric);
+                }
+            }
+            features.push(NumericReferenceFeature {
+                name: source.name.to_owned(),
+                missing,
+                bounds: if missing == n_training_rows {
+                    None
+                } else {
+                    Some((minimum, maximum))
+                },
+            });
+        }
+        Ok(Self {
+            n_training_rows,
+            features,
+        })
+    }
+
+    /// Compare one bounded batch against the original immutable reference.
+    ///
+    /// Query rows never update or expand it. Names must match exactly but may
+    /// arrive in a different order. Each returned report counts only this batch;
+    /// a previous successful or failed call cannot affect the result.
+    pub fn compare(
+        &self,
+        incoming: &[NumericBytesColumn<'_>],
+    ) -> Result<InputSupport, NumericBytesError> {
+        let n_prediction_rows = validate_table(incoming)?;
+        let by_name: HashMap<_, _> = incoming.iter().map(|c| (c.name, c.values)).collect();
+        if self.features.len() != incoming.len()
+            || self
+                .features
+                .iter()
+                .any(|c| !by_name.contains_key(c.name.as_str()))
+        {
+            return Err(NumericBytesError::SchemaMismatch);
+        }
+        const MISSING: u8 = 1;
+        const OUTSIDE: u8 = 2;
+        const UNSUPPORTED: u8 = 8;
+        let mut flags = vec![0u8; n_prediction_rows];
+        let mut features = Vec::with_capacity(self.features.len());
+        for source in &self.features {
+            let mut prediction_missing_count = 0;
+            let mut unsupported = 0;
+            let mut below = 0;
+            let mut above = 0;
+            for (chunk, flag) in by_name[source.name.as_str()]
+                .chunks_exact(8)
+                .zip(flags.iter_mut())
+            {
+                let value = decode(chunk);
+                if value.is_nan() {
+                    prediction_missing_count += 1;
+                    *flag |= MISSING;
+                } else if !value.is_finite() {
+                    return Err(NumericBytesError::InfiniteNumeric);
+                } else if let Some((minimum, maximum)) = source.bounds {
+                    if value < minimum {
+                        below += 1;
+                        *flag |= OUTSIDE;
+                    }
+                    if value > maximum {
+                        above += 1;
+                        *flag |= OUTSIDE;
+                    }
+                } else {
+                    unsupported += 1;
+                    *flag |= UNSUPPORTED;
+                }
+            }
+            features.push(FeatureSupport {
+                name: source.name.clone(),
+                training_missing_count: source.missing,
+                training_support: if source.bounds.is_none() {
+                    TrainingSupport::UnavailableAllMissing
+                } else {
+                    TrainingSupport::ObservedNonMissingValues
+                },
+                prediction_missing_count,
+                prediction_non_missing_without_training_values_count: unsupported,
+                counts: FeatureCounts::Numeric {
+                    below_training_min_count: source.bounds.map(|_| below),
+                    above_training_max_count: source.bounds.map(|_| above),
+                },
+            });
+        }
+        Ok(InputSupport {
+            schema_version: "1.0",
+            reference: "full_training_features_before_imputation",
+            action: "diagnostic_only_no_input_changes",
+            n_training_rows: self.n_training_rows,
+            n_prediction_rows,
+            rows_with_any_flag: flags.iter().filter(|&&f| f != 0).count(),
+            row_flag_counts: RowFlagCounts {
+                missing_value: flags.iter().filter(|&&f| f & MISSING != 0).count(),
+                numeric_outside_training_range: flags.iter().filter(|&&f| f & OUTSIDE != 0).count(),
+                unseen_category: 0,
+                non_missing_value_in_all_missing_training_feature: flags
+                    .iter()
+                    .filter(|&&f| f & UNSUPPORTED != 0)
+                    .count(),
+            },
+            features,
+        })
+    }
+}

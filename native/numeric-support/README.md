@@ -33,6 +33,24 @@ training_features = validate_features(training_feature_frame)
 report = prediction_input_support_numeric(training_features, query_feature_frame)
 ```
 
+For repeated batches against the same training snapshot, explicitly construct:
+
+```python
+from clotho_numeric_support import NumericSupportReference
+
+reference = NumericSupportReference(training_features)
+first_report = reference.compare(first_query_frame)
+second_report = reference.compare(second_query_frame)
+```
+
+The reference owns only support bounds/counts and immutable names, not the
+training DataFrame or training byte buffers. Later source mutations and earlier
+queries cannot change it. Rebuild explicitly when training changes. Assignment,
+reinitialization and pickling are rejected; no hidden cache is introduced. The
+reference requires the matching `numeric-source-reference-v1` extension
+capability. See `docs/RUST_NUMERIC_REFERENCE.md` in the repository for ownership,
+construction-inclusive measurements and verification limits.
+
 Select only appropriate source features before calling this helper. Training
 must already be normalized; numeric integers must pass Clotho's precision
 checks before conversion to float64. Categorical, mixed, sparse, and extension
