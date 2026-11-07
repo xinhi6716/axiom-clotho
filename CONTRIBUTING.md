@@ -122,3 +122,12 @@ AI-assisted contributions need the same human review, reproducible tests, and pr
 ## Reporting a problem
 
 Include Python/library versions, exact command or small API example, expected versus observed behavior, and a synthetic input that reproduces it. Omit private file paths and data. See SECURITY.md before reporting a security issue publicly.
+
+
+### Standalone Rust regression baseline
+
+The additive numeric `KnnRegressor` API now supports fitting and predicting in
+Rust without dependencies. It is not connected to the Python model-selection or
+saved-study workflow. Run the synthetic `knn_process` example and read
+[the algorithm, validation and limitations](docs/RUST_KNN_BASELINE.md) before use.
+Do not treat software tests as evidence of real material prediction accuracy.
