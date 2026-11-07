@@ -131,3 +131,13 @@ Rust without dependencies. It is not connected to the Python model-selection or
 saved-study workflow. Run the synthetic `knn_process` example and read
 [the algorithm, validation and limitations](docs/RUST_KNN_BASELINE.md) before use.
 Do not treat software tests as evidence of real material prediction accuracy.
+
+### Native numeric workflow
+
+The Rust workspace now also includes a runnable `clotho-cli` binary for numeric
+fit/predict/grouped-evaluate workflows. See [native commands and artifact
+contracts](docs/RUST_NATIVE_WORKFLOW.md) and [remaining migration
+work](docs/RUST_MIGRATION_STATUS.md). Run the whole workspace with
+`cargo test --manifest-path rust/Cargo.toml --workspace --locked --offline`
+after the documented initial dependency fetch. This is a new versioned numeric
+protocol, not an assertion of Python command or artifact compatibility.

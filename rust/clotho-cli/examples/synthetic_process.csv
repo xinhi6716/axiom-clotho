@@ -1,0 +1,9 @@
+wafer,anneal_temperature_c,film_thickness_nm,synthetic_response
+a,300,10,1.2
+a,325,12,1.47
+b,350,11,1.64
+b,375,13,1.91
+c,400,12,2.08
+c,425,14,2.35
+d,450,13,2.52
+d,475,15,2.79
