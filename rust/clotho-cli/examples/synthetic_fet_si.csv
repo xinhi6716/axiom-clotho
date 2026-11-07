@@ -1,0 +1,5 @@
+lot,wafer,device,condition,replicate,branch,temperature_K,drain_source_voltage_V,body_source_voltage_V,gate_source_voltage_V,drain_current_A
+L,W,D,C,R,B,300,1,0,0,1e-9
+L,W,D,C,R,B,300,1,0,1,1e-8
+L,W,D,C,R,B,300,1,0,2,1e-7
+L,W,D,C,R,B,300,1,0,3,1e-6

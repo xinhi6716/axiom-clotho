@@ -17,3 +17,5 @@ pub mod preprocessing;
 pub mod classification;
 
 pub mod selection;
+
+pub mod fet;

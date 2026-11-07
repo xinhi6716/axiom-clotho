@@ -338,3 +338,9 @@ selection, full-data refits, CLI integration, or saved bundles. A matching
 execution binding and finite observed targets for every row are required.
 
 Fixed synthetic comparison: [optional grouped models](examples/optional_grouped_study_v1/README.md), including all negative extrapolation results and the resource-monitoring qualification.
+
+Native Rust now also offers an explicit SI/binary64 `extract-fet` command for
+constant-current and log-current-slope features. See
+[the FET contract and synthetic example](docs/RUST_FET_EXTRACTION.md).
+This is measurement extraction, not demonstrated real-device predictive
+performance or full legacy FET workflow parity.

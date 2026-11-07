@@ -1,5 +1,6 @@
 //! Native numeric and explicitly mixed modelling. No Python runtime is used.
 #![forbid(unsafe_code)]
+mod fet_command;
 use clotho_core::classification::{LogisticClassifier, MajorityClassifier};
 use clotho_core::classification_metrics::{binary_metrics, BinaryMetrics};
 use clotho_core::evaluation::{grouped_kfold, regression_metrics};
@@ -17,7 +18,7 @@ use std::path::Path;
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 const MAX_BYTES: u64 = 64 * 1024 * 1024;
-const HELP: &str = "Clotho native modelling (experimental)\n\nfit --csv FILE --target NAME --features A,B --model knn|ridge|mean|logistic|majority --out MODEL.json [--k 5] [--alpha 1] [--preprocess mixed] [--categorical A,B]\npredict --artifact MODEL.json --csv FILE --out PREDICTIONS.csv [--threshold 0.5]\nevaluate --csv FILE --target NAME --features A,B --group NAME --model knn|ridge|mean|logistic|majority --folds 5 --out NEW_DIRECTORY [--k 5] [--alpha 1] [--threshold 0.5] [--preprocess mixed] [--categorical A,B]\ncompare --csv FILE --target NAME --features A,B --group NAME --candidates mean,ridge:1,knn:3 --outer-folds 5 --inner-folds 3 --max-fits 200 --out NEW_DIRECTORY\n\nStrict finite numeric features are the default. Mixed mode imputes empty numeric cells\nand encodes explicitly named categorical features using training rows only. All other\nfeatures remain numeric; NA and null are literal categorical strings, not missing.\nEvaluation holds out whole groups and fits preprocessing inside each training fold.\nAt most 100 encoded features per estimator. No Python, downloads or telemetry.\nOutputs must not already exist. Model files contain private raw training data.\n";
+const HELP: &str = "Clotho native modelling (experimental)\n\nextract-fet --csv FILE --criterion-a A --polarity positive|negative --max-bracket-v V --window-min-v V --window-max-v V --accept-assumptions true --out NEW_DIRECTORY\nfit --csv FILE --target NAME --features A,B --model knn|ridge|mean|logistic|majority --out MODEL.json [--k 5] [--alpha 1] [--preprocess mixed] [--categorical A,B]\npredict --artifact MODEL.json --csv FILE --out PREDICTIONS.csv [--threshold 0.5]\nevaluate --csv FILE --target NAME --features A,B --group NAME --model knn|ridge|mean|logistic|majority --folds 5 --out NEW_DIRECTORY [--k 5] [--alpha 1] [--threshold 0.5] [--preprocess mixed] [--categorical A,B]\ncompare --csv FILE --target NAME --features A,B --group NAME --candidates mean,ridge:1,knn:3 --outer-folds 5 --inner-folds 3 --max-fits 200 --out NEW_DIRECTORY\n\nStrict finite numeric features are the default. Mixed mode imputes empty numeric cells\nand encodes explicitly named categorical features using training rows only. All other\nfeatures remain numeric; NA and null are literal categorical strings, not missing.\nEvaluation holds out whole groups and fits preprocessing inside each training fold.\nAt most 100 encoded features per estimator. No Python, downloads or telemetry.\nOutputs must not already exist. Model files contain private raw training data.\n";
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -449,6 +450,9 @@ fn predictions_bytes(values: &[f64]) -> Result<Vec<u8>> {
 }
 fn run() -> Result<()> {
     let (cmd, opts) = args()?;
+    if cmd == "extract-fet" {
+        return fet_command::run(&opts);
+    }
     if cmd == "--help" || cmd == "help" {
         print!("{HELP}");
         return Ok(());

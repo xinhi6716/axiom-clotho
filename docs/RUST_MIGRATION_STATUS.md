@@ -487,3 +487,12 @@ Some linked documents describe historical release boundaries. For migration
 decisions, verify behavior against the pinned source and relevant tests rather
 than treating every historical paragraph as the current executable contract.
 
+
+### Native FET extraction slice (after nested numeric selection)
+
+The new `extract-fet` CLI and `clotho_core::fet` provide SI/binary64
+constant-current and log-slope measurement extraction with one acquisition per
+physical device and all-or-nothing cohort admission. See
+[Rust FET extraction](RUST_FET_EXTRACTION.md) for the explicit contract.
+This does not close legacy P4 parity: exact-decimal parsing, RRAM extraction,
+prepared endpoint joins, source hashes, saved scoring and init remain pending.
