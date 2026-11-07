@@ -1,10 +1,14 @@
-# Native Rust numeric regression workflow
+# Native Rust modelling workflow
 
 This is a runnable Rust-only path through CSV loading, fitting, saved model
 specifications, prediction and held-out grouped evaluation. It launches **no
 Python process** and makes **no runtime network calls**. It is additive: it does
 not yet replace every existing Clotho feature. See the
 [migration inventory](RUST_MIGRATION_STATUS.md) before claiming completion.
+
+The regression examples below are complemented by [native binary classification
+and explicit mixed-feature preprocessing](RUST_BINARY_AND_MIXED.md). That guide
+covers logistic/majority models, missing/categorical inputs and the v3 model schema.
 
 ## Build and run
 
@@ -44,7 +48,7 @@ I/O only; they are not held-out quality evidence. Use the separate grouped
 `evaluate` command for held-out estimates. Scientific use still requires a
 justified group definition, appropriate independent data and strong baselines.
 
-## Three models
+## Regression models
 
 - `--model mean`: training-target mean; the mandatory low-complexity baseline.
 - `--model knn --k 5`: uniform nearest-neighbor regression, training-only
@@ -70,8 +74,9 @@ result as unbiased. Native nested tuning is not yet implemented.
 - Headers must be unique, nonempty, have no surrounding whitespace and no NUL.
   The feature option supports simple comma-separated column names, not names
   containing commas. CSV quoting, CRLF and UTF-8 are parsed by the csv crate.
-- Numeric values must be finite and present. No silent median imputation, NaN
-  conversion, categorical encoding, units inference or target conversion occurs.
+- The default input path requires finite, present numeric values. Explicit
+  `--preprocess mixed` enables training-only median/one-hot preprocessing as
+  described in the extension guide. No units inference or target conversion occurs.
 - Prediction aligns the saved feature names with CSV headers; column reordering
   and unrelated extra columns are accepted. Required missing columns fail.
 - At most 64 MiB per input file, 20,000 rows and 100 selected features. CLI
@@ -114,8 +119,10 @@ replace encryption, disk backups, or control of the containing directory.
 
 ## Saved model specifications
 
-`fit` writes schema `clotho.numeric.v1`, feature order, target, estimator settings
-and **the full numeric training features and targets**. Keep this file private.
+`fit` writes schema `clotho.numeric.v3`, feature order, target, estimator settings
+and **the full selected training features and targets**. Mixed mode also stores
+raw cells and categorical roles. Keep this file private. Numeric v1/v2 files
+remain readable through the explicit legacy compatibility paths.
 `predict` validates and reconstructs the estimator from these rows. This is a
 portable, inspectable refit specification, **not a serialized coefficient-only
 model**; prediction startup includes fitting and needs the same protocol/version.
@@ -130,8 +137,7 @@ record the source input hashes/commit separately for scientific reproduction.
 
 ## Current limits
 
-No classification, categorical/missing preprocessing, random forests, nested
-search, uncertainty intervals, forward-window evaluation, measurement ingestion,
+No random forests, nested search, uncertainty intervals, forward-window evaluation, measurement ingestion,
 HTML report, legacy saved-artifact importer or source-manifest verification is
 implemented in this native path. The existing Python path remains available so
 those features are not silently deleted during migration. Passing software tests

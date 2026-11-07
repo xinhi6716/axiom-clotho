@@ -1,0 +1,9 @@
+wafer,anneal_temperature_c,film_thickness_nm,material,synthetic_response,synthetic_failed
+a,300,10,HfO2,1.2,0
+a,325,,HfO2,1.47,1
+b,350,11,TaOx,1.64,0
+b,375,13,TaOx,1.91,1
+c,400,12,HfO2,2.08,0
+c,425,14,,2.35,1
+d,450,13,TaOx,2.52,0
+d,475,15,HfO2,2.79,1

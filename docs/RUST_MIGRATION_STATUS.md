@@ -62,6 +62,13 @@ new numeric capabilities are explicitly additive. Retain the distinction between
 2. Python-equivalent behavior backed by matched acceptance tests; and
 3. Python functionality still awaiting migration.
 
+The next native extension adds `classification.rs`, `classification_metrics.rs`
+and `preprocessing.rs`, integrated into fit/predict/evaluate with model schema v3
+and binary evaluation schema `clotho.grouped_binary_evaluation.v1`. It supports
+explicit mixed data and logistic/prevalence models while preserving v1/v2 numeric
+reads. See [scope and contracts](RUST_BINARY_AND_MIXED.md). This is not a parity
+claim for sklearn estimators, encoders, random splits or legacy artifacts.
+
 ## 2. Public command surface to preserve or explicitly replace
 
 The Python distribution is `ml-super-calculator` 0.3.0b7. Installed scripts

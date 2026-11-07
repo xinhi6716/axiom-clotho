@@ -14,11 +14,12 @@ Clotho turns supported RRAM and FET measurement tables into device-level feature
 
 ### Native Rust numeric path (experimental)
 
-A Python-free CLI now supports numeric CSV **fit**, **predict**, and grouped
-**evaluate** with mean, ridge, and kNN models. Build it with Cargo and follow the
+A Python-free CLI now supports CSV **fit**, **predict**, and grouped
+**evaluate** with mean, ridge, kNN, logistic and prevalence-baseline models. Build it with Cargo and follow the
 [native workflow guide](docs/RUST_NATIVE_WORKFLOW.md). Its JSON model specifications
-contain training data and must be kept private. This new protocol does not yet
-replace classification, measurement ingestion, categorical preprocessing, nested
+contain training data and must be kept private. [Binary and mixed-input workflows](docs/RUST_BINARY_AND_MIXED.md)
+include explicit training-only median/one-hot preprocessing. This new protocol does not yet
+replace measurement ingestion, nested
 search or legacy saved studies. See the [full migration inventory](docs/RUST_MIGRATION_STATUS.md).
 
 ### Choose your starting point

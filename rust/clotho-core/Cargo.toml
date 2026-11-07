@@ -4,7 +4,8 @@ version = "0.1.0"
 edition = "2021"
 rust-version = "1.70"
 license = "MIT"
-description = "Opt-in, dependency-free source-feature diagnostics for Clotho"
+description = "Dependency-free Clotho modelling, preprocessing and evaluation core"
 publish = false
 
 [dependencies]
+
