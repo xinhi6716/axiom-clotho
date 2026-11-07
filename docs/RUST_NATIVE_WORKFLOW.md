@@ -9,6 +9,8 @@ not yet replace every existing Clotho feature. See the
 The regression examples below are complemented by [native binary classification
 and explicit mixed-feature preprocessing](RUST_BINARY_AND_MIXED.md). That guide
 covers logistic/majority models, missing/categorical inputs and the v3 model schema.
+For bounded candidate selection with independent inner and outer group folds,
+see [native nested numeric regression comparison](RUST_NESTED_SELECTION.md).
 
 ## Build and run
 
@@ -137,7 +139,8 @@ record the source input hashes/commit separately for scientific reproduction.
 
 ## Current limits
 
-No random forests, nested search, uncertainty intervals, forward-window evaluation, measurement ingestion,
+No random forests, mixed/classification nested search, uncertainty intervals,
+forward-window evaluation, measurement ingestion,
 HTML report, legacy saved-artifact importer or source-manifest verification is
 implemented in this native path. The existing Python path remains available so
 those features are not silently deleted during migration. Passing software tests

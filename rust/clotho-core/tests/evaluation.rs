@@ -354,3 +354,25 @@ fn generated_group_shapes_preserve_all_partition_invariants() {
         }
     }
 }
+
+#[test]
+fn rmse_only_is_not_invalidated_by_unrelated_r2_overflow() {
+    use clotho_core::evaluation::regression_rmse;
+    let y = [0.0, 1e-200];
+    let p = [1.0, 1.0];
+    assert_eq!(
+        regression_metrics(&y, &p),
+        Err(EvaluationError::NumericOverflow)
+    );
+    assert_eq!(regression_rmse(&y, &p).unwrap(), 1.0);
+    assert_eq!(regression_rmse(&[], &[]), Err(EvaluationError::Empty));
+    assert_eq!(regression_rmse(&[1.0], &[]), Err(EvaluationError::Shape));
+    assert_eq!(
+        regression_rmse(&[f64::NAN], &[0.0]),
+        Err(EvaluationError::NonFinite)
+    );
+    assert_eq!(
+        regression_rmse(&[f64::MAX], &[-f64::MAX]),
+        Err(EvaluationError::NumericOverflow)
+    );
+}

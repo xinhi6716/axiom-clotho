@@ -7,6 +7,7 @@ use clotho_core::input_support::{FeatureColumn, FeatureValues};
 use clotho_core::knn::KnnRegressor;
 use clotho_core::preprocessing::Preprocessor;
 use clotho_core::regression::{MeanRegressor, RidgeRegressor};
+use clotho_core::selection::{nested_grouped_regression, RegressionCandidate};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::error::Error;
@@ -16,7 +17,7 @@ use std::path::Path;
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 const MAX_BYTES: u64 = 64 * 1024 * 1024;
-const HELP: &str = "Clotho native modelling (experimental)\n\nfit --csv FILE --target NAME --features A,B --model knn|ridge|mean|logistic|majority --out MODEL.json [--k 5] [--alpha 1] [--preprocess mixed] [--categorical A,B]\npredict --artifact MODEL.json --csv FILE --out PREDICTIONS.csv [--threshold 0.5]\nevaluate --csv FILE --target NAME --features A,B --group NAME --model knn|ridge|mean|logistic|majority --folds 5 --out NEW_DIRECTORY [--k 5] [--alpha 1] [--threshold 0.5] [--preprocess mixed] [--categorical A,B]\n\nStrict finite numeric features are the default. Mixed mode imputes empty numeric cells\nand encodes explicitly named categorical features using training rows only. All other\nfeatures remain numeric; NA and null are literal categorical strings, not missing.\nEvaluation holds out whole groups and fits preprocessing inside each training fold.\nAt most 100 encoded features per estimator. No Python, downloads, telemetry or tuning.\nOutputs must not already exist. Model files contain private raw training data.\n";
+const HELP: &str = "Clotho native modelling (experimental)\n\nfit --csv FILE --target NAME --features A,B --model knn|ridge|mean|logistic|majority --out MODEL.json [--k 5] [--alpha 1] [--preprocess mixed] [--categorical A,B]\npredict --artifact MODEL.json --csv FILE --out PREDICTIONS.csv [--threshold 0.5]\nevaluate --csv FILE --target NAME --features A,B --group NAME --model knn|ridge|mean|logistic|majority --folds 5 --out NEW_DIRECTORY [--k 5] [--alpha 1] [--threshold 0.5] [--preprocess mixed] [--categorical A,B]\ncompare --csv FILE --target NAME --features A,B --group NAME --candidates mean,ridge:1,knn:3 --outer-folds 5 --inner-folds 3 --max-fits 200 --out NEW_DIRECTORY\n\nStrict finite numeric features are the default. Mixed mode imputes empty numeric cells\nand encodes explicitly named categorical features using training rows only. All other\nfeatures remain numeric; NA and null are literal categorical strings, not missing.\nEvaluation holds out whole groups and fits preprocessing inside each training fold.\nAt most 100 encoded features per estimator. No Python, downloads or telemetry.\nOutputs must not already exist. Model files contain private raw training data.\n";
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -457,6 +458,17 @@ fn run() -> Result<()> {
         return Ok(());
     }
     let allowed: &[&str] = match cmd.as_str() {
+        "compare" => &[
+            "--csv",
+            "--target",
+            "--features",
+            "--group",
+            "--candidates",
+            "--outer-folds",
+            "--inner-folds",
+            "--max-fits",
+            "--out",
+        ],
         "fit" => &[
             "--csv",
             "--target",
@@ -493,6 +505,9 @@ fn run() -> Result<()> {
         return Err("Output already exists; choose a new path".into());
     }
     let data = table(required(&opts, "--csv")?)?;
+    if cmd == "compare" {
+        return compare_regression(output, &data, &opts);
+    }
     if cmd == "predict" {
         let artifact: Artifact =
             serde_json::from_slice(&read_bounded(required(&opts, "--artifact")?)?).map_err(
@@ -804,6 +819,97 @@ fn evaluate_binary(
         y.len(),
         metrics.log_loss,
         metrics.brier
+    );
+    Ok(())
+}
+
+fn candidate_json(candidate: &RegressionCandidate) -> serde_json::Value {
+    match candidate {
+        RegressionCandidate::Mean => serde_json::json!({"model":"mean"}),
+        RegressionCandidate::Ridge { alpha } => serde_json::json!({"model":"ridge","alpha":alpha}),
+        RegressionCandidate::Knn { k } => serde_json::json!({"model":"knn","k":k}),
+    }
+}
+fn compare_regression(output: &Path, data: &Table, opts: &HashMap<String, String>) -> Result<()> {
+    let features: Vec<String> = required(opts, "--features")?
+        .split(',')
+        .map(|s| s.trim().to_owned())
+        .collect();
+    let target = required(opts, "--target")?;
+    let group = required(opts, "--group")?;
+    validate_features(&features, target, Some(group))?;
+    let mut candidates = Vec::new();
+    for token in required(opts, "--candidates")?.split(',').map(str::trim) {
+        let candidate = if token == "mean" {
+            RegressionCandidate::Mean
+        } else if let Some(alpha) = token.strip_prefix("ridge:") {
+            RegressionCandidate::Ridge {
+                alpha: alpha.parse().map_err(|_| "Invalid ridge candidate alpha")?,
+            }
+        } else if let Some(k) = token.strip_prefix("knn:") {
+            RegressionCandidate::Knn {
+                k: k.parse().map_err(|_| "Invalid kNN candidate k")?,
+            }
+        } else {
+            return Err("Candidates must be mean, ridge:ALPHA or knn:K".into());
+        };
+        candidates.push(candidate);
+    }
+    let x = data.numeric(&features)?;
+    let y = data.target(target)?;
+    let groups = data.groups(group)?;
+    let outer = number(opts, "--outer-folds", "5")?;
+    let inner = number(opts, "--inner-folds", "3")?;
+    let max_fits = number(opts, "--max-fits", "200")?;
+    let report = nested_grouped_regression(&x, &y, &groups, outer, inner, &candidates, max_fits)?;
+    let mut fold_ids = vec![0; y.len()];
+    let mut folds = Vec::new();
+    for (i, fold) in report.outer_folds.iter().enumerate() {
+        for &row in &fold.test_indices {
+            fold_ids[row] = i;
+        }
+        let scores:Vec<_>=fold.inner_candidate_scores.iter().map(|score|{
+            let failure=score.failure.as_ref().map(|f|serde_json::json!({"inner_fold":f.inner_fold_index,"stage":format!("{:?}",f.stage),"error":f.error.to_string()}));
+            serde_json::json!({"candidate_index":score.candidate_index,"pooled_inner_rmse":score.pooled_rmse,"failure":failure,"attempted_fits":score.fit_count})
+        }).collect();
+        let truth: Vec<_> = fold.test_indices.iter().map(|&j| y[j]).collect();
+        let pred: Vec<_> = fold
+            .test_indices
+            .iter()
+            .map(|&j| report.out_of_fold_predictions[j])
+            .collect();
+        let m = regression_metrics(&truth, &pred)?;
+        folds.push(serde_json::json!({"outer_fold":i,"n_train":fold.train_indices.len(),"n_test":fold.test_indices.len(),"selected_candidate_index":fold.selected_candidate_index,"selected_candidate":candidate_json(&candidates[fold.selected_candidate_index]),"inner_candidate_scores":scores,"attempted_fits":fold.fit_count,"outer_metrics":{"mae":m.mae,"rmse":m.rmse,"r2":m.r2}}));
+    }
+    let m = &report.pooled_metrics;
+    let manifest = serde_json::json!({"schema_version":"clotho.nested_regression.v1","features":features,"target":target,"group":group,"n_rows":y.len(),"n_groups":groups.iter().collect::<HashSet<_>>().len(),"outer_folds":outer,"inner_folds":inner,"candidates":candidates.iter().map(candidate_json).collect::<Vec<_>>(),"selection":"pooled inner out-of-fold RMSE; exact ties first candidate","preprocessing":"strict numeric; scaling fitted independently by each estimator","split":"deterministic group-disjoint largest-first","max_fits":max_fits,"planned_fits":report.planned_fit_count,"attempted_fits":report.fit_count,"pooled_outer_metrics":{"mae":m.mae,"rmse":m.rmse,"r2":m.r2},"folds":folds});
+    let mut w = csv::Writer::from_writer(Vec::new());
+    w.write_record(["row_index", "outer_fold", "target", "prediction"])?;
+    for i in 0..y.len() {
+        w.write_record([
+            i.to_string(),
+            fold_ids[i].to_string(),
+            y[i].to_string(),
+            report.out_of_fold_predictions[i].to_string(),
+        ])?;
+    }
+    let csv = w.into_inner()?;
+    let json = serde_json::to_vec_pretty(&manifest)?;
+    let mut builder = std::fs::DirBuilder::new();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        builder.mode(0o700);
+    }
+    builder.create(output)?;
+    create_file(&output.join("predictions.csv"), &csv)?;
+    create_file(&output.join("selection.json"), &json)?;
+    create_file(&output.join("COMPLETE"), b"clotho.nested_regression.v1\n")?;
+    println!(
+        "Wrote {} nested held-out predictions; {} of {} planned fits attempted",
+        y.len(),
+        report.fit_count,
+        report.planned_fit_count
     );
     Ok(())
 }

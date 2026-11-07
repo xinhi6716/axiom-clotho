@@ -19,8 +19,10 @@ A Python-free CLI now supports CSV **fit**, **predict**, and grouped
 [native workflow guide](docs/RUST_NATIVE_WORKFLOW.md). Its JSON model specifications
 contain training data and must be kept private. [Binary and mixed-input workflows](docs/RUST_BINARY_AND_MIXED.md)
 include explicit training-only median/one-hot preprocessing. This new protocol does not yet
-replace measurement ingestion, nested
-search or legacy saved studies. See the [full migration inventory](docs/RUST_MIGRATION_STATUS.md).
+replace measurement ingestion or legacy saved-study/search contracts. A separate
+[nested numeric regression comparison](docs/RUST_NESTED_SELECTION.md) selects
+candidates on inner group folds and evaluates untouched outer folds. See the
+[full migration inventory](docs/RUST_MIGRATION_STATUS.md).
 
 ### Choose your starting point
 

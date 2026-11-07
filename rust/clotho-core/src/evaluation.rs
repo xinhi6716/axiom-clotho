@@ -58,6 +58,26 @@ pub struct RegressionMetrics {
     pub r2: Option<f64>,
 }
 
+/// Compute only RMSE using the same robust error scaling as full metrics.
+///
+/// Model selection must not reject a finite RMSE merely because an unrelated
+/// R² is outside binary64 range on a near-constant target. Full reporting can
+/// still request [`regression_metrics`] separately.
+pub fn regression_rmse(y_true: &[f64], y_pred: &[f64]) -> Result<f64, EvaluationError> {
+    if y_true.len() != y_pred.len() {
+        return Err(EvaluationError::Shape);
+    }
+    if y_true.is_empty() {
+        return Err(EvaluationError::Empty);
+    }
+    if y_true.iter().chain(y_pred).any(|v| !v.is_finite()) {
+        return Err(EvaluationError::NonFinite);
+    }
+    let (errors, scale, factor) = differences(y_true, y_pred)?;
+    let squares = compensated_sum(errors.iter().map(|v| v * v));
+    restore_scale((squares / y_true.len() as f64).sqrt(), scale, factor)
+}
+
 /// Calculate finite, unweighted MAE, RMSE, and R² without squaring raw values.
 ///
 /// Inputs must be nonempty, equally sized, and finite. Scaled, compensated sums

@@ -113,12 +113,14 @@ roundtrip support; it is not an integrity signature.
 
 ## Not included
 
-No random forests, histogram boosting, native nested model selection, intervals,
+No random forests, histogram boosting, binary/mixed nested model selection, intervals,
 forward-time evaluation, measurement-file adapters, legacy artifact importer,
 HTML reporting, automatic causal identification or material-science accuracy
 claim is provided by this extension. These remain tracked in the migration
 inventory. Current examples and software tests do not substitute for real-data
 validation, calibration studies or comparison with strong scientific baselines.
+The separate [nested numeric regression path](RUST_NESTED_SELECTION.md) does
+not yet accept mixed preprocessing or classification.
 
 ## Verification record (2026-11-07)
 

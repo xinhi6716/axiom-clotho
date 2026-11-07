@@ -69,6 +69,12 @@ explicit mixed data and logistic/prevalence models while preserving v1/v2 numeri
 reads. See [scope and contracts](RUST_BINARY_AND_MIXED.md). This is not a parity
 claim for sklearn estimators, encoders, random splits or legacy artifacts.
 
+A further native slice adds `selection.rs` and `clotho compare`: bounded nested
+grouped numeric regression comparison with explicit candidates, fit budgeting,
+failure accounting and untouched outer-fold predictions. See the
+[protocol and remaining boundaries](RUST_NESTED_SELECTION.md). Mixed/classification
+nested selection and Python workflow/artifact compatibility remain unimplemented.
+
 ## 2. Public command surface to preserve or explicitly replace
 
 The Python distribution is `ml-super-calculator` 0.3.0b7. Installed scripts

@@ -15,3 +15,5 @@ pub mod classification_metrics;
 pub mod preprocessing;
 
 pub mod classification;
+
+pub mod selection;
