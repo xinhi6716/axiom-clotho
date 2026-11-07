@@ -19,3 +19,7 @@ pub mod classification;
 pub mod selection;
 
 pub mod fet;
+
+pub mod measurement;
+
+pub mod rram;

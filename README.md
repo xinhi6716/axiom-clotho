@@ -344,3 +344,10 @@ constant-current and log-current-slope features. See
 [the FET contract and synthetic example](docs/RUST_FET_EXTRACTION.md).
 This is measurement extraction, not demonstrated real-device predictive
 performance or full legacy FET workflow parity.
+
+Native `extract-rram` now provides paired HRS/LRS resistance summaries; native
+`prepare-measurements` joins extracted device features to exact training-only
+endpoints and disjoint physical partitions. See
+[RRAM extraction](docs/RUST_RRAM_EXTRACTION.md) and
+[measurement preparation](docs/RUST_MEASUREMENT_PREPARATION.md). These native
+schemas do not claim full legacy workflow compatibility.

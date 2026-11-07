@@ -45,7 +45,7 @@ original decimal distinctions are **not** preserved.
 - The log fit uses every measured sample inside the inclusive declared VGS
   window, equal weights and at least three samples. Selected currents must be
   strictly nonzero with the declared polarity. No best-window search occurs.
-- Log slope is unweighted OLS of log10(current in A) against VGS in V. The
+- Log slope is unweighted OLS of log10(declared-polarity magnitude of current in A) against VGS in V. The
   reported log RMSE uses N. This descriptive fit is not an ML training fit.
 - Distinct currents whose binary64 logarithms coincide are rejected. Numerical
   range failures reject the cohort; no partial feature export is produced.

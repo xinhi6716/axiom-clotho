@@ -496,3 +496,14 @@ physical device and all-or-nothing cohort admission. See
 [Rust FET extraction](RUST_FET_EXTRACTION.md) for the explicit contract.
 This does not close legacy P4 parity: exact-decimal parsing, RRAM extraction,
 prepared endpoint joins, source hashes, saved scoring and init remain pending.
+
+### Native measurement preparation and RRAM slice
+
+Native `prepare-measurements` joins explicit feature identities, exact train/
+predict partitions and training-only endpoints, enforcing disjoint composite
+physical groups. Native `extract-rram` extracts declared readpoints, pairs HRS/LRS
+cycles and produces per-device or explicitly per-device-condition medians.
+See [measurement preparation](RUST_MEASUREMENT_PREPARATION.md) and
+[RRAM extraction](RUST_RRAM_EXTRACTION.md). These are distinct native schemas;
+legacy exact-decimal and prepared/run/score bundle parity remain open. The new
+prepared CSVs are usable with the existing native fit/evaluate/compare/predict.
