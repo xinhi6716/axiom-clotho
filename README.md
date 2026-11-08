@@ -351,3 +351,17 @@ endpoints and disjoint physical partitions. See
 [RRAM extraction](docs/RUST_RRAM_EXTRACTION.md) and
 [measurement preparation](docs/RUST_MEASUREMENT_PREPARATION.md). These native
 schemas do not claim full legacy workflow compatibility.
+
+### Native results UI (candidate)
+
+The Rust CLI can now render a completed native regression or binary evaluation
+as a local offline results workspace:
+
+```sh
+clotho report --run runs/evaluation-01 --out runs/evaluation-01.html
+```
+
+It includes separate row/group-weighted metrics, a prediction scatter preview,
+fold/group details and light/dark responsive styling, without Python, React or a
+server. This is a results viewer, not yet a training-control app or a full rewrite.
+See [supported schemas, privacy, validation and outstanding browser QA](docs/RUST_RESULTS_UI.md).

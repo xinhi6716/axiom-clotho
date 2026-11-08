@@ -140,9 +140,20 @@ record the source input hashes/commit separately for scientific reproduction.
 ## Current limits
 
 No random forests, mixed/classification nested search, uncertainty intervals,
-forward-window evaluation, measurement ingestion,
-HTML report, legacy saved-artifact importer or source-manifest verification is
-implemented in this native path. The existing Python path remains available so
+forward-window evaluation, legacy saved-artifact importer or source-manifest
+verification is implemented in this native path. Native measurement extraction
+and preparation commands are available; consult the current CLI help and
+[migration inventory](RUST_MIGRATION_STATUS.md) for their bounded contracts.
+
+The native `report` command now generates an offline HTML results UI for completed
+grouped regression and binary evaluations. See
+[supported schemas and verification limits](RUST_RESULTS_UI.md). It is not a
+training-control application or a general legacy-study importer. Browser visual
+and interaction QA remains uncompleted because Chromium cannot start in the
+current execution environment. Use immutable inputs in trusted directories:
+file checks do not protect against concurrent input mutation or path replacement.
+
+The existing Python path remains available so
 those features are not silently deleted during migration. Passing software tests
 is not proof of material prediction accuracy, full migration, or industrial
 readiness. No new material benchmark or external scientific validation is claimed.
