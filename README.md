@@ -87,10 +87,10 @@ Required dependencies are `numpy>=1.24,<3`, `pandas>=2,<3`, `scikit-learn>=1.4,<
 **Prepare → Plan → Run → Score.** Keep training endpoints separate from the later outcomes used to evaluate predictions.
 
 <picture>
-  <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="docs/assets/clotho-ritual-process-dark-mobile.svg">
-  <source media="(max-width: 600px)" srcset="docs/assets/clotho-ritual-process-light-mobile.svg">
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/clotho-ritual-process-dark.svg">
-  <img src="docs/assets/clotho-ritual-process-light.svg" width="100%" alt="Prepare device features and training targets, inspect the plan, fit and predict, then score later outcomes without refitting.">
+  <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="docs/assets/clotho-workflow-en-dark-mobile.svg">
+  <source media="(max-width: 600px)" srcset="docs/assets/clotho-workflow-en-light-mobile.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/clotho-workflow-en-dark.svg">
+  <img src="docs/assets/clotho-workflow-en-light.svg" width="100%" alt="Prepare device features and training targets, inspect the plan, fit and predict, then score later outcomes without refitting.">
 </picture>
 
 | Your input | Supported route |

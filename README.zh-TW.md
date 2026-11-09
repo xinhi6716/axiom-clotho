@@ -75,10 +75,10 @@ clotho --version
 **Prepare → Plan → Run → Score。** 訓練端點與日後用來評估預測的觀測值分開提供。
 
 <picture>
-  <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="docs/assets/clotho-ritual-process-dark-mobile.svg">
-  <source media="(max-width: 600px)" srcset="docs/assets/clotho-ritual-process-light-mobile.svg">
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/clotho-ritual-process-dark.svg">
-  <img src="docs/assets/clotho-ritual-process-light.svg" width="100%" alt="整理元件特徵與訓練端點、檢查計畫、擬合並預測，最後以日後觀測值計分，不重新擬合。">
+  <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="docs/assets/clotho-workflow-zh-TW-dark-mobile.svg">
+  <source media="(max-width: 600px)" srcset="docs/assets/clotho-workflow-zh-TW-light-mobile.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/clotho-workflow-zh-TW-dark.svg">
+  <img src="docs/assets/clotho-workflow-zh-TW-light.svg" width="100%" alt="整理元件特徵與訓練端點、檢查計畫、擬合並預測，最後以日後觀測值計分，不重新擬合。">
 </picture>
 
 | 你的輸入 | 支援路線 |

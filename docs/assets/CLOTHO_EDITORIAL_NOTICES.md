@@ -1,3 +1,27 @@
+# Bilingual workflow cards · 2026-11-09
+
+The English and Traditional Chinese READMEs now use the eight
+`clotho-workflow-{en,zh-TW}-{light,dark}[-mobile].svg` workflow illustrations.
+They retain the ivory, midnight and antique-gold palette. Numbered cards,
+original line ornaments and a separate later-outcomes boundary make the same
+Prepare → Plan → Run → Score sequence easier to scan. Narrow viewports use a
+vertical composition; the Chinese README has Chinese labels and English CLI
+command names. Existing portrait, compact marks and historical SVGs are retained.
+
+These first-party vector illustrations use the repository's MIT license.
+Text uses system fonts: no font files, glyph outlines, remote resources, scripts,
+measurements or private data are embedded. The ornaments are symbolic, not
+scientific diagrams. The workflow wording, runtime and release version do not
+change. The SVG description matches the native README alternative text;
+native headings and nearby workflow explanations remain available.
+
+Regenerate with `python tools/render_readme_workflow.py`; use `--check` for a
+read-only consistency check. Layouts were raster-checked at desktop and narrow
+widths. Static rendering does not certify GitHub media-query selection or
+assistive-technology behavior.
+
+---
+
 # Current README identity · 2026-11-02
 
 The English and Traditional Chinese READMEs display the square `clotho.png` artwork from the public `xinhi6716/xinhi6716` profile repository, pinned to commit `95b148368534587e5393bc9ef610b99c01ca8e92`.

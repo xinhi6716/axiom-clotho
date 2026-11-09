@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="906" viewBox="0 0 480 906" role="img" aria-labelledby="title desc" xml:lang="zh-TW">
+<title id="title">從量測到預測</title>
+<desc id="desc">整理元件特徵與訓練端點、檢查計畫、擬合並預測，最後以日後觀測值計分，不重新擬合。</desc>
+<rect width="480" height="906" rx="12" fill="#f4f0e5"/>
+<path d="M24 1H456M24 905H456" stroke="#d1be92"/>
+<text x="24" y="38" fill="#7e5c22" font-size="15" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" text-anchor="start" letter-spacing="2">量 測 之 線</text>
+<text x="24" y="76" fill="#14212b" font-size="25" font-family="Georgia, 'Times New Roman', serif" text-anchor="start" letter-spacing="0">從量測到預測</text>
+<path d="M60 242V264" stroke="#a2854e"/>
+<rect x="24" y="104" width="432" height="140" rx="8" fill="#faf7ef" stroke="#d1be92"/>
+<circle cx="60" cy="143" r="20" fill="#f4f0e5" stroke="#d1be92"/>
+<text x="60" y="149" fill="#7e5c22" font-size="16" font-family="ui-monospace, 'SFMono-Regular', Consolas, monospace" text-anchor="middle" letter-spacing="0">01</text>
+<text x="100" y="147" fill="#14212b" font-size="28" font-family="Georgia, 'Times New Roman', serif" text-anchor="start" letter-spacing="0">整理</text>
+<g transform="translate(418 143)" fill="none" stroke="#7e5c22" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M-20 12V-12M0 18V-18M20 12V-12"/><circle cx="-20" cy="0" r="4"/><circle cx="0" cy="-8" r="4"/><circle cx="20" cy="6" r="4"/></g>
+<text x="100" y="186" fill="#14212b" font-size="21" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" text-anchor="start" letter-spacing="0">特徵與精確元件 ID</text>
+<text x="100" y="218" fill="#625e53" font-size="21" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" text-anchor="start" letter-spacing="0">僅使用訓練端點</text>
+<text x="171" y="145" fill="#7e5c22" font-size="16" font-family="ui-monospace, 'SFMono-Regular', Consolas, monospace" text-anchor="start" letter-spacing="0">prepare</text>
+<path d="M60 402V424" stroke="#a2854e"/>
+<rect x="24" y="264" width="432" height="140" rx="8" fill="#faf7ef" stroke="#d1be92"/>
+<circle cx="60" cy="303" r="20" fill="#f4f0e5" stroke="#d1be92"/>
+<text x="60" y="309" fill="#7e5c22" font-size="16" font-family="ui-monospace, 'SFMono-Regular', Consolas, monospace" text-anchor="middle" letter-spacing="0">02</text>
+<text x="100" y="307" fill="#14212b" font-size="28" font-family="Georgia, 'Times New Roman', serif" text-anchor="start" letter-spacing="0">規劃</text>
+<g transform="translate(418 303)" fill="none" stroke="#7e5c22" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M-20-16H20V16H-20ZM-7-16V16M7-16V16M-20-5H20M-20 5H20"/></g>
+<text x="100" y="346" fill="#14212b" font-size="21" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" text-anchor="start" letter-spacing="0">宣告群組切分</text>
+<text x="100" y="378" fill="#625e53" font-size="21" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" text-anchor="start" letter-spacing="0">檢查擬合次數預算</text>
+<text x="171" y="305" fill="#7e5c22" font-size="16" font-family="ui-monospace, 'SFMono-Regular', Consolas, monospace" text-anchor="start" letter-spacing="0">plan</text>
+<path d="M60 562V584" stroke="#a2854e"/>
+<rect x="24" y="424" width="432" height="140" rx="8" fill="#faf7ef" stroke="#d1be92"/>
+<circle cx="60" cy="463" r="20" fill="#f4f0e5" stroke="#d1be92"/>
+<text x="60" y="469" fill="#7e5c22" font-size="16" font-family="ui-monospace, 'SFMono-Regular', Consolas, monospace" text-anchor="middle" letter-spacing="0">03</text>
+<text x="100" y="467" fill="#14212b" font-size="28" font-family="Georgia, 'Times New Roman', serif" text-anchor="start" letter-spacing="0">執行</text>
+<g transform="translate(418 463)" fill="none" stroke="#7e5c22" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M0-23V23M-15-15C24-15-24 15 15 15M15-15C-24-15 24 15-15 15"/><path d="M-6-23H6M-6 23H6"/></g>
+<text x="100" y="506" fill="#14212b" font-size="21" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" text-anchor="start" letter-spacing="0">比較模型並重新擬合</text>
+<text x="100" y="538" fill="#625e53" font-size="21" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" text-anchor="start" letter-spacing="0">預測時不提供端點</text>
+<text x="171" y="465" fill="#7e5c22" font-size="16" font-family="ui-monospace, 'SFMono-Regular', Consolas, monospace" text-anchor="start" letter-spacing="0">run</text>
+<rect x="24" y="584" width="432" height="140" rx="8" fill="#faf7ef" stroke="#d1be92"/>
+<circle cx="60" cy="623" r="20" fill="#f4f0e5" stroke="#d1be92"/>
+<text x="60" y="629" fill="#7e5c22" font-size="16" font-family="ui-monospace, 'SFMono-Regular', Consolas, monospace" text-anchor="middle" letter-spacing="0">04</text>
+<text x="100" y="627" fill="#14212b" font-size="28" font-family="Georgia, 'Times New Roman', serif" text-anchor="start" letter-spacing="0">評分</text>
+<g transform="translate(418 623)" fill="none" stroke="#7e5c22" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M-20 18V-18H7L20-5V18ZM7-18V-5H20M-11 5L-3 12L11-1"/></g>
+<text x="100" y="666" fill="#14212b" font-size="21" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" text-anchor="start" letter-spacing="0">配對日後觀測值</text>
+<text x="100" y="698" fill="#625e53" font-size="21" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" text-anchor="start" letter-spacing="0">不新增模型擬合</text>
+<text x="171" y="625" fill="#7e5c22" font-size="16" font-family="ui-monospace, 'SFMono-Regular', Consolas, monospace" text-anchor="start" letter-spacing="0">score</text>
+<path d="M24 765H456" stroke="#d1be92"/>
+<text x="24" y="798" fill="#7e5c22" font-size="18" font-family="ui-monospace, 'SFMono-Regular', Consolas, monospace" text-anchor="start" letter-spacing="0">日後觀測值 → 僅供評分</text>
+<text x="24" y="838" fill="#625e53" font-size="22" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" text-anchor="start" letter-spacing="0">未來觀測值不進入</text>
+<text x="24" y="870" fill="#625e53" font-size="22" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" text-anchor="start" letter-spacing="0">資料準備或建模。</text>
+</svg>
