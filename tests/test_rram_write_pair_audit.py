@@ -39,6 +39,35 @@ class WritePairAudit(unittest.TestCase):
         self.assertEqual(report["eligible_declared_chips"], 2)
         self.assertNotIn("privateCell", result.stdout)
 
+    def test_eligible_chips_with_disjoint_protocols_have_no_shared_strata(self):
+        a, b = triplet(), triplet("chipB")
+        for row in b:
+            row[9] = "different_protocol"
+        report = json.loads(self.run_rows(a + b).stdout)
+        self.assertEqual(report["eligible_declared_chips"], 2)
+        self.assertEqual(report["declared_read_condition_coverage"], {
+            "declared_strata": 2, "multi_chip_strata": 0,
+            "eligible_transitions_in_multi_chip_strata": 0,
+        })
+        self.assertEqual(report["declared_exact_action_coverage"]["multi_chip_strata"], 0)
+
+    def test_shared_protocol_does_not_imply_shared_action(self):
+        a, b = triplet(), triplet("chipB")
+        b[1][7] = "4e-7"
+        report = json.loads(self.run_rows(a + b).stdout)
+        self.assertEqual(report["declared_read_condition_coverage"]["multi_chip_strata"], 1)
+        self.assertEqual(report["declared_exact_action_coverage"]["multi_chip_strata"], 0)
+
+    def test_exact_action_coverage_counts_chips_not_repeats(self):
+        a, b, c = triplet(), triplet("chipB"), triplet(key="t2", start=3)
+        report = json.loads(self.run_rows(a + b + c).stdout)
+        self.assertEqual(report["declared_exact_action_coverage"], {
+            "declared_strata": 1, "multi_chip_strata": 1,
+            "eligible_transitions_in_multi_chip_strata": 3,
+        })
+        report = json.loads(self.run_rows(a + c).stdout)
+        self.assertEqual(report["declared_exact_action_coverage"]["multi_chip_strata"], 0)
+
     def test_missing_before_not_inferred(self):
         result = self.run_rows(triplet()[1:])
         self.assertEqual(result.returncode, 1)

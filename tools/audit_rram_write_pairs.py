@@ -28,6 +28,20 @@ def number(raw, positive=False):
     return val if not positive or val > 0 else None
 
 
+def coverage(entries):
+    """Summarize shared declared conditions without publishing their labels."""
+    by_condition = defaultdict(Counter)
+    for signature, chip in entries:
+        by_condition[signature][chip] += 1
+    return {
+        "declared_strata": len(by_condition),
+        "multi_chip_strata": sum(len(chips) >= 2 for chips in by_condition.values()),
+        "eligible_transitions_in_multi_chip_strata": sum(
+            sum(chips.values()) for chips in by_condition.values() if len(chips) >= 2
+        ),
+    }
+
+
 def audit(path):
     """Return redacted counts, rejecting invalid identities and local timelines."""
     if not stat.S_ISREG(path.stat().st_mode):
@@ -70,15 +84,18 @@ def audit(path):
         role = d["kind"]
         v = number(d["voltage_V"])
         if role == "write":
-            valid = v is not None and number(d["width_s"], True) is not None and d["conductance_S"] == ""
+            width = number(d["width_s"], True)
+            valid = v is not None and width is not None and d["conductance_S"] == ""
         else:
+            width = None
             valid = role in ("pre_read", "post_read") and v is not None and (
                 d["width_s"] == "" and number(d["conductance_S"], True) is not None
             )
         protocol = d["protocol"]
-        transitions[key].append((role, v, valid and bool(IDENTIFIER.fullmatch(protocol)), protocol))
+        transitions[key].append((role, v, valid and bool(IDENTIFIER.fullmatch(protocol)), protocol, width))
     reasons = Counter()
     eligible = []
+    read_coverage, action_coverage = [], []
     for key, events in transitions.items():
         if key in invalid:
             reasons["noncontiguous_episode_events"] += 1
@@ -92,6 +109,10 @@ def audit(path):
             reasons["read_voltage_mismatch"] += 1
         else:
             eligible.append(key)
+            read_signature = (events[0][3], events[0][1])
+            action_signature = read_signature + (events[1][1], events[1][4])
+            read_coverage.append((read_signature, key[0]))
+            action_coverage.append((action_signature, key[0]))
     return {
         "schema": "clotho.rram_write_pair_audit.v1",
         "events": count,
@@ -100,6 +121,8 @@ def audit(path):
         "rejected_transitions_by_primary_reason": dict(sorted(reasons.items())),
         "eligible_declared_cells": len({k[:2] for k in eligible}),
         "eligible_declared_chips": len({k[0] for k in eligible}),
+        "declared_read_condition_coverage": coverage(read_coverage),
+        "declared_exact_action_coverage": coverage(action_coverage),
     }
 
 
