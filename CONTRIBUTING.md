@@ -141,3 +141,6 @@ work](docs/RUST_MIGRATION_STATUS.md). Run the whole workspace with
 `cargo test --manifest-path rust/Cargo.toml --workspace --locked --offline`
 after the documented initial dependency fetch. This is a new versioned numeric
 protocol, not an assertion of Python command or artifact compatibility.
+
+For explicit pre-read / write / post-read event intake, see the
+[RRAM write-pair audit](docs/RRAM_WRITE_PAIR_AUDIT.md).
