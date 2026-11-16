@@ -78,6 +78,39 @@ pub fn regression_rmse(y_true: &[f64], y_pred: &[f64]) -> Result<f64, Evaluation
     restore_scale((squares / y_true.len() as f64).sqrt(), scale, factor)
 }
 
+/// Relative squared-error improvement against explicit baseline predictions.
+///
+/// Computes `1 - MSE(model) / MSE(baseline)` on the same observations. Positive
+/// scores favor the model, zero denotes equal error, and negative scores are
+/// retained. This is not R² unless the baseline is the observed-target mean.
+/// Supply prediction-time baselines (such as persistence) without fitting them
+/// on held-out outcomes. This function cannot verify their provenance.
+///
+/// A perfect baseline makes the ratio undefined and returns `None`, including
+/// when both forecasts are perfect. All three inputs must be equally sized,
+/// nonempty and finite, even when the baseline is perfect. RMSE scaling avoids
+/// overflowing raw squared errors; unrepresentable scores return an error.
+pub fn regression_mse_skill(
+    y_true: &[f64],
+    y_pred: &[f64],
+    baseline: &[f64],
+) -> Result<Option<f64>, EvaluationError> {
+    if y_true.len() != baseline.len() || y_true.len() != y_pred.len() {
+        return Err(EvaluationError::Shape);
+    }
+    let model_rmse = regression_rmse(y_true, y_pred)?;
+    let baseline_rmse = regression_rmse(y_true, baseline)?;
+    if baseline_rmse == 0.0 {
+        return Ok(None);
+    }
+    let ratio = model_rmse / baseline_rmse;
+    let score = 1.0 - ratio * ratio;
+    if !score.is_finite() {
+        return Err(EvaluationError::NumericOverflow);
+    }
+    Ok(Some(score))
+}
+
 /// Calculate finite, unweighted MAE, RMSE, and R² without squaring raw values.
 ///
 /// Inputs must be nonempty, equally sized, and finite. Scaled, compensated sums
