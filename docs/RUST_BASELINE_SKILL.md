@@ -83,7 +83,7 @@ schemas and unknown options fail before creating output. Inputs are limited to
 exist, is owner-only on Unix, and is created only after scoring/serialization.
 An I/O failure during writing can still leave a partial file; check exit status.
 
-This format carries caller declarations, NOT verified provenance. The report
+The v1 format carries caller declarations, NOT verified provenance. Its report
 explicitly sets `provenance_verified`, `query_bytes_verified` and `fit_performed`
 to `false`. There is no query-byte digest or model-output binding. Native
 `predict` CSV row indices are not accepted as physical identities; this command
@@ -92,3 +92,49 @@ row identity, complete held-out coverage, leakage-free baseline construction,
 and prediction-time availability before making these JSON files. Matching false
 keys with changed/swapped values still pass. No accuracy, causal, uncertainty,
 or physical-independence claim follows from a successful comparison.
+
+## Opt-in exact query-byte binding (v2)
+
+To check a saved series' declared query digest against a file, use
+`clotho.declared_regression_series.v2` in **all three** series files and add a
+`query_sha256` field containing exactly 64 lowercase hexadecimal characters.
+Supply the query artifact with `--query`:
+
+```sh
+cargo run --locked -p clotho-cli -- compare-saved \
+  --observed observed-v2.json --model model-v2.json --baseline baseline-v2.json \
+  --query query.csv --out comparison-v2.json
+```
+
+The command reads the query once (at most 64 MiB) and computes SHA-256 over its
+exact bytes, without parsing, sorting, decoding, newline normalization or
+rewriting. All three declared digests must match that computed digest. A
+one-byte or newline change fails before output creation. The query can be any
+byte artifact, including empty; accepting its digest does not validate its
+format or establish a relationship between its rows and the scored series.
+
+For a reproducible byte-only fixture, the three literal bytes `abc` have digest
+`ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad`.
+Use `printf abc > query.bin` (no newline), set this digest in v2 copies of the
+synthetic series above, and pass `--query query.bin`. This is deliberately not
+a real model evaluation: the predictions were not generated from `abc`.
+
+A v2 report has schema `clotho.declared_regression_comparison.v2`, includes
+`query_sha256`, and sets `query_bytes_verified` to `true`. That flag means only
+that the supplied query bytes matched the three declarations at read time. It
+still sets `provenance_verified` and `fit_performed` to `false`. It does not prove
+that predictions, observations or baselines were produced from the query,
+that row identities are real, or that the dataset is correct. Manually copying
+the same digest into all three files still passes. The digest is not a
+signature, attestation, privacy guarantee, or protection against later changes
+to the file. Reports do not include the query path or contents.
+
+The v1 format and report are unchanged: use no digest field and no `--query`.
+Mixed versions, v2 without `--query`, v1 with `--query` or a digest (even null),
+missing/null/malformed v2 digests and mismatches are rejected. Existing semantic,
+row-order and finite-number checks remain mandatory after byte matching. This
+is not the Python saved-scoring protocol and does not load or run any model.
+
+Implementation uses the pinned RustCrypto `sha2` crate with portable software
+compression, not a handwritten hash or external executable. The lockfile pins
+its transitive packages; no existing dependency version is changed.

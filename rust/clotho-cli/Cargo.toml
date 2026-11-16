@@ -19,6 +19,8 @@ serde_json = { version = "=1.0.140", features = ["float_roundtrip"] }
 ryu = "=1.0.20"
 itoa = "=1.0.15"
 memchr = "=2.7.4"
+# Exact-byte query binding; portable Rust implementation without CPU dispatch.
+sha2 = { version = "=0.10.9", default-features = false, features = ["force-soft"] }
 
 [dev-dependencies]
 # Constrain derive-macro transitive versions to the supported MSRV as well.

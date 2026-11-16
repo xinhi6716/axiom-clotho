@@ -179,3 +179,144 @@ fn capacity_and_unrepresentable_scores_leave_no_output() {
     assert_eq!(w.run(&ARGS).status.code(), Some(2));
     assert!(!w.0.join("report.json").exists());
 }
+
+const ABC_SHA256: &str = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+
+fn setup_bound(digest: &str) -> Workspace {
+    let w = setup();
+    for file in ["observed.json", "model.json", "baseline.json"] {
+        let mut value: serde_json::Value =
+            serde_json::from_slice(&fs::read(w.0.join(file)).unwrap()).unwrap();
+        value["schema_version"] = "clotho.declared_regression_series.v2".into();
+        value["query_sha256"] = digest.into();
+        w.write(file, &value.to_string());
+    }
+    w.write("query.bin", "abc");
+    w
+}
+
+fn bound_args() -> Vec<&'static str> {
+    let mut args = ARGS.to_vec();
+    args.extend(["--query", "query.bin"]);
+    args
+}
+
+#[test]
+fn v2_matches_known_sha256_vector_but_does_not_verify_prediction_origin() {
+    // All declarations here are manually copied; no predictions were generated
+    // from "abc". Passing is byte matching, never proof of producer provenance.
+    let w = setup_bound(ABC_SHA256);
+    let output = w.run(&bound_args());
+    assert!(output.status.success(), "{:?}", output);
+    let report: serde_json::Value =
+        serde_json::from_slice(&fs::read(w.0.join("report.json")).unwrap()).unwrap();
+    assert_eq!(report["schema_version"], "clotho.declared_regression_comparison.v2");
+    assert_eq!(report["query_sha256"], ABC_SHA256);
+    assert_eq!(report["query_bytes_verified"], true);
+    assert_eq!(report["provenance_verified"], false);
+    assert_eq!(report["fit_performed"], false);
+    assert!((report["mse_skill"].as_f64().unwrap() - 0.8).abs() < 1e-14);
+    assert!(report.get("query_path").is_none());
+}
+
+#[test]
+fn changed_query_bytes_and_each_wrong_digest_fail_without_output() {
+    for bytes in [b"abc\n".as_slice(), b"abd", b"ABC", b""] {
+        let w = setup_bound(ABC_SHA256);
+        fs::write(w.0.join("query.bin"), bytes).unwrap();
+        assert_eq!(w.run(&bound_args()).status.code(), Some(2));
+        assert!(!w.0.join("report.json").exists());
+    }
+    for file in ["observed.json", "model.json", "baseline.json"] {
+        for digest in ["0".repeat(64), ABC_SHA256.to_uppercase(), "a".repeat(63)] {
+            let w = setup_bound(ABC_SHA256);
+            let mut value: serde_json::Value =
+                serde_json::from_slice(&fs::read(w.0.join(file)).unwrap()).unwrap();
+            value["query_sha256"] = digest.into();
+            w.write(file, &value.to_string());
+            assert_eq!(w.run(&bound_args()).status.code(), Some(2));
+            assert!(!w.0.join("report.json").exists());
+        }
+    }
+}
+
+#[test]
+fn v2_is_explicit_and_never_silently_downgrades_to_v1() {
+    let w = setup_bound(ABC_SHA256);
+    assert_eq!(w.run(&ARGS).status.code(), Some(2));
+    assert!(!w.0.join("report.json").exists());
+    let w = setup();
+    w.write("query.bin", "abc");
+    assert_eq!(w.run(&bound_args()).status.code(), Some(2));
+    assert!(!w.0.join("report.json").exists());
+    for file in ["observed.json", "model.json", "baseline.json"] {
+        for digest in [None, Some(serde_json::Value::Null), Some(ABC_SHA256.into())] {
+            let w = setup_bound(ABC_SHA256);
+            let mut value = series(serde_json::json!([1., 2.]));
+            if let Some(digest) = digest {
+                value["query_sha256"] = digest;
+            }
+            w.write(file, &value.to_string());
+            assert_eq!(w.run(&bound_args()).status.code(), Some(2));
+            assert!(!w.0.join("report.json").exists());
+        }
+    }
+}
+
+#[test]
+fn matching_digest_cannot_bypass_key_checks_or_output_protection() {
+    let w = setup_bound(ABC_SHA256);
+    let mut value: serde_json::Value =
+        serde_json::from_slice(&fs::read(w.0.join("model.json")).unwrap()).unwrap();
+    value["row_ids"] = serde_json::json!(["b", "a"]);
+    w.write("model.json", &value.to_string());
+    assert_eq!(w.run(&bound_args()).status.code(), Some(2));
+    assert!(!w.0.join("report.json").exists());
+    let w = setup_bound(ABC_SHA256);
+    w.write("report.json", "do not overwrite");
+    assert_eq!(w.run(&bound_args()).status.code(), Some(2));
+    assert_eq!(fs::read(w.0.join("report.json")).unwrap(), b"do not overwrite");
+}
+
+#[test]
+fn empty_query_is_a_valid_byte_artifact_and_missing_query_is_not() {
+    let w = setup_bound("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+    w.write("query.bin", "");
+    assert!(w.run(&bound_args()).status.success());
+    let w = setup_bound(ABC_SHA256);
+    fs::remove_file(w.0.join("query.bin")).unwrap();
+    assert_eq!(w.run(&bound_args()).status.code(), Some(2));
+    assert!(!w.0.join("report.json").exists());
+}
+
+#[test]
+fn v2_requires_one_nonnull_digest_and_bounded_query() {
+    for digest in [None, Some(serde_json::Value::Null)] {
+        let w = setup_bound(ABC_SHA256);
+        let mut value: serde_json::Value =
+            serde_json::from_slice(&fs::read(w.0.join("model.json")).unwrap()).unwrap();
+        value.as_object_mut().unwrap().remove("query_sha256");
+        if let Some(digest) = digest {
+            value["query_sha256"] = digest;
+        }
+        w.write("model.json", &value.to_string());
+        assert_eq!(w.run(&bound_args()).status.code(), Some(2));
+        assert!(!w.0.join("report.json").exists());
+    }
+    let w = setup_bound(ABC_SHA256);
+    let original = fs::read_to_string(w.0.join("model.json")).unwrap();
+    let duplicate = format!("{{\"query_sha256\":\"{ABC_SHA256}\",{}", &original[1..]);
+    w.write("model.json", &duplicate);
+    assert_eq!(w.run(&bound_args()).status.code(), Some(2));
+    assert!(!w.0.join("report.json").exists());
+
+    let w = setup_bound(ABC_SHA256);
+    fs::File::create(w.0.join("query.bin"))
+        .unwrap()
+        .set_len(64 * 1024 * 1024 + 1)
+        .unwrap();
+    let output = w.run(&bound_args());
+    assert_eq!(output.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("64 MiB"));
+    assert!(!w.0.join("report.json").exists());
+}

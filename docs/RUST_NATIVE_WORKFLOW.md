@@ -11,11 +11,16 @@ and explicit mixed-feature preprocessing](RUST_BINARY_AND_MIXED.md). That guide
 covers logistic/majority models, missing/categorical inputs and the v3 model schema.
 For bounded candidate selection with independent inner and outer group folds,
 see [native nested numeric regression comparison](RUST_NESTED_SELECTION.md).
+For fit-free comparison of saved declared series and optional exact query-byte
+binding, see [baseline-relative scoring](RUST_BASELINE_SKILL.md).
 
 ## Build and run
 
 Rust 1.70 or newer is required. The core is dependency-free. The CLI uses the
-MIT/Apache-2.0 licensed csv, serde and serde_json ecosystem, pinned in Cargo.lock.
+MIT/Apache-2.0 licensed csv, serde, serde_json and RustCrypto sha2 ecosystem,
+pinned in Cargo.lock. SHA-256 uses portable software compression; the lockfile
+also retains an MSRV-compatible libc 0.2.172 for platform-specific transitive
+dependencies. Regenerating the lockfile requires rechecking the Rust 1.70 minimum.
 Initial Cargo dependency acquisition uses crates.io; once fetched, the commands
 below work offline. No Python environment is needed.
 
