@@ -23,3 +23,25 @@ This is a core API addition, not a CLI option or a real-data accuracy claim.
 Compare paired errors on held-out groups and retain negative results. A gain
 over noisy persistence alone does not prove physical state prediction or
 causality: shared-read mathematical coupling can create apparent improvement.
+
+## Declared ordered cohorts
+
+`clotho_core::saved_comparison::compare_saved_regression` wraps the numeric
+primitive for three in-memory `SavedRegressionSeries`: observed, model and
+baseline. Each supplies a `CohortContract` (cohort, target, unit, horizon), ordered
+opaque `row_ids`, and numeric values. Contracts and complete row rosters must
+match literally. Duplicate IDs, reordered rows, missing rows, nonfinite values,
+blank/control-containing declarations, more than 20,000 rows or declarations
+longer than 256 UTF-8 bytes are rejected. No sorting, joins or normalization occur.
+
+The report retains the declared contract, row count, both RMSEs and MSE skill.
+It performs no fitting or selection. For a training-mean baseline, retain the
+correct outer-training mean for each held-out row; for RRAM persistence, retain
+the origin-available read in the same units and target/horizon. This API cannot
+check those conditions or distinguish forged IDs from authentic ones.
+
+This is not the Python `compare_saved_predictions` file protocol: it verifies
+no byte checksums, model execution, physical identity, hidden cohort omissions,
+historical independence, or units' actual meaning. In particular, swapping
+values while falsely keeping the same IDs passes the declared-roster check.
+It is not a CLI, an uncertainty interval, or a causal/accuracy claim.

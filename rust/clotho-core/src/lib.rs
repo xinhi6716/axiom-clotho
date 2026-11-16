@@ -23,3 +23,5 @@ pub mod fet;
 pub mod measurement;
 
 pub mod rram;
+
+pub mod saved_comparison;
