@@ -19,7 +19,8 @@ model. Fit any learned baseline exclusively on training data. This API checks
 numeric inputs, not timestamps, split provenance, physical independence, or
 whether the supplied baseline leaks held-out outcomes.
 
-This is a core API addition, not a CLI option or a real-data accuracy claim.
+The primitive itself is a core API, not a real-data accuracy claim.
+The separate declared-series CLI adapter is documented below.
 Compare paired errors on held-out groups and retain negative results. A gain
 over noisy persistence alone does not prove physical state prediction or
 causality: shared-read mathematical coupling can create apparent improvement.
@@ -44,4 +45,50 @@ This is not the Python `compare_saved_predictions` file protocol: it verifies
 no byte checksums, model execution, physical identity, hidden cohort omissions,
 historical independence, or units' actual meaning. In particular, swapping
 values while falsely keeping the same IDs passes the declared-roster check.
-It is not a CLI, an uncertainty interval, or a causal/accuracy claim.
+The core API does not provide an uncertainty interval or a causal/accuracy claim.
+
+## Fit-free declared-series CLI
+
+`compare-saved` exposes the declared-cohort API without loading model artifacts,
+training, or running prediction. It is separate from `compare` (nested model
+selection). Each of the three JSON files must independently supply exactly:
+
+```json
+{
+  "schema_version": "clotho.declared_regression_series.v1",
+  "cohort": "synthetic-1",
+  "target": "resistance",
+  "unit": "ohm",
+  "horizon": "1 write",
+  "row_ids": ["a", "b"],
+  "values": [1, 3]
+}
+```
+
+Save that as `observed.json`. Make `model.json` with the same declarations and
+keys but values `[1, 2]`, and `baseline.json` with values `[0, 1]`. From `rust/`:
+
+```sh
+cargo run --locked -p clotho-cli -- compare-saved \
+  --observed observed.json --model model.json --baseline baseline.json \
+  --out comparison.json
+```
+
+This synthetic example reports MSE skill `0.8`. Positive favors the model, zero
+is a tie, negative favors the baseline; a perfect baseline serializes as JSON
+`null`. The report includes both RMSEs, row count and declarations, but not the
+raw row IDs or values. Unknown/duplicate JSON fields, invalid inputs, unsupported
+schemas and unknown options fail before creating output. Inputs are limited to
+64 MiB each and the core row/declaration limits above. Output must not already
+exist, is owner-only on Unix, and is created only after scoring/serialization.
+An I/O failure during writing can still leave a partial file; check exit status.
+
+This format carries caller declarations, NOT verified provenance. The report
+explicitly sets `provenance_verified`, `query_bytes_verified` and `fit_performed`
+to `false`. There is no query-byte digest or model-output binding. Native
+`predict` CSV row indices are not accepted as physical identities; this command
+also does not accept Python saved-scoring files. Independently establish actual
+row identity, complete held-out coverage, leakage-free baseline construction,
+and prediction-time availability before making these JSON files. Matching false
+keys with changed/swapped values still pass. No accuracy, causal, uncertainty,
+or physical-independence claim follows from a successful comparison.
