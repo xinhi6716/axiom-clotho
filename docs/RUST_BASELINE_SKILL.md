@@ -306,3 +306,79 @@ comma, record ending or EOF. Quoted commas and quoted UTF-8 IDs are supported.
 Quoted field content is decoded by the existing CSV parser; embedded line breaks
 remain content and are subsequently rejected in IDs by the control-character
 rule. No whitespace is trimmed. Legacy predict/compare parsing is unchanged.
+
+## Pool caller-supplied scalar comparison reports
+
+`pool-saved` reduces a complete, explicitly listed set of ungrouped v2
+`compare-saved` reports without refitting or averaging their skill scores:
+
+```json
+{
+  "schema_version": "clotho.saved_report_manifest.v1",
+  "model_id": "ridge-fixed",
+  "baseline_id": "training-mean",
+  "reports": ["fold-a.json", "fold-b.json"]
+}
+```
+
+```sh
+cargo run --locked -p clotho-cli -- pool-saved \
+  --manifest reports.json --out pooled.json
+```
+
+Relative report paths resolve against the manifest's directory, not the working
+directory. Absolute paths are also accepted. The manifest must list 1–64 reports;
+each manifest/report file is limited to 64 KiB. Inputs must be strict named JSON
+objects with no unknown or duplicate fields. This first interface intentionally
+accepts only the exact ungrouped `clotho.declared_regression_comparison.v2`
+shape; v1, already pooled and `--groups` reports are rejected rather than silently
+ignoring information. No wildcard discovery, missing-file skipping or inferred
+fold list is performed. The caller must independently decide the complete list.
+
+Each report must declare 1–20,000 rows (at most 1,280,000 in the pool), a unique
+cohort label and a unique lowercase query digest, with identical target, unit
+and horizon across reports. Report-supplied verification flags and validation
+text must match the existing v2 shape. These strings and flags are **untrusted
+input declarations**, not evidence that this command verified any query bytes.
+RMSEs must be finite and nonnegative, and skill must exactly agree with their
+binary64 ratio (null for a perfect baseline). Nonzero decimal tokens that would
+underflow to zero are rejected. Editing or rounding report numbers may cause
+consistency checks to fail; use the unchanged native report files.
+
+For report row counts `n_i`, pooled model MSE is
+`sum(n_i * model_rmse_i^2) / sum(n_i)`, with the equivalent baseline formula.
+The command uses scaled, compensated accumulation to avoid raw-square overflow,
+then reports both pooled RMSEs and `1 - pooled_model_MSE / pooled_baseline_MSE`.
+A perfect pooled baseline produces null skill, even if the model is perfect.
+Perfect-baseline individual reports still contribute their model error and rows.
+There is no epsilon denominator or clipping: negative scores remain negative,
+and an unrepresentable ratio or detected normalization underflow fails before
+output creation. Ordinary binary64 rounding remains; original per-row residuals
+cannot be reconstructed from rounded RMSE scalars.
+
+For example, a 9-row report with model RMSE 0 and baseline RMSE 2, plus a 1-row
+report with model RMSE 3 and baseline RMSE 0, gives pooled model MSE 0.9, baseline
+MSE 3.6 and skill 0.75. Averaging the individual report skills would be undefined
+and would incorrectly omit the second report's error.
+
+The new `clotho.declared_report_pool.v1` output retains the declared source
+cohort, digest, row count and RMSEs in manifest order, not file paths. It sets
+`query_bytes_verified`, `roster_completeness_verified`, `disjointness_verified`,
+`provenance_verified` and `fit_performed` to false. **Scalar reports have no row
+rosters. Different digests/cohort labels do not prove disjoint samples**, correct
+row counts, complete fold coverage, genuine report origin, common baseline
+construction, independence or held-out evaluation. The command cannot detect
+shared rows under different IDs/files or invented scalars and digests. Its
+output is a conditional descriptive aggregation of supplied reports, not an
+uncertainty estimate, causal claim, signed receipt or cross-validation audit.
+Existing predict/compare defaults are unchanged; output is a new private file.
+
+The manifest also requires distinct `model_id` and `baseline_id` declarations
+(nonblank, no control characters, at most 256 UTF-8 bytes each). Choose these
+before pooling to explicitly state which pair the complete list is intended to
+represent. They are echoed with `identities_verified: false` and
+`membership_verified: false`: v2 scalar reports contain no originating model or
+baseline IDs, so this command cannot check that a report actually belongs to
+that declared pair. A common unit/target/horizon is not evidence of a common
+model or baseline. Distinct query digests also permit the same roster to have
+been re-encoded or reordered; those declarations do not establish disjointness.
