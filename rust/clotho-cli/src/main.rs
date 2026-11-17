@@ -5,6 +5,7 @@ mod prepare_command;
 mod predict_saved;
 mod observed_command;
 mod pool_command;
+mod training_input;
 mod rram_command;
 mod saved_command;
 mod saved_groups;
@@ -25,7 +26,7 @@ use std::path::Path;
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 const MAX_BYTES: u64 = 64 * 1024 * 1024;
-const HELP: &str = "Clotho native modelling (experimental)\n\npool-saved --manifest REPORTS.json --out NEW.json (scalar pooling; no roster verification)\nprepare-observed --query QUERY.csv --observed LABELS.csv --row-id NAME --saved-contract CONTRACT.json --out NEW.json\ncompare-saved --observed SERIES.json --model SERIES.json --baseline SERIES.json --out NEW.json [--query QUERY] [--groups GROUPS.json] (declared keys; optional v2 query byte binding; no fitting or provenance verification)\nprepare-measurements --csv FILE --partitions FILE --training-targets FILE --identity lot,wafer,device --features A,B --group-prefix 1 --out NEW_DIRECTORY\nextract-rram --csv FILE --max-bracket-v V --accept-assumptions true --out NEW_DIRECTORY [--feature-row-unit device|device-condition]\nextract-fet --csv FILE --criterion-a A --polarity positive|negative --max-bracket-v V --window-min-v V --window-max-v V --accept-assumptions true --out NEW_DIRECTORY\nfit --csv FILE --target NAME --features A,B --model knn|ridge|mean|logistic|majority --out MODEL.json [--k 5] [--alpha 1] [--preprocess mixed] [--categorical A,B]\npredict --artifact MODEL.json --csv FILE --out PREDICTIONS.csv [--threshold 0.5] [--row-id NAME --saved-contract CONTRACT.json (regression v2 JSON output)]\nevaluate --csv FILE --target NAME --features A,B --group NAME --model knn|ridge|mean|logistic|majority --folds 5 --out NEW_DIRECTORY [--k 5] [--alpha 1] [--threshold 0.5] [--preprocess mixed] [--categorical A,B]\ncompare --csv FILE --target NAME --features A,B --group NAME --candidates mean,ridge:1,knn:3 --outer-folds 5 --inner-folds 3 --max-fits 200 --out NEW_DIRECTORY\n\nStrict finite numeric features are the default. Mixed mode imputes empty numeric cells\nand encodes explicitly named categorical features using training rows only. All other\nfeatures remain numeric; NA and null are literal categorical strings, not missing.\nEvaluation holds out whole groups and fits preprocessing inside each training fold.\nAt most 100 encoded features per estimator. No Python, downloads or telemetry.\nOutputs must not already exist. Model files contain private raw training data.\n";
+const HELP: &str = "Clotho native modelling (experimental)\n\npool-saved --manifest REPORTS.json --out NEW.json (scalar pooling; no roster verification)\nprepare-observed --query QUERY.csv --observed LABELS.csv --row-id NAME --saved-contract CONTRACT.json --out NEW.json\ncompare-saved --observed SERIES.json --model SERIES.json --baseline SERIES.json --out NEW.json [--query QUERY] [--groups GROUPS.json] (declared keys; optional v2 query byte binding; no fitting or provenance verification)\nprepare-measurements --csv FILE --partitions FILE --training-targets FILE --identity lot,wafer,device --features A,B --group-prefix 1 --out NEW_DIRECTORY\nextract-rram --csv FILE --max-bracket-v V --accept-assumptions true --out NEW_DIRECTORY [--feature-row-unit device|device-condition]\nextract-fet --csv FILE --criterion-a A --polarity positive|negative --max-bracket-v V --window-min-v V --window-max-v V --accept-assumptions true --out NEW_DIRECTORY\nfit --csv FILE --target NAME --features A,B --model knn|ridge|mean|logistic|majority --out MODEL.json [--k 5] [--alpha 1] [--preprocess mixed] [--categorical A,B] [--large-training true]\npredict --artifact MODEL.json --csv FILE --out PREDICTIONS.csv [--threshold 0.5] [--row-id NAME --saved-contract CONTRACT.json (regression v2 JSON output)]\nevaluate --csv FILE --target NAME --features A,B --group NAME --model knn|ridge|mean|logistic|majority --folds 5 --out NEW_DIRECTORY [--k 5] [--alpha 1] [--threshold 0.5] [--preprocess mixed] [--categorical A,B]\ncompare --csv FILE --target NAME --features A,B --group NAME --candidates mean,ridge:1,knn:3 --outer-folds 5 --inner-folds 3 --max-fits 200 --out NEW_DIRECTORY\n\nStrict finite numeric features are the default. Mixed mode imputes empty numeric cells\nand encodes explicitly named categorical features using training rows only. All other\nfeatures remain numeric; NA and null are literal categorical strings, not missing.\nEvaluation holds out whole groups and fits preprocessing inside each training fold.\nAt most 100 encoded features per estimator. No Python, downloads or telemetry.\nOutputs must not already exist. Model files contain private raw training data.\n";
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -227,6 +228,9 @@ fn table(path: &str) -> Result<Table> {
     table_bytes(&read_bounded(path)?)
 }
 fn table_bytes(bytes: &[u8]) -> Result<Table> {
+    table_bytes_with_limit(bytes, 20_000)
+}
+fn table_bytes_with_limit(bytes: &[u8], row_limit: usize) -> Result<Table> {
     let mut rdr = csv::ReaderBuilder::new()
         .flexible(false)
         .from_reader(bytes);
@@ -244,8 +248,12 @@ fn table_bytes(bytes: &[u8]) -> Result<Table> {
     let mut rows = Vec::new();
     for record in rdr.records() {
         let record = record?;
-        if rows.len() >= 20_000 {
-            return Err("CSV exceeds 20,000 row limit".into());
+        if rows.len() >= row_limit {
+            return Err(if row_limit == 20_000 {
+                "CSV exceeds 20,000 row limit".into()
+            } else {
+                "CSV exceeds 32,768 training row limit".into()
+            });
         }
         rows.push(record.iter().map(str::to_owned).collect());
     }
@@ -498,6 +506,7 @@ fn run() -> Result<()> {
             "--out",
         ],
         "fit" => &[
+            "--large-training",
             "--csv",
             "--target",
             "--features",
@@ -544,8 +553,17 @@ fn run() -> Result<()> {
         None
     };
     // Export hashes the same bytes parsed here, never a second read of the path.
+    let extended_training = opts.contains_key("--large-training");
+    if extended_training && (opts.get("--large-training").map(String::as_str) != Some("true")
+        || cmd != "fit"
+        || !matches!(opts.get("--model").map(String::as_str), Some("mean" | "ridge"))
+        || opts.contains_key("--preprocess") || opts.contains_key("--categorical"))
+    {
+        return Err("large-training must be true and requires strict numeric mean/ridge fit".into());
+    }
     let data = match &query_bytes {
         Some(bytes) => table_bytes(bytes)?,
+        None if extended_training => training_input::load(required(&opts, "--csv")?)?,
         None => table(required(&opts, "--csv")?)?,
     };
     if cmd == "compare" {
@@ -640,7 +658,11 @@ fn run() -> Result<()> {
     };
     if cmd == "fit" {
         artifact.fit()?;
-        create_file(output, &serde_json::to_vec_pretty(&artifact)?)?;
+        let bytes = serde_json::to_vec_pretty(&artifact)?;
+        if artifact.training_y.len() > 20_000 && bytes.len() as u64 > MAX_BYTES {
+            return Err("Extended training artifact exceeds the 64 MiB reload limit".into());
+        }
+        create_file(output, &bytes)?;
         println!(
             "Wrote model specification and private training data ({} rows)",
             artifact.training_y.len()

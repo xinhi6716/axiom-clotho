@@ -10,6 +10,10 @@ use std::fmt;
 
 const MAX_ROWS: usize = 20_000;
 const MAX_FEATURES: usize = 100;
+/// Training-only extension for narrow mean/ridge tables. Query limits stay 20k.
+pub const MAX_TRAINING_ROWS: usize = 32_768;
+const MAX_EXTENDED_CELLS: usize = 1_000_000;
+const MAX_EXTENDED_RIDGE_WORK: usize = 10_000_000;
 // Reject solves that may lose twelve or more decimal digits. This is the
 // reciprocal infinity-norm condition of the equilibrated triangular factor,
 // not an estimate of the condition of unscaled, original-unit features.
@@ -33,7 +37,7 @@ impl fmt::Display for RegressionError {
             Self::Shape => "Feature widths and target lengths must match and be nonzero.",
             Self::NonFinite => "Features and targets must be finite.",
             Self::InvalidAlpha => "Ridge alpha must be finite and nonnegative.",
-            Self::Capacity => "At most 20,000 rows and 100 features are supported.",
+            Self::Capacity => "Query tables support 20,000 rows; training supports 32,768 rows with extended cell/work budgets above 20,000; at most 100 features.",
             Self::IllConditioned => "The regression system is rank deficient or ill-conditioned; use stronger regularization or remove redundant features.",
             Self::NumericFailure => "The data or result exceeds the supported floating-point range.",
         })
@@ -50,7 +54,7 @@ pub struct MeanRegressor {
 
 impl MeanRegressor {
     pub fn fit(x: &[Vec<f64>], y: &[f64]) -> Result<Self, RegressionError> {
-        let width = validate_training(x, y)?;
+        let width = validate_training(x, y, false)?;
         let scale = y.iter().map(|v| v.abs()).fold(0.0_f64, f64::max);
         let mean = if scale == 0.0 {
             0.0
@@ -84,7 +88,9 @@ impl MeanRegressor {
 /// ill-conditioned unregularized fits return an error; they do not silently
 /// receive a pseudoinverse or a different regularization parameter.
 ///
-/// Fit and predict support 1..=20,000 rows and 1..=100 features. Constant
+/// Prediction supports 1..=20,000 rows. Training supports up to 32,768
+/// rows, with n*p <= 1,000,000 and n*p*p <= 10,000,000 above 20,000.
+/// Both support 1..=100 features. Constant
 /// features are supported with positive alpha. With alpha zero they make the
 /// system rank deficient. Features must have identical order and units in fit
 /// and predict. No missing-value imputation or uncertainty estimate is supplied.
@@ -100,7 +106,7 @@ pub struct RidgeRegressor {
 
 impl RidgeRegressor {
     pub fn fit(x: &[Vec<f64>], y: &[f64], alpha: f64) -> Result<Self, RegressionError> {
-        let width = validate_training(x, y)?;
+        let width = validate_training(x, y, true)?;
         if !alpha.is_finite() || alpha < 0.0 {
             return Err(RegressionError::InvalidAlpha);
         }
@@ -272,9 +278,20 @@ fn scaled_difference(value: f64, origin: f64, scale: f64) -> Result<f64, Regress
     }
 }
 
-fn validate_training(x: &[Vec<f64>], y: &[f64]) -> Result<usize, RegressionError> {
+fn validate_training(x: &[Vec<f64>], y: &[f64], ridge: bool) -> Result<usize, RegressionError> {
     let width = x.first().ok_or(RegressionError::Empty)?.len();
-    validate_features(x, width)?;
+    if x.len() > MAX_TRAINING_ROWS || width > MAX_FEATURES {
+        return Err(RegressionError::Capacity);
+    }
+    if x.len() > MAX_ROWS {
+        let cells = x.len().checked_mul(width).ok_or(RegressionError::Capacity)?;
+        if cells > MAX_EXTENDED_CELLS
+            || (ridge && cells.checked_mul(width).ok_or(RegressionError::Capacity)? > MAX_EXTENDED_RIDGE_WORK)
+        {
+            return Err(RegressionError::Capacity);
+        }
+    }
+    validate_features_with_limit(x, width, MAX_TRAINING_ROWS)?;
     if x.len() != y.len() {
         return Err(RegressionError::Shape);
     }
@@ -285,13 +302,17 @@ fn validate_training(x: &[Vec<f64>], y: &[f64]) -> Result<usize, RegressionError
 }
 
 fn validate_features(x: &[Vec<f64>], width: usize) -> Result<(), RegressionError> {
+    validate_features_with_limit(x, width, MAX_ROWS)
+}
+
+fn validate_features_with_limit(x: &[Vec<f64>], width: usize, row_limit: usize) -> Result<(), RegressionError> {
     if x.is_empty() {
         return Err(RegressionError::Empty);
     }
     if width == 0 || x.iter().any(|row| row.len() != width) {
         return Err(RegressionError::Shape);
     }
-    if x.len() > MAX_ROWS || width > MAX_FEATURES {
+    if x.len() > row_limit || width > MAX_FEATURES {
         return Err(RegressionError::Capacity);
     }
     if x.iter().flatten().any(|value| !value.is_finite()) {

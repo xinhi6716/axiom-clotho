@@ -289,7 +289,7 @@ fn rejects_empty_ragged_mismatched_nonfinite_and_over_capacity_inputs() {
             RegressionError::NonFinite
         );
     }
-    for x in [vec![vec![0.0; 101]], vec![vec![0.0]; 20_001]] {
+    for x in [vec![vec![0.0; 101]], vec![vec![0.0]; 32_769]] {
         let y = vec![0.0; x.len()];
         assert_eq!(
             RidgeRegressor::fit(&x, &y, 1.0).unwrap_err(),
@@ -350,4 +350,25 @@ fn destructive_underflow_is_rejected_independent_of_row_order() {
         MeanRegressor::fit(&vec![vec![0.0]; 3], &[f64::MAX, -f64::MAX, 1e-15]).unwrap_err(),
         RegressionError::NumericFailure
     );
+}
+
+
+#[test]
+fn extended_training_has_separate_cell_work_and_query_budgets() {
+    let n = 32_768;
+    let x = vec![vec![0.0]; n];
+    let y = vec![3.0; n];
+    let mean = MeanRegressor::fit(&x, &y).unwrap();
+    let ridge = RidgeRegressor::fit(&x, &y, 1.0).unwrap();
+    assert_eq!(mean.predict(&[vec![0.0]]).unwrap(), vec![3.0]);
+    assert!((ridge.predict(&[vec![0.0]]).unwrap()[0] - 3.0).abs() < 1e-12);
+    assert_eq!(mean.predict(&x).unwrap_err(), RegressionError::Capacity);
+    assert_eq!(ridge.predict(&x).unwrap_err(), RegressionError::Capacity);
+    assert!(MeanRegressor::fit(&vec![vec![0.0; 30]; n], &y).is_ok());
+    assert_eq!(MeanRegressor::fit(&vec![vec![0.0; 31]; n], &y).unwrap_err(), RegressionError::Capacity);
+    // Invalid alpha is checked after the budget, avoiding an expensive boundary
+    // solve while proving the accepted and rejected sides of the work budget.
+    assert_eq!(RidgeRegressor::fit(&vec![vec![0.0; 17]; n], &y, -1.0).unwrap_err(), RegressionError::InvalidAlpha);
+    assert_eq!(RidgeRegressor::fit(&vec![vec![0.0; 18]; n], &y, -1.0).unwrap_err(), RegressionError::Capacity);
+    assert_eq!(RidgeRegressor::fit(&vec![vec![0.0; 100]; 20_000], &vec![0.0; 20_000], -1.0).unwrap_err(), RegressionError::InvalidAlpha);
 }

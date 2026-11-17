@@ -86,7 +86,10 @@ result as unbiased. Native nested tuning is not yet implemented.
   described in the extension guide. No units inference or target conversion occurs.
 - Prediction aligns the saved feature names with CSV headers; column reordering
   and unrelated extra columns are accepted. Required missing columns fail.
-- At most 64 MiB per input file, 20,000 rows and 100 selected features. CLI
+- At most 64 MiB per input file and 100 selected features. Query CSVs, mixed
+  training, kNN/classification training, evaluation and nested selection retain
+  the 20,000-row limit. Opt-in strict-numeric `fit --model mean|ridge --large-training true` additionally
+  accepts up to 32,768 training rows subject to the budgets below. CLI
   evaluation permits 2–20 folds; the group count must be at least the fold count.
   The core fold function has separate 20,000-row / 100-fold limits. These limits
   bound allocation, not a speed guarantee. k must fit every training fold.
@@ -168,3 +171,51 @@ readiness. No new material benchmark or external scientific validation is claime
   target/scaler fitting and target/group exclusion.
 - Python behavior parity, Python test suite, Windows/macOS, hosted CI, real-data
   prediction accuracy, packaging release and full migration remain unverified.
+
+
+## Bounded narrow-table training extension
+
+With explicit `--large-training true`, strict-numeric mean/ridge training can exceed 20,000 rows up to 32,768 rows.
+Only this extension is subject to `n * p <= 1,000,000`; ridge additionally
+requires `n * p * p <= 10,000,000`, where `p` is the selected feature count.
+These are allocation/work proxies, not measured bytes, flops or a runtime
+promise. Previously supported tables of at most 20,000 rows and 100 features
+retain their existing behavior, including wider ridge tables. The extension
+therefore deliberately has a narrower feature budget rather than globally
+changing the legacy limit. The augmented ridge solve also includes its intercept
+and regularization rows, so actual work is larger than the proxy count.
+
+Default CLI parsing retains the original 20,000-row limit and error message.
+The opt-in flag must be exactly `true`, on `fit --model mean|ridge` with neither
+`--preprocess` nor `--categorical`; other uses fail. Core mean/ridge training uses the same
+training-only budgets; prediction still rejects more than 20,000 query rows.
+Mixed preprocessing, kNN, logistic/majority, fold construction, evaluate, nested
+selection, prepared labels, saved comparisons and scalar report pooling keep
+their existing caps. This is not a larger-fold evaluation feature.
+
+Saved artifacts still contain the raw training data rather than fitted
+coefficients. Native `predict` refits those rows, so loading a narrow extended
+artifact uses the same training budget even for a small query. Extended artifacts
+are checked against the existing 64 MiB reload limit before writing; a failure
+creates no artifact. Legacy input byte caps are unchanged. Repeated prediction incurs
+repeated fit cost; chunking queries does not remove that cost.
+
+No training rows are sampled, truncated or split to evade limits. Feature order,
+scaling, solver, conditioning checks and target behavior are unchanged. This
+capacity extension does not establish generalization, physical independence,
+Lin-data feasibility, or access to held-out data. Resource measurements must
+name the synthetic shape, feature count, algorithm and environment rather than
+claiming a general performance guarantee.
+
+
+Opt-in raw CSV limits are checked **before** String cell materialization: 16 MiB
+bytes, at most 128 raw fields per record and 1,000,000 raw cells total including
+headers and unused columns. An allocation-free lexical preflight enforces strict
+UTF-8/BOM, LF/CRLF, escaped-quote syntax, no blank records, and the 32,768-data-row
+limit. Quoted commas/newlines are parsed as field content, not extra cells/rows.
+This tighter raw input contract applies even below 20,000 rows when the flag is
+present. Ordinary calls without the flag keep their existing CSV behavior.
+Raw cell/byte budgets complement, rather than replace, selected-feature training
+budgets. They bound the new allocation path but do not guarantee a fixed RSS or
+run time across machines. Stored artifacts retain the existing schema; older
+versions may reject their larger training tables on reload.
