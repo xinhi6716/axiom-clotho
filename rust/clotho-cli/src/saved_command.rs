@@ -73,7 +73,9 @@ impl SavedSeries {
 }
 
 pub fn run(opts: &HashMap<String, String>) -> Result<()> {
-    const ALLOWED: [&str; 5] = ["--observed", "--model", "--baseline", "--out", "--query"];
+    const ALLOWED: [&str; 6] = [
+        "--observed", "--model", "--baseline", "--out", "--query", "--groups",
+    ];
     if opts.keys().any(|key| !ALLOWED.contains(&key.as_str())) {
         return Err("Unknown option for compare-saved".into());
     }
@@ -139,6 +141,16 @@ pub fn run(opts: &HashMap<String, String>) -> Result<()> {
             "and supplied query byte digest only"
         )
         .into();
+    }
+    if let Some(path) = opts.get("--groups") {
+        report["grouped_summary"] = super::saved_groups::summarize(
+            path,
+            &observed.cohort,
+            &observed.row_ids,
+            &observed.values,
+            &model.values,
+            &baseline.values,
+        )?;
     }
     // All validation and serialization finish before creating the private output.
     let bytes = serde_json::to_vec_pretty(&report)?;

@@ -320,3 +320,177 @@ fn v2_requires_one_nonnull_digest_and_bounded_query() {
     assert!(String::from_utf8_lossy(&output.stderr).contains("64 MiB"));
     assert!(!w.0.join("report.json").exists());
 }
+
+fn group_args() -> Vec<&'static str> {
+    let mut args = ARGS.to_vec();
+    args.extend(["--groups", "groups.json"]);
+    args
+}
+
+fn mapping(ids: serde_json::Value, groups: serde_json::Value) -> serde_json::Value {
+    serde_json::json!({
+        "schema_version": "clotho.declared_row_groups.v1", "cohort": "synthetic-1",
+        "row_ids": ids, "group_ids": groups
+    })
+}
+
+#[test]
+fn declared_groups_show_pooled_macro_sign_reversal_without_ratios() {
+    let w = setup();
+    for (file, values) in [
+        ("observed.json", serde_json::json!([0., 0., 0., 0., 0.])),
+        ("model.json", serde_json::json!([0., 0., 0., 0., 3.])),
+        ("baseline.json", serde_json::json!([2., 2., 2., 2., 0.])),
+    ] {
+        let mut value = series(values);
+        value["row_ids"] = serde_json::json!(["a", "b", "c", "d", "e"]);
+        w.write(file, &value.to_string());
+    }
+    w.write("groups.json", &mapping(
+        serde_json::json!(["a", "b", "c", "d", "e"]),
+        serde_json::json!(["large", "large", "large", "large", "small"]),
+    ).to_string());
+    assert!(w.run(&group_args()).status.success());
+    let report: serde_json::Value =
+        serde_json::from_slice(&fs::read(w.0.join("report.json")).unwrap()).unwrap();
+    let g = &report["grouped_summary"];
+    assert_eq!(g["n_groups"], 2);
+    assert_eq!(g["n_rows"], 5);
+    assert!((g["pooled_row_mean_squared_error_delta"].as_f64().unwrap() - 1.4).abs() < 1e-14);
+    assert_eq!(g["macro_equal_group_mean_squared_error_delta"], -2.5);
+    assert_eq!(g["improved_groups"], 1);
+    assert_eq!(g["worsened_groups"], 1);
+    assert_eq!(g["baseline_perfect_groups"], 1);
+    assert_eq!(g["groups"][1]["mean_squared_error_delta"], -9.);
+    assert_eq!(g["groups"][1]["baseline_mse"], 0.);
+    assert_eq!(g["groups"][1]["model_mse"], 9.);
+    assert_eq!(g["groups"][1]["baseline_perfect"], true);
+    assert_eq!(g["independence_verified"], false);
+    assert_eq!(g["provenance_verified"], false);
+    fs::remove_file(w.0.join("report.json")).unwrap();
+    assert!(w.run(&ARGS).status.success());
+    let pooled: serde_json::Value =
+        serde_json::from_slice(&fs::read(w.0.join("report.json")).unwrap()).unwrap();
+    let mut stripped = report;
+    stripped.as_object_mut().unwrap().remove("grouped_summary");
+    assert_eq!(stripped, pooled);
+}
+
+#[test]
+fn mapping_rejects_ambiguous_missing_duplicate_and_reordered_rows() {
+    let valid = mapping(serde_json::json!(["a", "b"]), serde_json::json!(["one", "two"]));
+    for (field, value) in [
+        ("row_ids", serde_json::json!(["b", "a"])),
+        ("row_ids", serde_json::json!(["a", "a"])),
+        ("row_ids", serde_json::json!(["a"])),
+        ("row_ids", serde_json::json!(["a", "b", "c"])),
+        ("group_ids", serde_json::json!(["one"])),
+        ("group_ids", serde_json::json!(["one", " "])),
+        ("group_ids", serde_json::json!(["one", "x\ny"])),
+        ("group_ids", serde_json::json!(["one", "x".repeat(257)])),
+        ("cohort", serde_json::json!("other")),
+        ("schema_version", serde_json::json!("unknown")),
+        ("extra", serde_json::json!(true)),
+    ] {
+        let w = setup();
+        let mut bad = valid.clone();
+        bad[field] = value;
+        w.write("groups.json", &bad.to_string());
+        assert_eq!(w.run(&group_args()).status.code(), Some(2));
+        assert!(!w.0.join("report.json").exists());
+    }
+    for text in [
+        "[\"clotho.declared_row_groups.v1\",\"synthetic-1\",[\"a\",\"b\"],[\"one\",\"two\"]]".to_owned(),
+        format!("{{\"cohort\":\"synthetic-1\",{}", &valid.to_string()[1..]),
+    ] {
+        let w = setup();
+        w.write("groups.json", &text);
+        assert_eq!(w.run(&group_args()).status.code(), Some(2));
+        assert!(!w.0.join("report.json").exists());
+    }
+}
+
+#[test]
+fn groups_keep_perfect_and_tiny_baselines_honest_and_reject_square_range_loss() {
+    for values in [serde_json::json!([1., 3.]), serde_json::json!([1e-150, 1e-150])] {
+        let w = setup();
+        w.write("baseline.json", &series(values.clone()).to_string());
+        w.write("model.json", &series(values).to_string());
+        w.write("groups.json", &mapping(
+            serde_json::json!(["a", "b"]), serde_json::json!(["one", "two"]),
+        ).to_string());
+        assert!(w.run(&group_args()).status.success());
+        let report: serde_json::Value =
+            serde_json::from_slice(&fs::read(w.0.join("report.json")).unwrap()).unwrap();
+        assert_eq!(report["grouped_summary"]["tied_groups"], 2);
+    }
+    for magnitude in [1e200, 1e-200] {
+        let w = setup();
+        w.write("observed.json", &series(serde_json::json!([0., 0.])).to_string());
+        w.write("model.json", &series(serde_json::json!([magnitude, magnitude])).to_string());
+        w.write("baseline.json", &series(serde_json::json!([magnitude, magnitude])).to_string());
+        w.write("groups.json", &mapping(
+            serde_json::json!(["a", "b"]), serde_json::json!(["one", "one"]),
+        ).to_string());
+        assert_eq!(w.run(&group_args()).status.code(), Some(2));
+        assert!(!w.0.join("report.json").exists());
+        assert!(w.run(&ARGS).status.success());
+    }
+}
+
+#[test]
+fn grouped_v2_and_tiny_nonzero_errors_are_not_reported_as_perfect() {
+    let w = setup_bound(ABC_SHA256);
+    w.write("observed.json", &{
+        let mut v = series(serde_json::json!([0., 0.]));
+        v["schema_version"] = "clotho.declared_regression_series.v2".into();
+        v["query_sha256"] = ABC_SHA256.into();
+        v.to_string()
+    });
+    for (file, values) in [
+        ("model.json", serde_json::json!([0., 0.])),
+        ("baseline.json", serde_json::json!([1e-150, 1e-150])),
+    ] {
+        let mut v = series(values);
+        v["schema_version"] = "clotho.declared_regression_series.v2".into();
+        v["query_sha256"] = ABC_SHA256.into();
+        w.write(file, &v.to_string());
+    }
+    w.write("groups.json", &mapping(
+        serde_json::json!(["a", "b"]), serde_json::json!(["one", "two"]),
+    ).to_string());
+    let mut args = bound_args();
+    args.extend(["--groups", "groups.json"]);
+    assert!(w.run(&args).status.success());
+    let report: serde_json::Value =
+        serde_json::from_slice(&fs::read(w.0.join("report.json")).unwrap()).unwrap();
+    assert_eq!(report["query_bytes_verified"], true);
+    assert_eq!(report["grouped_summary"]["baseline_perfect_groups"], 0);
+    assert_eq!(report["grouped_summary"]["improved_groups"], 2);
+    assert!(report["grouped_summary"]["macro_equal_group_mean_squared_error_delta"]
+        .as_f64().unwrap() > 0.);
+}
+
+#[test]
+fn grouped_compensated_mean_retains_small_paired_gain_after_cancellation() {
+    let w = setup();
+    for (file, values) in [
+        ("observed.json", serde_json::json!([0., 0., 0.])),
+        ("model.json", serde_json::json!([0., 0., 1e150])),
+        ("baseline.json", serde_json::json!([1e150, 1., 0.])),
+    ] {
+        let mut value = series(values);
+        value["row_ids"] = serde_json::json!(["a", "b", "c"]);
+        w.write(file, &value.to_string());
+    }
+    w.write("groups.json", &mapping(
+        serde_json::json!(["a", "b", "c"]),
+        serde_json::json!(["one", "one", "one"]),
+    ).to_string());
+    assert!(w.run(&group_args()).status.success());
+    let report: serde_json::Value =
+        serde_json::from_slice(&fs::read(w.0.join("report.json")).unwrap()).unwrap();
+    let delta = report["grouped_summary"]["pooled_row_mean_squared_error_delta"]
+        .as_f64().unwrap();
+    assert!((delta - 1. / 3.).abs() < 1e-14);
+}
