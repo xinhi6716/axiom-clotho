@@ -247,3 +247,62 @@ attested. Files can still be edited or their digests copied. It does not establi
 real-world identity, truthful unit/horizon declarations, complete cohorts,
 training provenance, held-out independence, or correctness of physical data.
 `compare-saved` retains its existing explicit verification boundaries.
+
+## Attach separate observed labels without rewriting the query
+
+`prepare-observed` builds a v2 observed-series JSON from a feature-only query and
+a separate ID/target CSV. This closes the native label-separated scoring path:
+
+```sh
+cargo run --locked -p clotho-cli -- prepare-observed \
+  --query query.csv --observed labels.csv --row-id measurement_id \
+  --saved-contract contract.json --out observed-v2.json
+```
+
+Use the same `clotho.saved_prediction_contract.v1` contract as prediction. The
+query must contain the explicitly named ID column and **must not contain the
+contract's target column**. The labels CSV must contain exactly two headers: that
+ID name and that target name, in either order. Other columns, duplicate headers,
+missing target/ID headers and a target equal to the ID name are rejected.
+
+For example, a query roster `a,b` and labels `b,3` then `a,1` produces ordered
+IDs `["a","b"]` and values `[1,3]`. This is a strict one-to-one alignment, not an
+inner join: both rosters must be unique and contain exactly the same literal IDs.
+Missing, extra, repeated, blank, overlong or control-containing IDs fail before
+output creation. IDs are never trimmed, numerically coerced, synthesized or
+inferred from row positions. Labels may be shuffled; the query order is retained.
+
+Targets must be explicit finite binary64 numbers. Empty/invalid values, NaN,
+infinity, overflow and nonzero decimal inputs rounded down to zero are rejected,
+not dropped or imputed. Ordinary binary64 rounding still applies; this is not an
+arbitrary-precision decimal format. Representable subnormal values and signed
+zero are retained. Shared input limits remain 64 MiB per file and 20,000 CSV rows.
+
+The exact query buffer is read once for parsing and SHA-256, is never rewritten,
+and supplies the output's `query_sha256`. Labels are read separately and their
+bytes do not alter that digest. Existing bound predictions for those exact query
+bytes can now be scored with `compare-saved --query query.csv --observed
+observed-v2.json ...`. A later change to query bytes still invalidates comparison.
+The output is a new private file containing IDs and observed values; pre-existing
+files are never overwritten. All parsing, matching and serialization precede
+creation. No model is loaded, trained or executed by `prepare-observed`.
+
+This checks declared ID correspondence and byte identity, not label authenticity,
+truthful units/horizon, real-world identity or correct outcomes. A target-free
+header does not prove that remaining columns are leakage-free. It cannot establish
+when labels became available, prior query immutability, blinding or custody. The
+labels file is not authenticated or hashed into a new provenance protocol. The
+existing v2 format, comparison boundaries and predict/compare defaults remain
+unchanged.
+
+For this command only, both CSV byte buffers undergo strict lexical validation
+before the existing parser runs. Inputs must be valid UTF-8; one leading UTF-8
+BOM is accepted as the parser's header marker, but remains included in the query
+digest. Record endings must be LF or CRLF (an EOF without a final terminator is
+allowed). Blank physical records outside quoted fields are rejected rather than
+silently skipped. Quotes may start only at the beginning of a field; embedded
+quotes must be doubled, and a closing quote must be followed immediately by a
+comma, record ending or EOF. Quoted commas and quoted UTF-8 IDs are supported.
+Quoted field content is decoded by the existing CSV parser; embedded line breaks
+remain content and are subsequently rejected in IDs by the control-character
+rule. No whitespace is trimmed. Legacy predict/compare parsing is unchanged.

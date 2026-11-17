@@ -3,7 +3,7 @@ use super::{read_bounded, Artifact, Result, Table};
 use clotho_core::saved_comparison::MAX_DECLARATION_BYTES;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -36,6 +36,14 @@ impl Export {
         {
             return Err("Row ID column must be separate from model features and target".into());
         }
+        let export = Self::from_table(path, id_column, data)?;
+        if export.contract.target != artifact.target {
+            return Err("Saved prediction contract target differs from model artifact".into());
+        }
+        Ok(export)
+    }
+
+    fn from_table(path: &str, id_column: &str, data: &Table) -> Result<Self> {
         let bytes = read_bounded(path)?;
         if bytes
             .iter()
@@ -48,11 +56,10 @@ impl Export {
         let contract: Contract = serde_json::from_slice(&bytes)
             .map_err(|_| "Invalid saved prediction contract JSON")?;
         if contract.schema_version != "clotho.saved_prediction_contract.v1"
-            || contract.target != artifact.target
             || [&contract.cohort, &contract.target, &contract.unit, &contract.horizon]
                 .iter().any(|value| !valid_text(value))
         {
-            return Err("Invalid saved prediction contract or target differs from model artifact".into());
+            return Err("Invalid saved regression contract".into());
         }
         let column = data.column(id_column)?;
         let mut seen = HashSet::new();
@@ -65,6 +72,55 @@ impl Export {
             row_ids.push(id.clone());
         }
         Ok(Self { contract, row_ids })
+    }
+
+    pub(super) fn observed(
+        path: &str,
+        id_column: &str,
+        query: &Table,
+        labels: &Table,
+        query_bytes: &[u8],
+    ) -> Result<Vec<u8>> {
+        let export = Self::from_table(path, id_column, query)?;
+        let target = &export.contract.target;
+        if target == id_column || query.headers.iter().any(|header| header == target) {
+            return Err("Observed export requires a query without the declared target column".into());
+        }
+        if labels.headers.len() != 2 {
+            return Err("Observed CSV must contain exactly the ID and declared target columns".into());
+        }
+        let id = labels.column(id_column)?;
+        let value = labels.column(target)?;
+        let mut observed = HashMap::new();
+        for row in &labels.rows {
+            let key = &row[id];
+            if !valid_text(key) || observed.contains_key(key.as_str()) {
+                return Err("Observed IDs must be unique, bounded, nonblank text without controls".into());
+            }
+            let text = &row[value];
+            let number: f64 = text
+                .parse()
+                .map_err(|_| "Observed targets must be explicit finite numbers")?;
+            let mantissa = text.split(['e', 'E']).next().unwrap_or("");
+            if !number.is_finite()
+                || (number == 0.0 && mantissa.bytes().any(|b| (b'1'..=b'9').contains(&b)))
+            {
+                return Err("Observed target is outside the supported binary64 range".into());
+            }
+            observed.insert(key.as_str(), number);
+        }
+        if observed.len() != export.row_ids.len() {
+            return Err("Observed IDs must match the complete query roster".into());
+        }
+        let values = export
+            .row_ids
+            .iter()
+            .map(|id| {
+                observed.get(id.as_str()).copied()
+                    .ok_or_else(|| "Observed IDs must match the complete query roster".into())
+            })
+            .collect::<Result<Vec<f64>>>()?;
+        export.bytes(&values, query_bytes)
     }
 
     pub(super) fn bytes(&self, predictions: &[f64], query: &[u8]) -> Result<Vec<u8>> {
