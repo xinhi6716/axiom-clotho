@@ -194,3 +194,56 @@ samples, or effective sample size. Reports set `independence_verified` and
 validate the sidecar's declared grouping. Group labels are included in the
 private output; row IDs and raw values are not. No confidence intervals,
 significance tests, model fitting, or causal claims are added.
+
+## Generate a v2 series with native regression prediction
+
+Native `predict` can produce the existing v2 saved-series JSON instead of CSV.
+Supply **both** `--row-id ID_COLUMN` and `--saved-contract CONTRACT.json`:
+
+```json
+{
+  "schema_version": "clotho.saved_prediction_contract.v1",
+  "cohort": "synthetic-1",
+  "target": "resistance",
+  "unit": "ohm",
+  "horizon": "1 write"
+}
+```
+
+```sh
+cargo run --locked -p clotho-cli -- predict \
+  --artifact model.json --csv query.csv --row-id measurement_id \
+  --saved-contract contract.json --out predictions-v2.json
+```
+
+The contract is a strict named JSON object. Its target must match the fitted
+artifact target exactly; all declarations obey the saved-series text limits.
+The selected ID column must exist, be separate from model features and target,
+and contain unique, nonblank, control-free IDs of at most 256 UTF-8 bytes. IDs
+are copied in query row order without numeric conversion, trimming or sorting.
+The output has exactly the established `clotho.declared_regression_series.v2`
+fields and can be passed as `--model` or `--baseline` to `compare-saved`.
+
+The query is read once: the exact byte buffer parsed for prediction is also
+SHA-256 hashed, so there is no second-read race between prediction and digest.
+Only artifact-selected feature columns feed the estimator. Other query columns,
+including a target column if present, are not treated as observations or used
+for prediction. The digest nevertheless covers the entire file, including those
+unused columns, headers and line endings. No observed-series file is fabricated.
+Prepare independently justified aligned observations for comparison. A learned
+baseline can be exported through its own separately fitted regression artifact;
+its training split and leakage-free construction remain the caller's duty.
+
+This path uses the existing native predictor, which **refits the saved model
+specification on its stored training data**. It is not the fit-free comparator.
+Strict-numeric and explicit mixed regression artifacts use their existing
+preprocessing behavior. Binary classifiers, `--threshold`, partial option pairs,
+invalid IDs or contracts fail without creating the output. Without these two
+options, legacy prediction CSV output is unchanged. Outputs remain new-file-only
+and owner-readable/writable on Unix; they contain supplied row IDs and predictions.
+
+The export records what this invocation computed, but it is not signed or
+attested. Files can still be edited or their digests copied. It does not establish
+real-world identity, truthful unit/horizon declarations, complete cohorts,
+training provenance, held-out independence, or correctness of physical data.
+`compare-saved` retains its existing explicit verification boundaries.

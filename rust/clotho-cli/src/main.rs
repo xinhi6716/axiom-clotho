@@ -2,6 +2,7 @@
 #![forbid(unsafe_code)]
 mod fet_command;
 mod prepare_command;
+mod predict_saved;
 mod rram_command;
 mod saved_command;
 mod saved_groups;
@@ -22,7 +23,7 @@ use std::path::Path;
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 const MAX_BYTES: u64 = 64 * 1024 * 1024;
-const HELP: &str = "Clotho native modelling (experimental)\n\ncompare-saved --observed SERIES.json --model SERIES.json --baseline SERIES.json --out NEW.json [--query QUERY] [--groups GROUPS.json] (declared keys; optional v2 query byte binding; no fitting or provenance verification)\nprepare-measurements --csv FILE --partitions FILE --training-targets FILE --identity lot,wafer,device --features A,B --group-prefix 1 --out NEW_DIRECTORY\nextract-rram --csv FILE --max-bracket-v V --accept-assumptions true --out NEW_DIRECTORY [--feature-row-unit device|device-condition]\nextract-fet --csv FILE --criterion-a A --polarity positive|negative --max-bracket-v V --window-min-v V --window-max-v V --accept-assumptions true --out NEW_DIRECTORY\nfit --csv FILE --target NAME --features A,B --model knn|ridge|mean|logistic|majority --out MODEL.json [--k 5] [--alpha 1] [--preprocess mixed] [--categorical A,B]\npredict --artifact MODEL.json --csv FILE --out PREDICTIONS.csv [--threshold 0.5]\nevaluate --csv FILE --target NAME --features A,B --group NAME --model knn|ridge|mean|logistic|majority --folds 5 --out NEW_DIRECTORY [--k 5] [--alpha 1] [--threshold 0.5] [--preprocess mixed] [--categorical A,B]\ncompare --csv FILE --target NAME --features A,B --group NAME --candidates mean,ridge:1,knn:3 --outer-folds 5 --inner-folds 3 --max-fits 200 --out NEW_DIRECTORY\n\nStrict finite numeric features are the default. Mixed mode imputes empty numeric cells\nand encodes explicitly named categorical features using training rows only. All other\nfeatures remain numeric; NA and null are literal categorical strings, not missing.\nEvaluation holds out whole groups and fits preprocessing inside each training fold.\nAt most 100 encoded features per estimator. No Python, downloads or telemetry.\nOutputs must not already exist. Model files contain private raw training data.\n";
+const HELP: &str = "Clotho native modelling (experimental)\n\ncompare-saved --observed SERIES.json --model SERIES.json --baseline SERIES.json --out NEW.json [--query QUERY] [--groups GROUPS.json] (declared keys; optional v2 query byte binding; no fitting or provenance verification)\nprepare-measurements --csv FILE --partitions FILE --training-targets FILE --identity lot,wafer,device --features A,B --group-prefix 1 --out NEW_DIRECTORY\nextract-rram --csv FILE --max-bracket-v V --accept-assumptions true --out NEW_DIRECTORY [--feature-row-unit device|device-condition]\nextract-fet --csv FILE --criterion-a A --polarity positive|negative --max-bracket-v V --window-min-v V --window-max-v V --accept-assumptions true --out NEW_DIRECTORY\nfit --csv FILE --target NAME --features A,B --model knn|ridge|mean|logistic|majority --out MODEL.json [--k 5] [--alpha 1] [--preprocess mixed] [--categorical A,B]\npredict --artifact MODEL.json --csv FILE --out PREDICTIONS.csv [--threshold 0.5] [--row-id NAME --saved-contract CONTRACT.json (regression v2 JSON output)]\nevaluate --csv FILE --target NAME --features A,B --group NAME --model knn|ridge|mean|logistic|majority --folds 5 --out NEW_DIRECTORY [--k 5] [--alpha 1] [--threshold 0.5] [--preprocess mixed] [--categorical A,B]\ncompare --csv FILE --target NAME --features A,B --group NAME --candidates mean,ridge:1,knn:3 --outer-folds 5 --inner-folds 3 --max-fits 200 --out NEW_DIRECTORY\n\nStrict finite numeric features are the default. Mixed mode imputes empty numeric cells\nand encodes explicitly named categorical features using training rows only. All other\nfeatures remain numeric; NA and null are literal categorical strings, not missing.\nEvaluation holds out whole groups and fits preprocessing inside each training fold.\nAt most 100 encoded features per estimator. No Python, downloads or telemetry.\nOutputs must not already exist. Model files contain private raw training data.\n";
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -221,10 +222,12 @@ fn read_bounded(path: &str) -> Result<Vec<u8>> {
     Ok(bytes)
 }
 fn table(path: &str) -> Result<Table> {
-    let bytes = read_bounded(path)?;
+    table_bytes(&read_bounded(path)?)
+}
+fn table_bytes(bytes: &[u8]) -> Result<Table> {
     let mut rdr = csv::ReaderBuilder::new()
         .flexible(false)
-        .from_reader(bytes.as_slice());
+        .from_reader(bytes);
     let headers: Vec<String> = rdr.headers()?.iter().map(str::to_owned).collect();
     let mut seen = HashSet::new();
     if headers.is_empty()
@@ -497,7 +500,9 @@ fn run() -> Result<()> {
             "--preprocess",
             "--categorical",
         ],
-        "predict" => &["--artifact", "--csv", "--out", "--threshold"],
+        "predict" => &[
+            "--artifact", "--csv", "--out", "--threshold", "--row-id", "--saved-contract",
+        ],
         "evaluate" => &[
             "--csv",
             "--target",
@@ -521,7 +526,20 @@ fn run() -> Result<()> {
     if output.symlink_metadata().is_ok() {
         return Err("Output already exists; choose a new path".into());
     }
-    let data = table(required(&opts, "--csv")?)?;
+    let saved_export = cmd == "predict" && opts.contains_key("--saved-contract");
+    if cmd == "predict" && saved_export != opts.contains_key("--row-id") {
+        return Err("--row-id and --saved-contract must be supplied together".into());
+    }
+    let query_bytes = if saved_export {
+        Some(read_bounded(required(&opts, "--csv")?)?)
+    } else {
+        None
+    };
+    // Export hashes the same bytes parsed here, never a second read of the path.
+    let data = match &query_bytes {
+        Some(bytes) => table_bytes(bytes)?,
+        None => table(required(&opts, "--csv")?)?,
+    };
     if cmd == "compare" {
         return compare_regression(output, &data, &opts);
     }
@@ -537,10 +555,25 @@ fn run() -> Result<()> {
                     )
                 },
             )?;
+        let export = if saved_export {
+            if opts.contains_key("--threshold") {
+                return Err("threshold is not supported for saved regression export".into());
+            }
+            Some(predict_saved::Export::prepare(
+                required(&opts, "--saved-contract")?,
+                required(&opts, "--row-id")?,
+                &data,
+                &artifact,
+            )?)
+        } else {
+            None
+        };
         let model = artifact.fit()?;
         let x = data.feature_rows(&artifact)?;
         let probabilities = model.predict(&x)?;
-        if artifact.is_binary() {
+        if let (Some(export), Some(bytes)) = (export, query_bytes) {
+            create_file(output, &export.bytes(&probabilities, &bytes)?)?;
+        } else if artifact.is_binary() {
             let threshold = threshold_option(&opts)?;
             let mut w = csv::Writer::from_writer(Vec::new());
             w.write_record(["row_index", "positive_probability", "predicted_label"])?;
