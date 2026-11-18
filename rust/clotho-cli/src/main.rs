@@ -304,6 +304,7 @@ impl Table {
                         if !value.is_finite() {
                             return Err("Numeric columns must be finite".into());
                         }
+                        reject_cell_underflow(&row[i], value)?;
                         Ok(value)
                     })
                     .collect()
@@ -389,6 +390,19 @@ fn preprocessing_options(
     validate_categorical(features, &categorical, mixed)?;
     Ok((mixed, categorical))
 }
+// Called only after parsing a finite numeric cell. A mathematically nonzero
+// decimal must not silently become a zero feature, regression target, or label.
+// Exponent digits do not determine whether the significand is zero.
+fn reject_cell_underflow(text: &str, value: f64) -> Result<()> {
+    if value == 0.0
+        && text.split(['e', 'E']).next().unwrap_or("").bytes()
+            .any(|byte| (b'1'..=b'9').contains(&byte))
+    {
+        return Err("Nonzero numeric cell underflows binary64".into());
+    }
+    Ok(())
+}
+
 fn mixed_columns(
     rows: &[Vec<String>],
     features: &[String],
@@ -407,6 +421,7 @@ fn mixed_columns(
                 if row[i].is_empty() { return Ok(None); }
                 let value = row[i].parse::<f64>().map_err(|_| "Mixed numeric columns must contain explicit numbers or empty cells; declare string columns with --categorical")?;
                 if !value.is_finite() { return Err("Numeric columns must be finite".into()); }
+                reject_cell_underflow(&row[i], value)?;
                 Ok(Some(value))
             }).collect::<Result<Vec<_>>>()?)
         };

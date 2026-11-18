@@ -255,3 +255,22 @@ promise transactional publication on filesystem failure (a partial new file can
 remain on write failure). No raw-row artifact is automatically converted,
 replaced, deleted, uploaded or made safe to publish. Ridge export is deliberately
 not implemented: its numerically stable state includes first-row feature anchors.
+
+### Numeric CSV underflow validation
+
+Selected numeric feature and target cells now reject a decimal nonzero value
+that parses to binary64 zero, for example `1e-999` or `2e-324`. Previously these
+could silently become zero-valued features, targets, or binary labels. This is
+an intentional validation tightening for fit, prediction, evaluation and
+selection, including Mean inference queries and numeric mixed-mode columns.
+Failures occur before creating the requested output. Mixed artifact numeric
+strings are checked by the same parser when reloaded.
+
+Actual zero (including signed zero and zero with an exponent) and representable
+subnormal values remain accepted. Ordinary decimal rounding to a nonzero
+binary64 value is unchanged. Explicit categorical literals such as `1e-999`,
+mixed-mode empty cells, group IDs, and unused columns retain their existing
+meaning. Errors do not echo the offending private cell. This check concerns
+input conversion, not arithmetic underflow inside a fitted model. It does not
+retroactively recover precision already lost in legacy numeric JSON artifacts,
+or change CLI option parsing or the separate domain-extraction workflows.
