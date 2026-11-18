@@ -53,6 +53,21 @@ pub struct MeanRegressor {
 }
 
 impl MeanRegressor {
+    /// Restore inference state without training rows or fitting.
+    /// This summary is not a confidentiality guarantee.
+    pub fn from_mean(width: usize, mean: f64) -> Result<Self, RegressionError> {
+        if width == 0 {
+            return Err(RegressionError::Shape);
+        }
+        if width > MAX_FEATURES {
+            return Err(RegressionError::Capacity);
+        }
+        if !mean.is_finite() {
+            return Err(RegressionError::NonFinite);
+        }
+        Ok(Self { width, mean })
+    }
+
     pub fn fit(x: &[Vec<f64>], y: &[f64]) -> Result<Self, RegressionError> {
         let width = validate_training(x, y, false)?;
         let scale = y.iter().map(|v| v.abs()).fold(0.0_f64, f64::max);

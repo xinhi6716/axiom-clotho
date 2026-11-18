@@ -219,3 +219,39 @@ Raw cell/byte budgets complement, rather than replace, selected-feature training
 budgets. They bound the new allocation path but do not guarantee a fixed RSS or
 run time across machines. Stored artifacts retain the existing schema; older
 versions may reject their larger training tables on reload.
+
+### Opt-in Mean inference summary
+
+Strict numeric Mean alone can export `clotho.mean_inference.v1` without raw
+training rows. Both commands require explicit opt-in; existing defaults and
+legacy training-containing artifacts are unchanged:
+
+```sh
+clotho fit --csv train.csv --features x,z --target y --model mean \
+  --mean-inference true --out NEW-mean.json
+clotho predict --artifact NEW-mean.json --mean-inference true \
+  --csv query.csv --out NEW-predictions.csv
+```
+
+The strict named JSON object has exactly `schema_version`, `model` (`mean`),
+`features`, `target`, and finite binary64 `mean`. Feature order is declared by
+1–100 unique names excluding the target; names are nonblank, without surrounding
+whitespace or control characters, and at most 256 UTF-8 bytes each. The artifact
+is at most 64 KiB. Unknown/duplicate fields, positional arrays, unsupported
+versions/models and nonzero numeric tokens rounding to zero are rejected.
+Loading reconstructs a validated Mean evaluator, not training arrays, and does
+not refit. Queries retain the normal numeric feature alignment, finite checks
+and 20,000-row limit even though Mean ignores feature values. The existing
+`--row-id` / `--saved-contract` v2 prediction output also works in this mode.
+`--threshold`, mixed preprocessing, Ridge and other estimators are unsupported.
+`--large-training true` may be combined at fit time under its existing limits.
+
+Serialization roundtrips the fitted binary64 mean; it does not promise decimal
+exactness, anonymization, confidentiality, producer authenticity or scientific
+validity. A single-row training mean reveals that target; feature/target names
+may also be sensitive. Outputs use the existing private, create-new-only writer:
+validation and serialization complete before opening the output. This does not
+promise transactional publication on filesystem failure (a partial new file can
+remain on write failure). No raw-row artifact is automatically converted,
+replaced, deleted, uploaded or made safe to publish. Ridge export is deliberately
+not implemented: its numerically stable state includes first-row feature anchors.

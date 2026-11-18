@@ -6,6 +6,7 @@ mod predict_saved;
 mod observed_command;
 mod pool_command;
 mod training_input;
+mod mean_inference;
 mod rram_command;
 mod saved_command;
 mod saved_groups;
@@ -26,7 +27,7 @@ use std::path::Path;
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 const MAX_BYTES: u64 = 64 * 1024 * 1024;
-const HELP: &str = "Clotho native modelling (experimental)\n\npool-saved --manifest REPORTS.json --out NEW.json (scalar pooling; no roster verification)\nprepare-observed --query QUERY.csv --observed LABELS.csv --row-id NAME --saved-contract CONTRACT.json --out NEW.json\ncompare-saved --observed SERIES.json --model SERIES.json --baseline SERIES.json --out NEW.json [--query QUERY] [--groups GROUPS.json] (declared keys; optional v2 query byte binding; no fitting or provenance verification)\nprepare-measurements --csv FILE --partitions FILE --training-targets FILE --identity lot,wafer,device --features A,B --group-prefix 1 --out NEW_DIRECTORY\nextract-rram --csv FILE --max-bracket-v V --accept-assumptions true --out NEW_DIRECTORY [--feature-row-unit device|device-condition]\nextract-fet --csv FILE --criterion-a A --polarity positive|negative --max-bracket-v V --window-min-v V --window-max-v V --accept-assumptions true --out NEW_DIRECTORY\nfit --csv FILE --target NAME --features A,B --model knn|ridge|mean|logistic|majority --out MODEL.json [--k 5] [--alpha 1] [--preprocess mixed] [--categorical A,B] [--large-training true]\npredict --artifact MODEL.json --csv FILE --out PREDICTIONS.csv [--threshold 0.5] [--row-id NAME --saved-contract CONTRACT.json (regression v2 JSON output)]\nevaluate --csv FILE --target NAME --features A,B --group NAME --model knn|ridge|mean|logistic|majority --folds 5 --out NEW_DIRECTORY [--k 5] [--alpha 1] [--threshold 0.5] [--preprocess mixed] [--categorical A,B]\ncompare --csv FILE --target NAME --features A,B --group NAME --candidates mean,ridge:1,knn:3 --outer-folds 5 --inner-folds 3 --max-fits 200 --out NEW_DIRECTORY\n\nStrict finite numeric features are the default. Mixed mode imputes empty numeric cells\nand encodes explicitly named categorical features using training rows only. All other\nfeatures remain numeric; NA and null are literal categorical strings, not missing.\nEvaluation holds out whole groups and fits preprocessing inside each training fold.\nAt most 100 encoded features per estimator. No Python, downloads or telemetry.\nOutputs must not already exist. Model files contain private raw training data.\n";
+const HELP: &str = "Clotho native modelling (experimental)\n\npool-saved --manifest REPORTS.json --out NEW.json (scalar pooling; no roster verification)\nprepare-observed --query QUERY.csv --observed LABELS.csv --row-id NAME --saved-contract CONTRACT.json --out NEW.json\ncompare-saved --observed SERIES.json --model SERIES.json --baseline SERIES.json --out NEW.json [--query QUERY] [--groups GROUPS.json] (declared keys; optional v2 query byte binding; no fitting or provenance verification)\nprepare-measurements --csv FILE --partitions FILE --training-targets FILE --identity lot,wafer,device --features A,B --group-prefix 1 --out NEW_DIRECTORY\nextract-rram --csv FILE --max-bracket-v V --accept-assumptions true --out NEW_DIRECTORY [--feature-row-unit device|device-condition]\nextract-fet --csv FILE --criterion-a A --polarity positive|negative --max-bracket-v V --window-min-v V --window-max-v V --accept-assumptions true --out NEW_DIRECTORY\nfit --csv FILE --target NAME --features A,B --model knn|ridge|mean|logistic|majority --out MODEL.json [--k 5] [--alpha 1] [--preprocess mixed] [--categorical A,B] [--large-training true] [--mean-inference true (mean only)]\npredict --artifact MODEL.json --csv FILE --out PREDICTIONS.csv [--mean-inference true] [--threshold 0.5] [--row-id NAME --saved-contract CONTRACT.json (regression v2 JSON output)]\nevaluate --csv FILE --target NAME --features A,B --group NAME --model knn|ridge|mean|logistic|majority --folds 5 --out NEW_DIRECTORY [--k 5] [--alpha 1] [--threshold 0.5] [--preprocess mixed] [--categorical A,B]\ncompare --csv FILE --target NAME --features A,B --group NAME --candidates mean,ridge:1,knn:3 --outer-folds 5 --inner-folds 3 --max-fits 200 --out NEW_DIRECTORY\n\nStrict finite numeric features are the default. Mixed mode imputes empty numeric cells\nand encodes explicitly named categorical features using training rows only. All other\nfeatures remain numeric; NA and null are literal categorical strings, not missing.\nEvaluation holds out whole groups and fits preprocessing inside each training fold.\nAt most 100 encoded features per estimator. No Python, downloads or telemetry.\nOutputs must not already exist. Default model files contain private raw training data; opt-in mean inference files contain a summary, not a confidentiality guarantee.\n";
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -506,6 +507,7 @@ fn run() -> Result<()> {
             "--out",
         ],
         "fit" => &[
+            "--mean-inference",
             "--large-training",
             "--csv",
             "--target",
@@ -518,7 +520,7 @@ fn run() -> Result<()> {
             "--categorical",
         ],
         "predict" => &[
-            "--artifact", "--csv", "--out", "--threshold", "--row-id", "--saved-contract",
+            "--mean-inference", "--artifact", "--csv", "--out", "--threshold", "--row-id", "--saved-contract",
         ],
         "evaluate" => &[
             "--csv",
@@ -542,6 +544,13 @@ fn run() -> Result<()> {
     let output = Path::new(required(&opts, "--out")?);
     if output.symlink_metadata().is_ok() {
         return Err("Output already exists; choose a new path".into());
+    }
+    let mean_inference = opts.contains_key("--mean-inference");
+    if mean_inference && (opts.get("--mean-inference").map(String::as_str) != Some("true")
+        || (cmd == "fit" && (opts.get("--model").map(String::as_str) != Some("mean")
+            || opts.contains_key("--preprocess") || opts.contains_key("--categorical"))))
+    {
+        return Err("mean-inference must be true and requires strict numeric mean".into());
     }
     let saved_export = cmd == "predict" && opts.contains_key("--saved-contract");
     if cmd == "predict" && saved_export != opts.contains_key("--row-id") {
@@ -568,6 +577,9 @@ fn run() -> Result<()> {
     };
     if cmd == "compare" {
         return compare_regression(output, &data, &opts);
+    }
+    if cmd == "predict" && mean_inference {
+        return mean_inference::predict(&opts, output, &data, query_bytes.as_deref());
     }
     if cmd == "predict" {
         let artifact: Artifact =
@@ -657,6 +669,9 @@ fn run() -> Result<()> {
         categorical_features,
     };
     if cmd == "fit" {
+        if mean_inference {
+            return mean_inference::export(&artifact, output);
+        }
         artifact.fit()?;
         let bytes = serde_json::to_vec_pretty(&artifact)?;
         if artifact.training_y.len() > 20_000 && bytes.len() as u64 > MAX_BYTES {
