@@ -286,3 +286,16 @@ remain valid. Ordinary rounding to a nonzero binary64 value is unchanged.
 This is input conversion validation, not arbitrary-precision scoring or a
 change to grouped/pooling mathematics. Previously rounded source artifacts
 cannot have their lost precision reconstructed by this check.
+
+Legacy training-containing model JSON loaded by `predict` now uses the same
+quote-aware numeric loss-to-zero check as saved-series import. A nonzero JSON
+number such as `1e-999` is rejected before serde can turn it into zero, including
+training feature/target arrays and `alpha`. This checks every numeric token in
+the artifact, even a parameter a particular estimator would not consume; it
+does not silently reinterpret authored values. Validation completes before any
+prediction output is created. True zeros, representable subnormals, and quoted
+numeric-looking feature names remain supported. Existing schema, duplicate-field,
+shape and finite-value checks still run. Mixed-mode strings are not JSON numeric
+tokens and retain their existing numeric/categorical parsing rules. This does
+not recover precision already lost in old files, change ordinary nonzero
+rounding, or alter estimator arithmetic and legacy refitting behavior.

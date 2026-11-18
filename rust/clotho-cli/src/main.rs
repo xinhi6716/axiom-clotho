@@ -7,6 +7,7 @@ mod observed_command;
 mod pool_command;
 mod training_input;
 mod mean_inference;
+mod numeric_json;
 mod rram_command;
 mod saved_command;
 mod saved_groups;
@@ -597,8 +598,10 @@ fn run() -> Result<()> {
         return mean_inference::predict(&opts, output, &data, query_bytes.as_deref());
     }
     if cmd == "predict" {
+        let artifact_bytes = read_bounded(required(&opts, "--artifact")?)?;
+        numeric_json::reject_numeric_underflow(&artifact_bytes)?;
         let artifact: Artifact =
-            serde_json::from_slice(&read_bounded(required(&opts, "--artifact")?)?).map_err(
+            serde_json::from_slice(&artifact_bytes).map_err(
                 |error| {
                     // Serde's Display may include private raw values or field names.
                     format!(
