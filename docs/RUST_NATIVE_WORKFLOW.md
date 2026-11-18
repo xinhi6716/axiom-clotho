@@ -274,3 +274,15 @@ meaning. Errors do not echo the offending private cell. This check concerns
 input conversion, not arithmetic underflow inside a fitted model. It does not
 retroactively recover precision already lost in legacy numeric JSON artifacts,
 or change CLI option parsing or the separate domain-extraction workflows.
+
+Imported `compare-saved` v1 and v2 JSON series also reject nonzero numeric
+literals that round to binary64 zero (for example `1e-999` or `2e-324`) before
+scoring any of the observed, model or baseline inputs. Otherwise an imported
+nonzero error could silently become a perfect baseline. This validation occurs
+before output creation, on the original bounded JSON bytes, without changing
+strict/duplicate field checks or v2 query digest requirements. True zero,
+representable subnormals, and numeric-looking text inside quoted metadata/IDs
+remain valid. Ordinary rounding to a nonzero binary64 value is unchanged.
+This is input conversion validation, not arbitrary-precision scoring or a
+change to grouped/pooling mathematics. Previously rounded source artifacts
+cannot have their lost precision reconstructed by this check.

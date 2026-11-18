@@ -44,6 +44,7 @@ impl SavedSeries {
         {
             return Err("Invalid saved-series JSON; expected a JSON object".into());
         }
+        reject_numeric_underflow(&bytes)?;
         let series: Self = serde_json::from_slice(&bytes)
             .map_err(|_| "Invalid saved-series JSON; expected the strict regression-series schema")?;
         match (series.schema_version.as_str(), &series.query_sha256) {
@@ -160,4 +161,67 @@ pub fn run(opts: &HashMap<String, String>) -> Result<()> {
         result.n_rows
     );
     Ok(())
+}
+
+// Quote-aware check before serde conversion. Serde remains responsible for
+// JSON grammar, strict fields and duplicate keys; no raw values are echoed.
+fn reject_numeric_underflow(bytes: &[u8]) -> Result<()> {
+    let (mut i, mut in_string) = (0, false);
+    while i < bytes.len() {
+        if in_string {
+            if bytes[i] == b'\\' {
+                i += 2;
+                continue;
+            }
+            if bytes[i] == b'"' {
+                in_string = false;
+            }
+        } else if bytes[i] == b'"' {
+            in_string = true;
+        } else if bytes[i].is_ascii_digit() || bytes[i] == b'-' {
+            let start = i;
+            while i < bytes.len()
+                && matches!(bytes[i], b'0'..=b'9' | b'-' | b'+' | b'.' | b'e' | b'E')
+            {
+                i += 1;
+            }
+            let token = std::str::from_utf8(&bytes[start..i]).unwrap_or("");
+            if let Ok(value) = token.parse::<f64>() {
+                let mantissa = token.split(['e', 'E']).next().unwrap_or("");
+                if value == 0.0 && mantissa.bytes().any(|b| (b'1'..=b'9').contains(&b)) {
+                    return Err("Nonzero saved-series number underflows binary64".into());
+                }
+            }
+            continue;
+        }
+        i += 1;
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod numeric_token_tests {
+    use super::*;
+
+    #[test]
+    fn accepted_subnormal_tokens_survive_the_actual_serde_conversion() {
+        for (token, expected_bits) in [
+            ("3e-324", 1),
+            ("5e-324", 1),
+            ("2.4703282292062328e-324", 1),
+            ("-3e-324", (1_u64 << 63) | 1),
+            ("0e-999", 0),
+            ("-0.0e-999", 1_u64 << 63),
+        ] {
+            let bytes = format!(
+                r#"{{"schema_version":"clotho.declared_regression_series.v1","cohort":"c","target":"y","unit":"u","horizon":"h","row_ids":["a"],"values":[{token}]}}"#
+            );
+            reject_numeric_underflow(bytes.as_bytes()).unwrap();
+            let parsed: SavedSeries = serde_json::from_slice(bytes.as_bytes()).unwrap();
+            assert_eq!(parsed.values[0].to_bits(), expected_bits, "{token}");
+        }
+        for token in ["2e-324", "2.4703282292062327e-324", "-2.4703282292062327e-324"] {
+            assert!(reject_numeric_underflow(token.as_bytes()).is_err());
+        }
+    }
 }

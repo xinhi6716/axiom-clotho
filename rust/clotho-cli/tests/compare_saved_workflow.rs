@@ -494,3 +494,72 @@ fn grouped_compensated_mean_retains_small_paired_gain_after_cancellation() {
         .as_f64().unwrap();
     assert!((delta - 1. / 3.).abs() < 1e-14);
 }
+
+
+// Use literal JSON tokens: constructing serde_json::Value first would already
+// have lost the distinction this file-boundary regression test protects.
+fn token_series(token: &str, v2: bool) -> String {
+    let version = if v2 { "v2" } else { "v1" };
+    let digest = if v2 {
+        // SHA-256 of the exact query bytes "abc".
+        r#", "query_sha256":"ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad""#
+    } else {
+        ""
+    };
+    format!(
+        r#"{{"schema_version":"clotho.declared_regression_series.{version}","cohort":"1e-999","target":"y","unit":"u","horizon":"h","row_ids":["escaped\"1e-999\\tail"],"values":[{token}]{digest}}}"#
+    )
+}
+
+#[test]
+fn all_saved_input_roles_reject_nonzero_decimal_to_zero_in_v1_and_v2() {
+    for v2 in [false, true] {
+        for role in ["observed.json", "model.json", "baseline.json"] {
+            for token in ["1e-999", "-1E-999", "2e-324", "0.000001e-999"] {
+                let w = Workspace::new();
+                w.write("query", "abc");
+                for file in ["observed.json", "model.json", "baseline.json"] {
+                    w.write(file, &token_series(if file == role { token } else { "0" }, v2));
+                }
+                let mut args = ARGS.to_vec();
+                if v2 {
+                    args.extend(["--query", "query"]);
+                }
+                let output = w.run(&args);
+                assert!(!output.status.success(), "accepted {role} {token}");
+                let error = String::from_utf8_lossy(&output.stderr);
+                assert!(error.contains("underflows binary64"), "{error}");
+                assert!(!error.contains(token));
+                assert!(!w.0.join("report.json").exists());
+            }
+        }
+    }
+}
+
+#[test]
+fn saved_zero_subnormal_and_quoted_numeric_looking_ids_remain_valid() {
+    for v2 in [false, true] {
+        for token in ["0", "-0.0", "0e-999", "-0.000E+999", "5e-324", "-5e-324", "3e-324"] {
+            let w = Workspace::new();
+            w.write("query", "abc");
+            // Identical representable inputs give exact zero errors, avoiding
+            // any separate limitations of the squared-error arithmetic.
+            for file in ["observed.json", "model.json", "baseline.json"] {
+                w.write(file, &token_series(token, v2));
+            }
+            let mut args = ARGS.to_vec();
+            if v2 {
+                args.extend(["--query", "query"]);
+            }
+            let output = w.run(&args);
+            assert!(output.status.success(), "{token}: {output:?}");
+            let report: serde_json::Value = serde_json::from_slice(
+                &fs::read(w.0.join("report.json")).unwrap(),
+            ).unwrap();
+            assert_eq!(report["model_rmse"], 0.0);
+            assert_eq!(report["baseline_rmse"], 0.0);
+            assert!(report["mse_skill"].is_null());
+            assert_eq!(report["query_bytes_verified"], v2);
+        }
+    }
+}
