@@ -563,3 +563,23 @@ fn saved_zero_subnormal_and_quoted_numeric_looking_ids_remain_valid() {
         }
     }
 }
+
+#[test]
+fn subnormal_rmse_ratio_does_not_publish_a_false_skill_tie() {
+    let w = Workspace::new();
+    for (file, values) in [
+        ("observed.json", "[0,0]"),
+        ("model.json", "[5e-324,0]"),
+        ("baseline.json", "[5e-324,5e-324]"),
+    ] {
+        let text = format!(
+            r#"{{"schema_version":"clotho.declared_regression_series.v1","cohort":"synthetic","target":"y","unit":"u","horizon":"h","row_ids":["a","b"],"values":{values}}}"#
+        );
+        w.write(file, &text);
+    }
+    let output = w.run(&ARGS);
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr)
+        .contains("Evaluation exceeds the supported floating-point range"));
+    assert!(!w.0.join("report.json").exists());
+}

@@ -92,6 +92,13 @@ fn skill(model: f64, baseline: f64) -> Result<Option<f64>> {
     if baseline == 0.0 {
         return Ok(None);
     }
+    if model == 0.0 {
+        return Ok(Some(1.0));
+    }
+    // Match the core range restriction, including caller-supplied reports.
+    if model.is_subnormal() || baseline.is_subnormal() {
+        return Err("Pooled skill is outside the supported binary64 range".into());
+    }
     let ratio = model / baseline;
     let result = 1.0 - ratio * ratio;
     if !result.is_finite() {

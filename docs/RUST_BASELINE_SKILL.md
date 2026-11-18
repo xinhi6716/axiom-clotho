@@ -382,3 +382,22 @@ baseline IDs, so this command cannot check that a report actually belongs to
 that declared pair. A common unit/target/horizon is not evidence of a common
 model or baseline. Distinct query digests also permit the same roster to have
 been re-encoded or reordered; those declarations do not establish disjointness.
+
+### Subnormal RMSE ratio boundary
+
+The native skill calculation rejects nonzero subnormal RMSE values when both
+model and baseline have nonzero error. Their binary64 quantization can materially
+change the MSE ratio: residuals `[min_subnormal, 0]` and
+`[min_subnormal, min_subnormal]` both round to the same RMSE, which would falsely
+report skill zero instead of 0.5. Reversing them would similarly hide skill -1.
+The function returns the existing numeric-range error, and `compare-saved` does
+not create an output. Normal RMSE calculations keep the existing scalar formula
+and pooling compatibility. A perfect baseline is still undefined (`None`), and
+a perfect model against a nonperfect baseline still has skill 1. This is a
+conservative range restriction, not arbitrary-precision scoring; even some
+exactly representable subnormal ties are rejected. Choosing appropriate units
+before producing predictions can avoid this range, but no inputs are silently
+rescaled. Scalar reports cannot reconstruct precision already lost in their
+RMSE fields. `pool-saved` applies the same restriction to both imported scalar
+reports and the pooled result, preventing a caller-supplied report from bypassing
+the range check. Formats and grouped calculations are unchanged.

@@ -90,6 +90,9 @@ pub fn regression_rmse(y_true: &[f64], y_pred: &[f64]) -> Result<f64, Evaluation
 /// when both forecasts are perfect. All three inputs must be equally sized,
 /// nonempty and finite, even when the baseline is perfect. RMSE scaling avoids
 /// overflowing raw squared errors; unrepresentable scores return an error.
+/// When both errors are nonzero, subnormal RMSE values are rejected: rounding
+/// their physical-unit values can materially corrupt the squared-error ratio.
+/// Exact perfect-model and perfect-baseline cases retain their usual semantics.
 pub fn regression_mse_skill(
     y_true: &[f64],
     y_pred: &[f64],
@@ -102,6 +105,15 @@ pub fn regression_mse_skill(
     let baseline_rmse = regression_rmse(y_true, baseline)?;
     if baseline_rmse == 0.0 {
         return Ok(None);
+    }
+    if model_rmse == 0.0 {
+        return Ok(Some(1.0));
+    }
+    // Ratios of subnormal RMSEs can be materially wrong after quantization:
+    // [min, 0] and [min, min] both round to RMSE=min although SSE differs 2x.
+    // Keep the scalar-report formula unchanged in its supported normal range.
+    if model_rmse.is_subnormal() || baseline_rmse.is_subnormal() {
+        return Err(EvaluationError::NumericOverflow);
     }
     let ratio = model_rmse / baseline_rmse;
     let score = 1.0 - ratio * ratio;

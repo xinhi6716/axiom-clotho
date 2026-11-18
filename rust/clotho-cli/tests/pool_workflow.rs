@@ -195,3 +195,35 @@ fn manifest_requires_distinct_explicit_model_and_baseline_declarations() {
         assert!(!w.0.join("pooled.json").exists());
     }
 }
+
+#[test]
+fn subnormal_ratios_cannot_bypass_the_core_range_through_scalar_reports() {
+    let tiny = f64::from_bits(1);
+    for (model, baseline) in [(tiny, tiny), (tiny, 1.0), (1.0, tiny)] {
+        let w = setup(
+            report("a", "a", 1, model, baseline),
+            report("b", "b", 1, model, baseline),
+        );
+        assert!(!w.run(&ARGS).status.success());
+        assert!(!w.0.join("pooled.json").exists());
+    }
+    for (model, baseline, expected) in [
+        (0.0, tiny, Some(1.0)),
+        (tiny, 0.0, None),
+        (f64::MIN_POSITIVE, f64::MIN_POSITIVE, Some(0.0)),
+    ] {
+        let w = setup(
+            report("a", "a", 1, model, baseline),
+            report("b", "b", 1, model, baseline),
+        );
+        assert!(w.run(&ARGS).status.success());
+        assert_eq!(read(&w)["mse_skill"].as_f64(), expected);
+    }
+    // Each source has an exact zero exception, but the pooled pair does not.
+    let w = setup(
+        report("a", "a", 1, tiny, 0.0),
+        report("b", "b", 1, 0.0, tiny),
+    );
+    assert!(!w.run(&ARGS).status.success());
+    assert!(!w.0.join("pooled.json").exists());
+}
