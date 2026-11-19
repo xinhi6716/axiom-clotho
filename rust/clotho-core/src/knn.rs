@@ -33,6 +33,8 @@ impl std::error::Error for KnnError {}
 /// is provided. Distance ties use training-row order deterministically.
 #[derive(Clone, Debug)]
 pub struct KnnRegressor {
+    // Keep raw coordinates: separately rounded scaled values can erase a
+    // real difference and invent a nearest-neighbor tie.
     training: Vec<Vec<f64>>,
     targets: Vec<f64>,
     scales: Vec<f64>,
@@ -73,8 +75,9 @@ impl KnnRegressor {
         {
             return Err(KnnError::NumericOverflow);
         }
+        drop(training);
         Ok(Self {
-            training,
+            training: x.to_vec(),
             targets: y.to_vec(),
             scales,
             k,
@@ -93,10 +96,21 @@ impl KnnRegressor {
                 }
                 let mut distances = Vec::with_capacity(self.training.len());
                 for (i, train) in self.training.iter().enumerate() {
-                    let d = q
-                        .iter()
-                        .zip(train)
-                        .fold(0.0_f64, |acc, (a, b)| acc.hypot(a - b));
+                    let mut d = 0.0_f64;
+                    for ((a, b), scale) in row.iter().zip(train).zip(&self.scales) {
+                        let direct = a - b;
+                        let delta = if direct.is_finite() {
+                            direct / scale
+                        } else {
+                            // Opposite extreme values may overflow subtraction
+                            // while their scaled difference remains representable.
+                            a / scale - b / scale
+                        };
+                        if !delta.is_finite() || (a != b && delta == 0.0) {
+                            return Err(KnnError::NumericOverflow);
+                        }
+                        d = d.hypot(delta);
+                    }
                     if !d.is_finite() {
                         return Err(KnnError::NumericOverflow);
                     }

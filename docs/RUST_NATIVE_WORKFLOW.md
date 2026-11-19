@@ -299,3 +299,15 @@ shape and finite-value checks still run. Mixed-mode strings are not JSON numeric
 tokens and retain their existing numeric/categorical parsing rules. This does
 not recover precision already lost in old files, change ordinary nonzero
 rounding, or alter estimator arithmetic and legacy refitting behavior.
+
+kNN distances subtract original feature coordinates before dividing by the
+training-only max-absolute scale. This prevents separately rounded normalized
+values from inventing a tie between distinct adjacent values (for example 7
+and the next representable value above 7, with scale 12). Opposite extreme
+values use a scaled-subtraction fallback when direct subtraction overflows.
+Nonzero differences lost to zero or nonfinite distances are rejected. Actual
+distance ties still use training-row order. Training/query limits, feature
+scaling, uniform averaging, and artifact format are unchanged; the in-memory
+model retains raw coordinates rather than pre-rounded normalized coordinates.
+This improves pairwise distance fidelity, not arbitrary-precision distance
+ordering when accumulation itself rounds nearby distances to the same value.
