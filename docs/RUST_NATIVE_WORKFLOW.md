@@ -311,3 +311,15 @@ scaling, uniform averaging, and artifact format are unchanged; the in-memory
 model retains raw coordinates rather than pre-rounded normalized coordinates.
 This improves pairwise distance fidelity, not arbitrary-precision distance
 ordering when accumulation itself rounds nearby distances to the same value.
+
+kNN neighbor-target averaging now first attempts compensated summation in the
+original target units. Normalizing very large opposite targets before they
+cancel can quantize a small representable residual: `[1e308,-1e308,1e-15]`
+previously predicted approximately `4.9406564584124655e-16` rather than
+`1e-15 / 3`. Original-unit accumulation preserves that residual. If the raw
+sum or compensation overflows, the existing scaled averaging path remains in
+use, supporting finite means such as `[MAX,MAX]`. Existing target-normalization
+range checks, neighbor selection, tie ordering, limits and artifact schemas
+are unchanged. This is not exact arithmetic: the scaled fallback and normal
+binary64 rounding still have finite precision. Mean/Ridge estimators are not
+modified by this kNN-specific change.

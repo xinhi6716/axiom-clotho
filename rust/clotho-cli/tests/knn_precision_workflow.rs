@@ -55,3 +55,20 @@ fn fitted_artifact_reload_preserves_exact_nearest_neighbor() {
         .map(|line| line.split(',').nth(1).unwrap().parse().unwrap()).collect();
     assert_eq!(values, vec![1.0, 0.0]);
 }
+
+#[test]
+fn reloaded_neighbor_mean_preserves_representable_cancellation_residual() {
+    let w = Workspace::new();
+    w.write("train.csv", "x,y\n0,1e308\n0,-1e308\n0,1e-15\n");
+    w.write("query.csv", "x\n0\n");
+    assert!(w.run(&[
+        "fit", "--csv", "train.csv", "--features", "x", "--target", "y",
+        "--model", "knn", "--k", "3", "--out", "model.json",
+    ]).status.success());
+    assert!(w.run(&[
+        "predict", "--artifact", "model.json", "--csv", "query.csv", "--out", "out.csv",
+    ]).status.success());
+    let csv = fs::read_to_string(w.0.join("out.csv")).unwrap();
+    let value: f64 = csv.lines().nth(1).unwrap().split(',').nth(1).unwrap().parse().unwrap();
+    assert_eq!(value.to_bits(), (1e-15_f64 / 3.0).to_bits());
+}
