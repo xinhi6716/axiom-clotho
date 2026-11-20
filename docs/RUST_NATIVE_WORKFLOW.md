@@ -311,3 +311,18 @@ scaling, uniform averaging, and artifact format are unchanged; the in-memory
 model retains raw coordinates rather than pre-rounded normalized coordinates.
 This improves pairwise distance fidelity, not arbitrary-precision distance
 ordering when accumulation itself rounds nearby distances to the same value.
+
+kNN neighbor-target averaging returns the exact arithmetic mean of the
+selected, accepted finite binary64 targets, correctly rounded once to binary64
+(nearest, ties to even). Fixed-size integer accumulators sum the inputs in
+units of the minimum positive subnormal before exact division by the neighbor
+count. This preserves small residuals through cancellation without
+intermediate floating-point overflow and does not depend on the order of an
+unchanged selected neighbor set. An exact zero mean returns positive zero; a
+negative nonzero mean that rounds to zero returns negative zero.
+
+The target-normalization acceptance guard still rejects nonzero targets that
+would normalize to zero. This change does not alter neighbor selection or
+row-order tie breaking, prediction bounds, artifact formats, or Mean/Ridge
+estimators. Correct rounding refers to the actual binary64 inputs, not to
+decimal values before ingestion or to arbitrary-precision distance ordering.
