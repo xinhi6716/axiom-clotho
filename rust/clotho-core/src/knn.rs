@@ -3,6 +3,9 @@
 //! validation or a replacement for grouped evaluation/model selection.
 use std::fmt;
 
+#[path = "knn_exact_mean.rs"]
+mod exact_mean;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum KnnError {
     Empty,
@@ -117,45 +120,10 @@ impl KnnRegressor {
                     distances.push((d, i));
                 }
                 distances.sort_unstable_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
-                let scale = distances[..self.k]
-                    .iter()
-                    .map(|(_, i)| self.targets[*i].abs())
-                    .fold(0.0_f64, f64::max);
-                if scale == 0.0 {
-                    return Ok(0.0);
-                }
-                // Preserve the existing target-normalization range boundary.
-                if distances[..self.k].iter().any(|(_, i)| {
-                    self.targets[*i] != 0.0 && self.targets[*i] / scale == 0.0
-                }) {
-                    return Err(KnnError::NumericOverflow);
-                }
-                // Scaling before cancellation can quantize a small residual.
-                // Prefer original units; retain the scaled fallback for overflow.
-                if let Some(mean) = unscaled_neighbor_mean(
-                    distances[..self.k].iter().map(|(_, i)| self.targets[*i]), self.k,
-                ) {
-                    return Ok(mean);
-                }
-                // Neumaier compensation retains small terms during cancellation.
-                // The normalized sum is bounded by k, so it cannot overflow.
-                let mut sum = 0.0_f64;
-                let mut correction = 0.0_f64;
-                for (_, i) in &distances[..self.k] {
-                    let value = self.targets[*i] / scale;
-                    if self.targets[*i] != 0.0 && value == 0.0 {
-                        return Err(KnnError::NumericOverflow);
-                    }
-                    let next = sum + value;
-                    correction += if sum.abs() >= value.abs() {
-                        (sum - next) + value
-                    } else {
-                        (value - next) + sum
-                    };
-                    sum = next;
-                }
-                let mean = ((sum + correction) / self.k as f64).clamp(-1.0, 1.0) * scale;
-                Ok(mean)
+                exact_mean::checked_mean(
+                    distances[..self.k].iter().map(|(_, i)| self.targets[*i]),
+                    self.k,
+                )
             })
             .collect()
     }
@@ -174,35 +142,4 @@ fn validate(x: &[Vec<f64>], width: usize) -> Result<(), KnnError> {
         return Err(KnnError::NonFinite);
     }
     Ok(())
-}
-
-// None means raw accumulation exceeded range; the existing scaled path handles
-// cases such as averaging two MAX targets. No target or neighbor order changes.
-fn unscaled_neighbor_mean(values: impl Iterator<Item = f64>, count: usize) -> Option<f64> {
-    let mut sum = 0.0_f64;
-    let mut correction = 0.0_f64;
-    for value in values {
-        let next = sum + value;
-        if !next.is_finite() {
-            return None;
-        }
-        correction += if sum.abs() >= value.abs() {
-            (sum - next) + value
-        } else {
-            (value - next) + sum
-        };
-        if !correction.is_finite() {
-            return None;
-        }
-        sum = next;
-    }
-    let total = sum + correction;
-    if !total.is_finite() {
-        return None;
-    }
-    let mean = total / count as f64;
-    if total != 0.0 && mean == 0.0 {
-        return None;
-    }
-    Some(mean)
 }
