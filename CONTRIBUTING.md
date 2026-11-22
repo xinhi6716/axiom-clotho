@@ -16,12 +16,25 @@ With dependencies already installed, use `PYTHONPATH=src` instead of installing.
 
 ### Check the optional Rust core
 
-The first Rust migration slice is a dependency-free source-feature diagnostic;
-it does not replace Python fitting or prediction. With a Rust toolchain already
-installed, run `cargo test --manifest-path rust/Cargo.toml --offline --locked`
-and `PYTHONPATH=src python tools/check_rust_parity.py`. Set
-`CLOTHO_REQUIRE_RUST=1` for the complete Python suite to require, rather than
-skip, cross-language parity. See [scope and verification](docs/RUST_CORE.md).
+The Rust workspace contains both the `clotho-core` library and the experimental
+`clotho-cli` executable. The native CLI has its own CSV fit, predict and grouped
+evaluate contracts; it does not replace Python measurement ingestion or reuse
+Python saved artifacts. See the [native workflow](docs/RUST_NATIVE_WORKFLOW.md).
+
+From the repository root, use these commands with a Rust toolchain already
+installed and the locked workspace dependencies already cached:
+
+```bash
+cargo fmt --manifest-path rust/Cargo.toml --check
+cargo test --manifest-path rust/Cargo.toml --workspace --locked --offline
+```
+
+On a fresh Cargo cache, see the workflow guide for the one-time dependency
+fetch. To check the separate Python/Rust source-support diagnostic, use an
+existing Python environment and run `PYTHONPATH=src python tools/check_rust_parity.py`.
+Set `CLOTHO_REQUIRE_RUST=1` for the Python suite to fail rather than skip when
+Rust is unavailable. The [parity guide](docs/RUST_CORE.md) explains what this
+check covers; it does not establish parity of the native modelling workflow.
 
 For a read-only synthetic prediction-preflight timing check, run
 `PYTHONPATH=src python benchmarks/prediction_preflight.py --case all --repeats 9`.
