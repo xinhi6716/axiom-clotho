@@ -31,7 +31,7 @@ candidates on inner group folds and evaluates untouched outer folds. See the
 | No dataset yet | [A small synthetic demo](#try-the-demo) |
 | RRAM or FET measurements | [The measurement workflow](#thread) |
 | A feature table | [Grouped tabular modelling](#tabular-start) |
-| Saved predictions | [Reports and evaluation](#evidence) |
+| Saved predictions | [Python run reports or native saved-series scoring](#evidence) |
 
 <a id="begin"></a>
 <a id="get-the-reviewed-beta-core"></a>
@@ -177,6 +177,15 @@ Tabular reports offer **English / 繁體中文** controls; measurement summary p
 
 See the [report guide](docs/USAGE_REFERENCE.md#outputs) for manifests, checksums and verification. `mlcalc verify` checks saved file bytes without fitting, but requires POSIX no-follow file access; a passing checksum does not establish scientific validity or authenticity.
 
+The experimental Rust CLI on `main` also offers [`compare-saved`](docs/RUST_BASELINE_SKILL.md#fit-free-declared-series-cli)
+for three aligned regression series: observed values, model predictions and
+baseline predictions. It reports both RMSEs and baseline-relative MSE skill
+(undefined for a zero-error baseline) without loading or fitting a model. [Optional v2 query binding](docs/RUST_BASELINE_SKILL.md#opt-in-exact-query-byte-binding-v2)
+checks the query's exact bytes against the declared digest; it does not prove
+where the values came from, that the row IDs identify real samples, or that
+the series are independent. Use the native JSON contract, not the Python run
+files in the table above. The native CLI is separate from the frozen Python b7 wheel.
+
 <a id="limits"></a>
 <a id="know-the-boundaries"></a>
 <a id="horizon"></a>
@@ -191,11 +200,11 @@ See the [report guide](docs/USAGE_REFERENCE.md#outputs) for manifests, checksums
 
 Current source additionally offers explicit `nystroem_ridge`, `group_median` and `group_balanced_ridge` regression comparators with fold-local fitting and recorded fit details; defaults stay unchanged. Group-balanced Ridge weights only the final squared-loss estimator, not preprocessing, and makes no group-MAE improvement guarantee. These additions are not in frozen b7 downloads. [Optional families, budgets and reader compatibility](docs/OPTIONAL_REGRESSION_FAMILIES.md).
 
-An experimental [Rust core](docs/RUST_CORE.md) ports source-feature support
-diagnostics with exact Python parity checks. It does not yet fit models or
-replace the Python workflow. No Rust compiler is required for ordinary Clotho use.
-A separate [optional numeric diagnostic](docs/RUST_NATIVE_NUMERIC_SUPPORT.md)
-can be built explicitly; it does not change default planning or prediction.
+The experimental Rust workspace includes both a [source-feature support diagnostic](docs/RUST_CORE.md)
+with exact Python parity checks and separate [native fitting and evaluation
+commands](docs/RUST_NATIVE_WORKFLOW.md). Neither replaces the default Python workflow. A Rust
+compiler is not required for ordinary Python Clotho use.
+[Optional numeric diagnostic setup](docs/RUST_NATIVE_NUMERIC_SUPPORT.md).
 
 Version b7 refreshes the Clotho artwork, report presentation and documentation. It retains the b6 check that rejects nonfinite fitted regression ExtraTrees state; workflows, models, splits and metrics are unchanged. [Release notes](docs/RELEASE_NOTES_0.3.0b7.md). Broader domain modules remain on the [roadmap](ROADMAP.md).
 

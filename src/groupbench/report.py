@@ -7,6 +7,7 @@ import html
 import json
 import os
 from pathlib import Path
+import stat
 import tempfile
 
 from .package_source import package_source_display
@@ -38,10 +39,17 @@ def render_html(result) -> str:
         name: esc(name) + (' <small class="entry-label">' + t('Selection procedure', '模型選擇程序') + '</small>' if name == "selected" else "")
         for name, _ in ranking
     }
-    bars = "".join(
-        f'<div class="bar-row"><span>{labels[name]}</span><div class="track"><div class="bar {"primary" if name == "selected" else ""}" style="width:{max(1, 100 * value["overall"]["group_mae"] / max_mae):.2f}%"></div></div><b>{_number(value["overall"]["group_mae"])}</b></div>'
-        for name, value in ranking
-    )
+    def bar_row(name, model):
+        group_mae = model["overall"]["group_mae"]
+        fill = ""
+        if group_mae > 0:
+            width = max(1, 100 * group_mae / max_mae)
+            primary_class = "primary" if name == "selected" else ""
+            fill = f'<div class="bar {primary_class}" style="width:{width:.2f}%"></div>'
+        return (f'<div class="bar-row"><span>{labels[name]}</span>'
+                f'<div class="track">{fill}</div><b>{_number(group_mae)}</b></div>')
+
+    bars = "".join(bar_row(name, model) for name, model in ranking)
     table = "".join(
         f'<tr><th scope="row">{esc(name)}</th><td>{_number(value["overall"]["group_mae"])}</td><td>{_number(value["overall"]["mae"])}</td><td>{_number(value["overall"]["rmse"])}</td><td>{_number(value["overall"]["r2"])}</td><td>{_number(value["overall"]["worst_group_mae"])}</td></tr>'
         for name, value in ranking
@@ -165,6 +173,21 @@ def write_report(result, output_dir, *, overwrite: bool = False) -> Path:
     return Path(output_dir) / "report.html"
 
 
+def check_overwrite_artifact_paths(output_dir, names):
+    """Reject already-present directories before replacing any payloads."""
+    out = Path(output_dir)
+    for name in names:
+        path = out / name
+        try:
+            mode = path.lstat().st_mode
+        except FileNotFoundError:
+            continue
+        # File symlinks may be replaced as directory entries without touching
+        # their targets. lstat distinguishes those from actual directories.
+        if stat.S_ISDIR(mode):
+            raise IsADirectoryError(f"Cannot overwrite report artifact {path}: it is a directory.")
+
+
 def write_payloads(payloads: dict[str, str], output_dir, *, overwrite: bool = False):
     """Write a same-directory staged bundle with atomic per-file no-clobber."""
     if not payloads:
@@ -177,7 +200,9 @@ def write_payloads(payloads: dict[str, str], output_dir, *, overwrite: bool = Fa
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
     names = tuple(payloads) + ("checksums.json",)
-    if not overwrite and any((out / name).exists() or (out / name).is_symlink() for name in names):
+    if overwrite:
+        check_overwrite_artifact_paths(out, names)
+    elif any((out / name).exists() or (out / name).is_symlink() for name in names):
         raise FileExistsError(f"Output files already exist in {out}; choose a new directory or pass overwrite=True.")
     payloads = dict(payloads)
     hashes = {name: hashlib.sha256(content.encode("utf-8")).hexdigest() for name, content in payloads.items()}

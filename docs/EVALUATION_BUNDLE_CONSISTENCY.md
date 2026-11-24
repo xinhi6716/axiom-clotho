@@ -8,10 +8,24 @@ and fail this check.
 
 ## Supported scope
 
-Only regression evaluation schema `1.0` / protocol `nested-group-kfold-v1` and
-schema `1.1` / `nested-group-kfold-distinct-v2` are supported. The latter requires
-`config.categorical_encoding: distinct-v2`. Binary, prediction-only, unknown
-versions and unknown model families fail closed. Existing writers are unchanged.
+Use the manifest's `schema_version` and `protocol` together when choosing
+the validator. The current regression evaluation reader supports:
+
+| Schema | Manifest protocol |
+| --- | --- |
+| 1.0 | `nested-group-kfold-v1` |
+| 1.1 | `nested-group-kfold-distinct-v2` |
+| 1.2 | `nested-group-kfold-extended-families-v1` |
+| 1.3 | `nested-group-outer-domain-inner-v1` |
+| 1.4 | `nested-group-kfold-extended-families-v2` |
+
+Schema 1.1 requires `config.categorical_encoding: distinct-v2`. Schema 1.3
+is the domain-inner path. For 1.4, the check includes consistency of declared
+inner selection records and relative fitting weights; it does not recompute
+inner-validation scores or verify which weights were actually used. Binary,
+prediction-only, unknown versions and unknown model families fail closed.
+To check a saved regression prediction bundle instead, use
+[`mlcalc validate-prediction-bundle`](PREDICTION_BUNDLE_SCHEMA.md).
 
 Checks cover:
 
@@ -65,7 +79,8 @@ metrics within the declared tolerance. It does not authenticate origin, prove
 that fitting happened or validate scientific independence, model quality or
 causal claims. An invented but internally consistent bundle can pass. Features,
 source digests, environment metadata, model parameters and inner-selection records
-are not reconstructed or validated. No models are loaded/refit, no network calls
+are not independently reconstructed or verified, even where declarations are
+consistency-checked. No models are loaded/refit, no network calls
 are made and no artifacts are written. Inner-validation predictions are not
 recovered. Synthetic tests establish plumbing, not real-data performance.
 

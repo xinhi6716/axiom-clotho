@@ -10,6 +10,7 @@ from html.parser import HTMLParser
 from types import SimpleNamespace
 import unittest
 
+from groupbench.metrics import grouped_metrics
 from groupbench.report import _number, render_html, write_report
 
 
@@ -77,6 +78,42 @@ class ReadingPathTests(unittest.TestCase):
     @staticmethod
     def _body(text, caption):
         return text.split(f'<caption id="{caption}">', 1)[1].split('<tbody>', 1)[1].split('</tbody>', 1)[0]
+
+    def test_chart_and_table_follow_group_mae_when_row_ranking_disagrees(self):
+        groups = ["large", "large", "large", "small"]
+        truth = [0, 0, 0, 0]
+        for name, prediction in (("selected", [0, 0, 0, 3]), ("dummy", [2, 2, 2, 0])):
+            overall, per_group = grouped_metrics(truth, prediction, groups)
+            self.result.summary["models"][name] = dict(overall=overall, per_group=per_group)
+
+        text = render_html(self.result)
+        chart = text.split('<div class="bar-row">', 1)[1].split(
+            '<caption id="comparison-table">', 1)[0]
+        self.assertLess(chart.index('<span>dummy</span>'), chart.index('<span>selected'))
+        bars = [attrs for tag, attrs in Document(chart).tags
+                if tag == "div" and "bar" in attrs.get("class", "").split()]
+        self.assertEqual([bar["style"] for bar in bars], ["width:66.67%", "width:100.00%"])
+        body = self._body(text, "comparison-table")
+        self.assertLess(body.index('>dummy</th><td>1.0000</td><td>1.5000</td>'),
+                        body.index('>selected</th><td>1.5000</td><td>0.7500</td>'))
+
+    def test_exact_zero_keeps_comparison_label_but_not_a_filled_bar(self):
+        for dummy_error in (0.0, 2.0):
+            with self.subTest(dummy_error=dummy_error):
+                for name, error in (("selected", 0.0), ("dummy", dummy_error)):
+                    overall, per_group = grouped_metrics([0, 0], [error, error], ["a", "b"])
+                    self.result.summary["models"][name] = dict(overall=overall, per_group=per_group)
+                text = render_html(self.result)
+                chart = text.split('<div class="bar-row">', 1)[1].split(
+                    '<caption id="comparison-table">', 1)[0]
+                self.assertEqual(chart.count('<div class="track"></div><b>0.0000</b>'),
+                                 2 if dummy_error == 0 else 1)
+                bars = [attrs for tag, attrs in Document(chart).tags
+                        if tag == "div" and "bar" in attrs.get("class", "").split()]
+                self.assertEqual([bar["style"] for bar in bars],
+                                 [] if dummy_error == 0 else ["width:100.00%"])
+                self.assertIn('>selected</th><td>0.0000</td>',
+                              self._body(text, "comparison-table"))
 
     def test_all_group_toggle_uses_record_count_not_manifest_count(self):
         for count in (0, 1, 15, 16, 20000):

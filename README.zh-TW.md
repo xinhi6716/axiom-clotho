@@ -19,7 +19,7 @@ Clotho 將支援的 RRAM、FET 量測表整理成元件特徵，依你宣告的�
 | 還沒有資料 | [小型合成範例](#try-the-demo) |
 | RRAM 或 FET 量測 | [量測工作流程](#thread) |
 | 特徵資料表 | [分組建模](#tabular-start) |
-| 已保存的預測 | [報告與評估](#evidence) |
+| 已保存的預測 | [Python 報告或 Rust 保存序列評分](#evidence) |
 
 <a id="begin"></a>
 <a id="get-the-reviewed-beta-core"></a>
@@ -160,6 +160,8 @@ mlcalc run measurements.csv \
 
 manifest、校驗碼與驗證方式見[報告指南](docs/USAGE_REFERENCE.md#outputs)。`mlcalc verify` 不擬合模型，只檢查保存檔案的位元組；它需要 POSIX 的 no-follow 檔案存取。校驗通過不代表科學有效性或來源真實性。
 
+`main` 上的實驗性 Rust CLI 另提供 [`compare-saved`](docs/RUST_BASELINE_SKILL.md#fit-free-declared-series-cli)。它接收已對齊的觀測、模型預測與基準預測三份迴歸序列，不載入或擬合模型，直接報告兩組 RMSE 與相對基準的 MSE 技能分數（基準誤差為零時不定義）。[選用 v2 查詢綁定](docs/RUST_BASELINE_SKILL.md#opt-in-exact-query-byte-binding-v2)僅核對查詢檔的原始位元組是否符合宣告的雜湊值，無法證明數值來源、列識別碼確實指向實體樣本，或序列彼此獨立。這個指令使用 Rust 專用 JSON 格式，不讀取上表的 Python 執行產物，也不包含在已凍結的 Python b7 wheel 中。
+
 <a id="limits"></a>
 <a id="horizon"></a>
 
@@ -173,7 +175,7 @@ manifest、校驗碼與驗證方式見[報告指南](docs/USAGE_REFERENCE.md#out
 
 目前原始碼另提供明確選用的 `nystroem_ridge` 與 `group_median` 迴歸比較器，保留各訓練切分內的擬合與擬合資訊；預設模型不變。這些新增功能不在已凍結的 b7 下載檔內。[選用模型、擬合次數與讀取相容性](docs/OPTIONAL_REGRESSION_FAMILIES.md)。
 
-實驗性的 [Rust 核心](docs/RUST_CORE.md) 先移植輸入特徵支援範圍診斷，並以 Python 結果逐欄精確比對。它尚未執行模型擬合，也未取代 Python 工作流程；一般使用 Clotho 不需要 Rust 編譯器。另可明確建置[可選的純數值診斷入口](docs/RUST_NATIVE_NUMERIC_SUPPORT.md)，不會自動替換計畫或預測流程。
+實驗性的 Rust 工作區包含可與 Python 逐欄精確比對的[特徵支援範圍診斷](docs/RUST_CORE.md)，以及獨立的[原生擬合與評估指令](docs/RUST_NATIVE_WORKFLOW.md)。兩者都未取代預設 Python 流程；使用 Python 版 Clotho 不需要 Rust 編譯器。[選用的純數值診斷入口](docs/RUST_NATIVE_NUMERIC_SUPPORT.md)。
 
 b7 更新 Clotho 圖像、報告呈現與文件；保留 b6 拒絕已擬合迴歸 ExtraTrees 中非有限數值的檢查。既有流程、模型、切分與指標維持不變。[版本說明](docs/RELEASE_NOTES_0.3.0b7.md)。更多領域模組仍屬[規劃工作](ROADMAP.md)。
 

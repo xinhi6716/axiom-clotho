@@ -115,8 +115,19 @@ def evaluate_observed_history(observations: pd.DataFrame, *, origins: pd.DataFra
         previous2.append(indices[target - 2])
     observed = values[selected]
     persistence = values[previous]
+    older = values[previous2]
+    large = np.abs(persistence) > np.finfo(np.float64).max / 2.0
     with _checked_arithmetic():
-        continuation = 2.0 * persistence - values[previous2]
+        if np.any(large):
+            continuation = np.empty_like(persistence)
+            ordinary = ~large
+            continuation[ordinary] = 2.0 * persistence[ordinary] - older[ordinary]
+            # Halve the older value before subtracting when doubling persistence
+            # alone would overflow. A sufficiently large same-sign older value
+            # halves exactly; genuinely out-of-range results still fail.
+            continuation[large] = 2.0 * (persistence[large] - 0.5 * older[large])
+        else:
+            continuation = 2.0 * persistence - older
     if not np.isfinite(continuation).all():
         raise ValueError('Index continuation must be finite.')
     output = origins.reset_index(drop=True).copy()
