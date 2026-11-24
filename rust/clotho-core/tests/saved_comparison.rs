@@ -150,3 +150,34 @@ fn same_keys_do_not_authenticate_values() {
     let wrong_values = series(&ids, &[3., 1.]);
     assert!(compare_saved_regression(y, wrong_values, b).is_ok());
 }
+
+#[test]
+fn scalar_reuse_preserves_perfect_model_and_subnormal_boundaries() {
+    let ids = ["a"];
+    let min = f64::from_bits(1);
+    let observed = series(&ids, &[0.0]);
+    let tiny_values = [min];
+    let tiny = series(&ids, &tiny_values);
+    let ordinary = series(&ids, &[1.0]);
+
+    let perfect = compare_saved_regression(observed, observed, tiny).unwrap();
+    assert_eq!(perfect.model_rmse.to_bits(), 0);
+    assert_eq!(perfect.baseline_rmse.to_bits(), 1);
+    assert_eq!(perfect.mse_skill, Some(1.0));
+
+    let undefined = compare_saved_regression(observed, tiny, observed).unwrap();
+    assert_eq!(undefined.model_rmse.to_bits(), 1);
+    assert_eq!(undefined.baseline_rmse.to_bits(), 0);
+    assert_eq!(undefined.mse_skill, None);
+
+    for (model, baseline) in [
+        (tiny, ordinary),
+        (ordinary, tiny),
+        (series(&ids, &[f64::MAX]), series(&ids, &[f64::MIN_POSITIVE])),
+    ] {
+        assert_eq!(
+            compare_saved_regression(observed, model, baseline),
+            Err(SavedComparisonError::Numeric(EvaluationError::NumericOverflow))
+        );
+    }
+}

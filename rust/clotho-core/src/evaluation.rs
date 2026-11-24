@@ -103,6 +103,16 @@ pub fn regression_mse_skill(
     }
     let model_rmse = regression_rmse(y_true, y_pred)?;
     let baseline_rmse = regression_rmse(y_true, baseline)?;
+    mse_skill_from_checked_rmse(model_rmse, baseline_rmse)
+}
+
+// Both operands must come from successful regression_rmse reductions.
+pub(crate) fn mse_skill_from_checked_rmse(
+    model_rmse: f64,
+    baseline_rmse: f64,
+) -> Result<Option<f64>, EvaluationError> {
+    debug_assert!(model_rmse.is_finite() && model_rmse >= 0.0);
+    debug_assert!(baseline_rmse.is_finite() && baseline_rmse >= 0.0);
     if baseline_rmse == 0.0 {
         return Ok(None);
     }
