@@ -46,8 +46,9 @@ not real measurements. Current-source commands and matching fixtures are require
 
 - [Compare validation budgets](../docs/SAVED_BUDGET_COMPARISON.md): two methods × two budgets on matched observations. [Invented input](saved-budget-comparison/invented.json).
 - [Evaluate prediction intervals](../docs/SAVED_INTERVAL_EVALUATION.md): coverage, width and interval score for a complete declared cohort. It does not generate or calibrate intervals. [Invented input](saved-interval-evaluation/invented_voltage.json).
+- [Score a fixed device–phase schedule](scheduled-phase-scoring/README.md): see why weighting the same paired forecasts differently can reverse the ranking.
 
-Both utilities print descriptive JSON. If you redirect it to a file, choose a new path: the shell may overwrite an existing file before Python starts.
+The budget and interval utilities print descriptive JSON. If you redirect it to a file, choose a new path: the shell may overwrite an existing file before Python starts.
 
 ## Before using real data
 
