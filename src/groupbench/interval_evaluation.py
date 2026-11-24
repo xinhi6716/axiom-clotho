@@ -44,10 +44,19 @@ def _keys(value, expected, name):
         raise ValueError(f"{name} must have exactly these keys: {sorted(expected)}")
 
 
+def _require_unicode_scalars(value):
+    # Python str can contain surrogate code points. An explicit surrogate
+    # pair and the corresponding supplementary scalar are distinct Python
+    # strings but serialize identically under json.dumps(ensure_ascii=True).
+    if any("\ud800" <= char <= "\udfff" for char in value):
+        raise ValueError("Interval text must contain only Unicode scalar values; surrogate code points are not allowed")
+
+
 def _label(value, limit=256):
     if (not isinstance(value, str) or not value or len(value) > limit
             or value != value.strip() or any(ord(c) < 32 for c in value)):
         raise ValueError("Labels must be bounded, nonempty, trimmed text without control characters")
+    _require_unicode_scalars(value)
     return value
 
 
@@ -145,8 +154,10 @@ def _groups(values):
             numerator, denominator = value.as_integer_ratio()
             if numerator.bit_length() > 4096 or denominator.bit_length() > 4096:
                 raise ValueError("Floating group identifiers exceed the 4096-bit exact-ratio limit; use text IDs")
-        if isinstance(value, str) and len(value) > 1024:
-            raise ValueError("Text group identifiers must not exceed 1024 characters")
+        if isinstance(value, str):
+            if len(value) > 1024:
+                raise ValueError("Text group identifiers must not exceed 1024 characters")
+            _require_unicode_scalars(value)
         bounded.append(value)
     # No NumPy numeric promotion before the shared exact-identity validator.
     return validate_groups(bounded, len(bounded))

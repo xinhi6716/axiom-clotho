@@ -1,10 +1,12 @@
 """Synthetic contract tests for simultaneous coverage of declared groups."""
 from copy import deepcopy
+import json
 import unittest
 
 from groupbench.interval_evaluation import (
     diagnose_saved_interval_whole_group_coverage,
     evaluate_saved_intervals,
+    load_document,
 )
 
 
@@ -90,3 +92,28 @@ class WholeGroupCoverageTests(unittest.TestCase):
         doc["rows"].reverse()
         doc["expected_row_ids"].reverse()
         self.assertEqual(diagnose_saved_interval_whole_group_coverage(doc), result)
+
+    def test_surrogate_group_labels_cannot_collapse_on_json_round_trip(self):
+        doc = fixture()
+        doc["rows"][0]["group"] = "\ud83d\ude00"  # Two Python surrogate code points.
+        doc["rows"][1]["group"] = "\U0001f600"  # One valid supplementary scalar.
+        with self.assertRaisesRegex(ValueError, "surrogate"):
+            diagnose_saved_interval_whole_group_coverage(doc)
+        doc["rows"][0]["group"] = "\U0001f600"
+        checked = diagnose_saved_interval_whole_group_coverage(load_document(json.dumps(doc)))
+        round_trip = json.loads(json.dumps(checked))
+        group = next(g for g in round_trip["groups"] if g["group"] == "\U0001f600")
+        self.assertEqual(group["n_rows"], 2)
+        self.assertEqual(len({g["group"] for g in round_trip["groups"]}), len(round_trip["groups"]))
+
+    def test_lone_surrogates_from_escaped_json_fail_in_rows_and_metadata(self):
+        for field in ("identifiers", "group", "metadata"):
+            doc = fixture()
+            if field == "identifiers":
+                doc["expected_row_ids"][0] = doc["rows"][0]["row_id"] = "\ud800"
+            elif field == "group":
+                doc["rows"][0]["group"] = "\ud800"
+            else:
+                doc["metadata"]["target_definition"] = "\ud800"
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, "surrogate"):
+                evaluate_saved_intervals(load_document(json.dumps(doc)))
