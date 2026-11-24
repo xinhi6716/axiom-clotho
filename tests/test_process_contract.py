@@ -60,6 +60,53 @@ class ProcessContractTests(unittest.TestCase):
         self.assertIn("condition_identity_mismatch", codes(result))
         self.assertEqual(row.temperature, "80")  # No automatic temperature substitution.
 
+    def test_absolute_temperature_bound_uses_exact_declared_units(self):
+        # Below-bound deltas can disappear when Celsius is narrowed to float64
+        # or rounded under a low-precision global Decimal context.
+        cases = (
+            ("K", "-1", True), ("K", "-1e-200", True),
+            ("degC", "-273.150000000000000000000000000000000001", True),
+            ("degC", "-2.731500000000000000000000000000000001e2", True),
+            ("K", "-0.0", False), ("K", "0", False), ("K", "1e-200", False),
+            ("degC", "-273.15", False),
+            ("degC", "-273.149999999999999999999999999999999999", False),
+            ("degC", "-1", False), ("degC", "200", False),
+        )
+        for basis in ("setpoint", "measured"):
+            for unit, token, below in cases:
+                with self.subTest(basis=basis, unit=unit, token=token), localcontext() as context:
+                    context.prec, context.Emax, context.Emin = 1, 1, -1
+                    row = observation(temperature_basis=basis, temperature_unit=unit, temperature=token)
+                    report = preview_ald_contract(
+                        [row], contract=contract(temperature_basis=basis), check_absolute_temperature=True,
+                    )
+                    self.assertEqual(report["issue_counts"], {"temperature_below_absolute_zero": 1} if below else {})
+                    self.assertEqual(report["status"], "declaration_issues_found" if below else "no_declared_conflicts")
+                    self.assertEqual(row.temperature, token)
+                    if below:
+                        self.assertEqual(report["issues"], [{
+                            "code": "temperature_below_absolute_zero", "field": "temperature",
+                            "row_position": 0, "feature_position": None,
+                        }])
+
+    def test_invalid_units_and_tokens_are_not_reinterpreted_for_temperature_bound(self):
+        for unit, token, expected in (
+                ("C", "-500", {"unsupported_temperature_unit": 1}),
+                ("K", "-1e-201", {"invalid_decimal_token": 1}),
+                ([], "-500", {"unsupported_temperature_unit": 1}),
+                ("F", "NaN", {"unsupported_temperature_unit": 1, "invalid_decimal_token": 1})):
+            with self.subTest(unit=unit, token=token):
+                report = preview_ald_contract(
+                    [observation(temperature_unit=unit, temperature=token)], contract=contract(),
+                    check_absolute_temperature=True,
+                )
+                self.assertEqual(report["issue_counts"], expected)
+
+    def test_temperature_check_opt_in_is_explicit(self):
+        for choice in (None, 0, 1, "true"):
+            with self.subTest(choice=choice), self.assertRaisesRegex(ValueError, "explicit bool"):
+                preview_ald_contract([observation()], contract=contract(), check_absolute_temperature=choice)
+
     def test_steady_slope_is_not_proved_by_average_thickness(self):
         declared = contract(target_method="steady_growth_slope")
         clean = observation(target_method="steady_growth_slope", target="-0.1", derivation=None)

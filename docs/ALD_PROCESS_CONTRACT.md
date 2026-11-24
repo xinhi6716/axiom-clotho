@@ -59,9 +59,13 @@ Every observation has a `condition_id`; its `temperature_condition_id` and
 verification that two quantities were measured under the same conditions.
 
 `temperature` is decimal text. The only accepted unit labels are `degC` and `K`.
-Temperature values are not converted, compared, or checked for physical
-plausibility. Even a well-formed negative Kelvin value requires a separate
-physical review and can produce no declaration conflict.
+By default this declaration-only check does not flag a well-formed temperature
+based on its value. Set `check_absolute_temperature=True` when calling
+`preview_ald_contract` to compare each valid token with exact absolute zero
+in its declared unit: 0 K or −273.15 °C. A lower value produces
+`temperature_below_absolute_zero`, even if it would round to the boundary in
+float64. No correction, conversion, or ALD operating-range check is made;
+values equal to or above the bound still require physical and source review.
 
 ### Distinguish target methods
 
@@ -151,7 +155,7 @@ that all columns in some external table were checked.
   control characters or surrogate code points. Enum labels and identities are
   case-sensitive except the reserved unknown identity markers above.
 - These are software resource and declaration bounds, not an accepted ALD
-  operating window, minimum sample size, physical sign restriction, or
+  operating window, minimum sample size, general physical sign filter, or
   scientific inclusion criterion.
 
 ## Read the report without treating it as approval

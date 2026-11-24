@@ -25,6 +25,7 @@ _METHODS = frozenset({"steady_growth_slope", "total_thickness_div_cycles"})
 _FEATURE_ROLES = frozenset({"process_setting", "material_identity", "postprocess_measurement",
                             "computed_target", "identifier", "unknown"})
 _AVAILABILITY = frozenset({"before_process", "after_process", "unknown"})
+_ABSOLUTE_ZERO = {"K": Fraction(0), "degC": Fraction(-27315, 100)}
 _LENGTH_UNITS = {"angstrom": 1, "nm": 10}
 _GROWTH_UNITS = {"angstrom/cycle": 1, "nm/cycle": 10}
 _UNKNOWN_IDENTITIES = frozenset({"unknown", "unreported", "not_reported"})
@@ -123,14 +124,18 @@ class ALDObservation:
     derivation: ThicknessCycleDerivation | None = None
 
 
-def preview_ald_contract(records, *, contract):
+def preview_ald_contract(records, *, contract, check_absolute_temperature=False):
     """Return declaration conflicts for a bounded list/tuple of observations.
 
     Inputs and frozen declarations are rechecked on every call. Missing or
     unsupported metadata is flagged, never guessed. A conflict-free report is
     not evidence that declarations are true, source-verified or independent.
-    No output row subset or model-ready table is produced.
+    No output row subset or model-ready table is produced. With the explicit
+    temperature check, a finite valid token strictly below absolute zero in
+    its declared unit is flagged; the default remains declaration-only.
     """
+    if type(check_absolute_temperature) is not bool:
+        raise ValueError("check_absolute_temperature must be an explicit bool.")
     if type(contract) is not ALDExperimentalContract:
         raise ValueError("An explicit ALDExperimentalContract is required.")
     ALDExperimentalContract.__post_init__(contract)
@@ -201,12 +206,17 @@ def preview_ald_contract(records, *, contract):
         if _member(record.temperature_basis, {"reported_unspecified"}):
             add("unknown_temperature_basis", "temperature_basis", row=position)
 
-        if not _member(record.temperature_unit, {"degC", "K"}):
+        temperature_unit_ok = _member(record.temperature_unit, _ABSOLUTE_ZERO)
+        if not temperature_unit_ok:
             add("unsupported_temperature_unit", "temperature_unit", row=position)
         try:
-            _fraction(record.temperature)
+            temperature = _fraction(record.temperature)
         except ValueError:
             add("invalid_decimal_token", "temperature", row=position)
+        else:
+            if (check_absolute_temperature and temperature_unit_ok
+                    and temperature < _ABSOLUTE_ZERO[record.temperature_unit]):
+                add("temperature_below_absolute_zero", "temperature", row=position)
         target = None
         if not _member(record.target_unit, _GROWTH_UNITS):
             add("unsupported_growth_unit", "target_unit", row=position)
