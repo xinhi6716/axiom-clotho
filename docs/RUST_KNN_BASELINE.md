@@ -1,9 +1,11 @@
 # Standalone Rust numeric kNN regression
 
-This dependency-free library baseline can fit numeric training rows and predict
-continuous targets entirely in Rust. It is additive and is **not** connected to
-Clotho's Python CLI, saved-study format, grouped model selection or native adapter.
-It does not establish real semiconductor accuracy or complete the Rust migration.
+This dependency-free Rust library fits numeric training rows and predicts
+continuous targets. The [native Rust CLI](RUST_NATIVE_WORKFLOW.md) uses it for
+`fit --model knn`, `predict` from a native artifact, and grouped `evaluate`.
+Native artifacts contain the selected training rows and targets; `predict`
+reconstructs the estimator from them. Keep these files private. This path does
+not reuse Python saved studies or establish scientific model accuracy.
 
 ## Run
 
@@ -19,12 +21,21 @@ training data. The example is explicitly synthetic, not an experimental dataset.
 ## Algorithm and contract
 
 For feature j, fit s_j = max_i |x_ij| on training data only, replacing zero with
-one. Euclidean distances are computed between x_j/s_j and q_j/s_j using `hypot`
-for stable accumulation. Average the k nearest training targets with equal
-weights. Exact distance ties select lower training-row indices first. This is
+one. For each query/training pair, subtract in the original units and then
+scale the difference: `(q_j - x_ij) / s_j`. If direct subtraction overflows,
+try `q_j / s_j - x_ij / s_j` instead. Accumulate the coordinates with `hypot`.
+Average the k nearest targets with equal weights. Equal *computed* distances
+select lower training-row indices first. This is
 maximum-absolute scaling, **not** standard deviation or range scaling. It can be
 sensitive to training outliers and feature offsets. Reordering tied training rows
 can change predictions. Duplicates retain their individual weight.
+
+For example, train on `x,y` pairs `(7,0)`, `(7.000000000000001,1)`, and `(12,2)`
+with `k=1`. Query in the order `7.000000000000001`, then `7`: the native
+fit/reload regression expects predictions `1`, then `0`. Scaling the coordinates
+separately first would collapse the first two training inputs to the same
+binary64 value and incorrectly predict `0` for both. Subtracting first avoids
+this false tie, but accumulated distances still round to binary64.
 
 Inputs must be nonempty, rectangular, numeric and finite. Each table is limited
 to 20,000 rows and 100 features; k is between 1 and the training row count.
@@ -56,8 +67,9 @@ causal identification or use extrapolated predictions for safety-critical contro
 
 Exact search costs O(n_query * (n_train * n_features + n_train log n_train)) time,
 O(n_train * n_features) fitted storage and O(n_train + n_features) working memory
-per query. No accelerator, approximate index, intervals, serialization, CLI or
-real-data benchmark is included. Large requests within the validation ceiling can
+per query. The core library has no serializer; the CLI handles saved training
+specifications as described above. No accelerator, approximate index, intervals
+or real-data benchmark is included. Large requests within the validation ceiling can
 still be expensive. No network requests or external runtime dependencies occur.
 
 Scaling that collapses any nonzero training/query feature or selected target to
