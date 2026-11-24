@@ -71,7 +71,44 @@ rows. No full-data normalization or target-mean fitting occurs before splitting.
 Hyperparameters are fixed by the caller, not selected by looking at test results.
 Repeatedly choosing settings from this report is model selection; use separate
 inner/outer data or an untouched final evaluation instead of reporting a tuned
-result as unbiased. Native nested tuning is not yet implemented.
+result as unbiased. For the separate, bounded numeric regression path, use [nested comparison](RUST_NESTED_SELECTION.md).
+
+## Replay an existing split
+
+Use `evaluate` when Clotho should construct the folds. If a study has already
+frozen its train/test membership (for example, a source holdout), prepare the
+files for each fold yourself and use `fit` followed by `predict`. Running
+`evaluate` on the combined table does **not** replay that external split.
+
+For this strict numeric regression example, `fold-0-train.csv` holds the
+training rows and a `response` column. `fold-0-query.csv` holds only the
+held-out features, with no target or post-outcome columns. Replace the
+example feature names with your actual headers.
+
+```sh
+rust/target/release/clotho fit \
+  --csv fold-0-train.csv --target response --features power,scan_speed \
+  --model ridge --alpha 1 --out fold-0-model.json
+
+rust/target/release/clotho predict \
+  --artifact fold-0-model.json --csv fold-0-query.csv \
+  --out fold-0-predictions.csv
+```
+
+1. Before fitting, freeze the row IDs, group IDs and train/test membership
+   from your study roster. Check that train and test share no groups at the
+   level your study claims to hold out. The two commands do not check the
+   split or whether rows from different groups came from the same physical unit.
+2. Keep an explicit query-row-to-ID mapping in the exact order written to
+   the query CSV. The default regression output has zero-based `row_index`
+   and `prediction`; join through that mapping, not through the order of a
+   separately sorted labels file. Require exactly one result per expected ID.
+   For key-preserving prediction with query-byte binding, see
+   [baseline-relative scoring](RUST_BASELINE_SKILL.md).
+3. Score held-out labels only after prediction, on the same roster for each
+   model and baseline. Record the split, input hashes and model settings.
+   Use distinct fresh output paths per fold. Keep the models and any files
+   containing private labels local; the saved model includes its training data.
 
 ## Data contract
 

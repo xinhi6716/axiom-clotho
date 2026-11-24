@@ -16,12 +16,26 @@ With dependencies already installed, use `PYTHONPATH=src` instead of installing.
 
 ### Check the optional Rust core
 
-The first Rust migration slice is a dependency-free source-feature diagnostic;
-it does not replace Python fitting or prediction. With a Rust toolchain already
-installed, run `cargo test --manifest-path rust/Cargo.toml --offline --locked`
-and `PYTHONPATH=src python tools/check_rust_parity.py`. Set
-`CLOTHO_REQUIRE_RUST=1` for the complete Python suite to require, rather than
-skip, cross-language parity. See [scope and verification](docs/RUST_CORE.md).
+The Rust workspace contains both the `clotho-core` library and the experimental
+`clotho-cli` executable. The native CLI has its own CSV fit, predict and grouped
+evaluate contracts; it does not replace Python measurement ingestion or reuse
+Python saved artifacts. See the [native workflow](docs/RUST_NATIVE_WORKFLOW.md)
+and [remaining migration work](docs/RUST_MIGRATION_STATUS.md).
+
+From the repository root, use these commands with a Rust toolchain already
+installed and the locked workspace dependencies already cached:
+
+```bash
+cargo fmt --manifest-path rust/Cargo.toml --all --check
+cargo test --manifest-path rust/Cargo.toml --workspace --locked --offline
+```
+
+On a fresh Cargo cache, see the workflow guide for the one-time dependency
+fetch. To check the separate Python/Rust source-support diagnostic, use an
+existing Python environment and run `PYTHONPATH=src python tools/check_rust_parity.py`.
+Set `CLOTHO_REQUIRE_RUST=1` for the Python suite to fail rather than skip when
+Rust is unavailable. The [parity guide](docs/RUST_CORE.md) explains what this
+check covers; it does not establish parity of the native modelling workflow.
 
 For a read-only synthetic prediction-preflight timing check, run
 `PYTHONPATH=src python benchmarks/prediction_preflight.py --case all --repeats 9`.
@@ -119,6 +133,9 @@ Use synthetic test data by default. Do not include private measurements, credent
 
 AI-assisted contributions need the same human review, reproducible tests, and provenance as any other change. Do not submit generated results you did not actually run.
 
+For explicit pre-read / write / post-read event intake, see the
+[RRAM write-pair audit](docs/RRAM_WRITE_PAIR_AUDIT.md).
+
 ## Reporting a problem
 
 Include Python/library versions, exact command or small API example, expected versus observed behavior, and a synthetic input that reproduces it. Omit private file paths and data. See SECURITY.md before reporting a security issue publicly.
@@ -131,13 +148,3 @@ Rust without dependencies. It is not connected to the Python model-selection or
 saved-study workflow. Run the synthetic `knn_process` example and read
 [the algorithm, validation and limitations](docs/RUST_KNN_BASELINE.md) before use.
 Do not treat software tests as evidence of real material prediction accuracy.
-
-### Native numeric workflow
-
-The Rust workspace now also includes a runnable `clotho-cli` binary for numeric
-fit/predict/grouped-evaluate workflows. See [native commands and artifact
-contracts](docs/RUST_NATIVE_WORKFLOW.md) and [remaining migration
-work](docs/RUST_MIGRATION_STATUS.md). Run the whole workspace with
-`cargo test --manifest-path rust/Cargo.toml --workspace --locked --offline`
-after the documented initial dependency fetch. This is a new versioned numeric
-protocol, not an assertion of Python command or artifact compatibility.
