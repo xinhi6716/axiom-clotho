@@ -330,3 +330,56 @@ labels and post-outcome information. Fit every learned transformation and
 estimator only on that fold's training membership, with any selection protocol
 separately reviewed. This planner supplies no temporal nested-selection,
 benchmark, scoring, or end-to-end temporal-ML guarantee.
+
+## Optional fixed-horizon label timing audit
+
+`groupbench.group_time_plan.audit_group_forward_label_timing` checks a row
+ledger against a typed plan. A group-level availability estimate alone can let
+a training label through if the estimate predates its actual arrival. This
+audit adds a separate declaration; it does not change planner, CLI, evaluation
+or saved formats. Use it when the group span encloses forecast **origins**, and
+all targets have one positive fixed horizon.
+
+```python
+from groupbench.group_time_plan import (
+    ForecastLabelTiming, GroupSpan, TimeWindow, audit_group_forward_label_timing,
+    plan_group_forward_windows,
+)
+
+plan = plan_group_forward_windows(
+    ["previous", "held"],
+    group_spans=[GroupSpan("previous", 0, 3, 7), GroupSpan("held", 10, 11, 16)],
+    windows=[TimeWindow(10, 15)], clock_id="test-bench", time_unit="step", gap=2,
+)
+rows = (ForecastLabelTiming(0, "previous", 3, 4, 7),
+        ForecastLabelTiming(1, "held", 11, 12, 16))
+result = audit_group_forward_label_timing(
+    plan, clock_id="test-bench", time_unit="step", horizon=1, labels=rows,
+)
+assert result.fold_train_label_counts == (1,)
+assert result.fold_test_label_counts == (1,)
+```
+
+- The ledger must cover every positional row, including unused rows, in
+  original order and with the exact typed group ID. No row IDs are recovered
+  from the plan; matching supplied positions does not verify table order.
+- Clock and unit must match the plan. Actual measurement must equal origin
+  plus the declared positive horizon, and first label availability cannot
+  precede that measurement. All ticks are exact signed 64-bit built-in
+  integers; overflow of origin plus horizon is rejected.
+- Every training label's arrival plus gap must be **strictly earlier** than
+  its fold's lower bound. In the example, changing the previous label's
+  availability from 7 to 8 fails: `8 + 2 = 10` is not before 10. A label
+  from an earlier test fold must meet this same rule if later used for
+  training. Test availability after the forecast window is allowed; this
+  does not verify whether a score had actually been computed in time.
+- Group availability must be an upper bound for all rows, even those never
+  trained or tested. An overestimate is allowed and keeps the original plan
+  conservative; the audit does not move groups or recommend a new split.
+
+Require a canonical plan and at most 20,000 rows, 1,000 windows, 256-character
+plan strings, and 250,000 window-by-row/group work units
+(`windows * (rows + groups)`). This API returns counts or raises `ValueError`;
+it reads no data files or labels themselves. A pass checks declared timing
+only. It does not authenticate timestamps, verify hardware identity or
+training execution, audit feature ancestry, or cover variable-horizon targets.

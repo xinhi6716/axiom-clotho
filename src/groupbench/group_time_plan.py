@@ -8,7 +8,7 @@ or train-only preprocessing. See docs/GROUP_FORWARD_WINDOW_PLAN.md.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields, is_dataclass
 from typing import Literal
 
 
@@ -236,4 +236,132 @@ def plan_group_forward_windows(
         total=_membership(rows, group_order, row_identities),
         tested=_membership(rows, group_order, tested),
         untested=_membership(rows, group_order, row_identities - tested),
+    )
+
+
+_LABEL_AUDIT_MAX_ROWS = 20_000
+_LABEL_AUDIT_MAX_WINDOWS = 1_000
+_LABEL_AUDIT_MAX_WORK = 250_000
+
+
+@dataclass(frozen=True, slots=True)
+class ForecastLabelTiming:
+    """One plan row's declared origin, target measurement and label arrival."""
+
+    row_position: int
+    group: GroupIdentity
+    forecast_origin: int
+    measured_at: int
+    available_at: int
+
+
+@dataclass(frozen=True, slots=True)
+class ForwardLabelTimingAudit:
+    """Counts from a metadata-only fixed-horizon audit."""
+
+    n_rows: int
+    n_tested_labels: int
+    fold_train_label_counts: tuple[int, ...]
+    fold_test_label_counts: tuple[int, ...]
+
+
+def _same_label_plan_fields(left, right):
+    # Dataclass equality alone accepts bool for int and 1.0 for 1.
+    if type(left) is not type(right):
+        return False
+    if is_dataclass(right):
+        return all(_same_label_plan_fields(getattr(left, f.name), getattr(right, f.name)) for f in fields(right))
+    if type(right) is tuple:
+        return len(left) == len(right) and all(_same_label_plan_fields(a, b) for a, b in zip(left, right))
+    return left == right
+
+
+def _canonical_label_plan(plan):
+    if type(plan) is not GroupForwardWindowPlan:
+        raise ValueError("Expected a GroupForwardWindowPlan.")
+    if any(type(items) is not tuple for items in (plan.row_groups, plan.group_spans, plan.folds)):
+        raise ValueError("Expected canonical tuple containers in the plan.")
+    rows, groups, windows = len(plan.row_groups), len(plan.group_spans), len(plan.folds)
+    if (not 1 <= groups <= rows <= _LABEL_AUDIT_MAX_ROWS
+            or not 1 <= windows <= _LABEL_AUDIT_MAX_WINDOWS
+            or windows * (rows + groups) > _LABEL_AUDIT_MAX_WORK):
+        raise ValueError("Label audit exceeds the supported plan work bound.")
+    if any(type(fold) is not ForwardWindowFold for fold in plan.folds):
+        raise ValueError("Expected ForwardWindowFold records.")
+    if any(type(span) is not GroupSpan for span in plan.group_spans):
+        raise ValueError("Expected GroupSpan records.")
+    for value in (plan.time_unit, plan.clock_id, *plan.row_groups, *(span.group for span in plan.group_spans)):
+        if type(value) is str and len(value) > 256:
+            raise ValueError("Label audit plan strings must have at most 256 characters.")
+    rebuilt = plan_group_forward_windows(
+        plan.row_groups, group_spans=plan.group_spans,
+        windows=tuple(fold.window for fold in plan.folds), clock_id=plan.clock_id,
+        time_unit=plan.time_unit, gap=plan.gap,
+    )
+    if not _same_label_plan_fields(plan, rebuilt):
+        raise ValueError("Plan does not match its canonical membership.")
+    return rebuilt
+
+
+def audit_group_forward_label_timing(
+    plan: GroupForwardWindowPlan, *, clock_id: str, time_unit: str, horizon: int,
+    labels: list[ForecastLabelTiming] | tuple[ForecastLabelTiming, ...],
+) -> ForwardLabelTimingAudit:
+    """Check declared label ticks against a fixed horizon and forward plan.
+
+    Provide exactly one row record per plan position (including unused rows)
+    in row order, with its matching typed group. Origin is inside the inclusive
+    group span. Measured tick is origin plus the positive horizon; available
+    tick is no earlier than measurement. Across every training fold, label
+    availability plus the plan's gap must strictly precede the window start.
+    The plan's group availability bound must also cover every declared row.
+    Test labels may arrive after their forecast window; scoring is not checked.
+    """
+    plan = _canonical_label_plan(plan)
+    if any(type(label) is not str or len(label) > 256 for label in (clock_id, time_unit)):
+        raise ValueError("Label audit clock and time unit must be bounded strings.")
+    _declaration(clock_id, "clock_id")
+    _declaration(time_unit, "time_unit")
+    if clock_id != plan.clock_id or time_unit != plan.time_unit:
+        raise ValueError("Label audit clock and time unit must match the plan.")
+    _tick(horizon, "horizon")
+    if horizon <= 0:
+        raise ValueError("Label audit horizon must be positive.")
+    if type(labels) not in (list, tuple) or len(labels) != len(plan.row_groups):
+        raise ValueError("Label timing must cover every plan row exactly in order.")
+    labels = tuple(labels)
+    spans = {span.group: span for span in plan.group_spans}
+    for i, (item, group) in enumerate(zip(labels, plan.row_groups)):
+        if type(item) is not ForecastLabelTiming:
+            raise ValueError("Expected ForecastLabelTiming records.")
+        if (type(item.row_position) is not int or item.row_position != i
+                or type(item.group) is not type(group) or item.group != group):
+            raise ValueError("Label timing row positions and typed groups must match the plan.")
+        for name in ("forecast_origin", "measured_at", "available_at"):
+            _tick(getattr(item, name), name)
+        span = spans[group]
+        if not span.start <= item.forecast_origin <= span.end:
+            raise ValueError("Forecast origin must lie inside the declared group span.")
+        if item.forecast_origin > MAX_TICK - horizon:
+            raise ValueError("Forecast origin plus horizon exceeds signed-64-bit ticks.")
+        if item.measured_at != item.forecast_origin + horizon:
+            raise ValueError("Target measurement must match the fixed horizon.")
+        if item.available_at < item.measured_at:
+            raise ValueError("A label cannot become available before it was measured.")
+
+    for fold in plan.folds:
+        # Python arithmetic here is exact; equality after the embargo fails.
+        for position in fold.train.rows:
+            if labels[position].available_at + plan.gap >= fold.window.lower:
+                raise ValueError(
+                    f"Training label at row {position} in fold {fold.index} must be available "
+                    "with the plan gap strictly before the window starts."
+                )
+
+    if any(item.available_at > spans[item.group].label_available_at for item in labels):
+        raise ValueError("A row label exceeds its declared group availability bound.")
+    return ForwardLabelTimingAudit(
+        n_rows=len(labels), n_tested_labels=plan.tested.n_rows,
+        fold_train_label_counts=tuple(fold.train.n_rows for fold in plan.folds),
+        fold_test_label_counts=tuple(fold.test.n_rows for fold in plan.folds),
     )
