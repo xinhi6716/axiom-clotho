@@ -46,10 +46,17 @@ changing those query features affects distances, but does not certify support.
 Extremely large queries relative to tiny fitted scales may return NumericOverflow,
 never a silent infinity. Errors contain no input values.
 
-Target averaging normalizes by the largest neighbor-target magnitude before
-summing with Neumaier compensation; final normalized roundoff is bounded to [-1, 1]. This avoids overflow
-for finite targets but does not promise exact arithmetic or preserved subnormal
-precision. Prediction validates all rows and returns no partial output on error.
+The selected finite binary64 targets are summed as exact integer multiples of
+the smallest positive subnormal. Divide by k and round the mean to binary64
+once, to nearest with ties to even. Reordering the same selected neighbors does
+not change this mean. Exact cancellation returns positive zero; a negative
+nonzero mean that rounds to zero returns negative zero.
+
+The existing target-normalization range check still rejects a selected nonzero
+target if dividing it by the largest selected target magnitude would round it
+to zero. This check is an acceptance rule, not how the mean is computed. The
+exact mean neither changes which neighbors are selected nor recovers decimal
+precision lost at input. Prediction returns no partial output on error.
 
 ## Validation and scientific use
 

@@ -3,6 +3,9 @@
 //! validation or a replacement for grouped evaluation/model selection.
 use std::fmt;
 
+#[path = "knn_exact_mean.rs"]
+mod exact_mean;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum KnnError {
     Empty,
@@ -117,33 +120,10 @@ impl KnnRegressor {
                     distances.push((d, i));
                 }
                 distances.sort_unstable_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
-                // Normalize targets before summation to avoid overflowing a finite mean.
-                let scale = distances[..self.k]
-                    .iter()
-                    .map(|(_, i)| self.targets[*i].abs())
-                    .fold(0.0_f64, f64::max);
-                if scale == 0.0 {
-                    return Ok(0.0);
-                }
-                // Neumaier compensation retains small terms during cancellation.
-                // The normalized sum is bounded by k, so it cannot overflow.
-                let mut sum = 0.0_f64;
-                let mut correction = 0.0_f64;
-                for (_, i) in &distances[..self.k] {
-                    let value = self.targets[*i] / scale;
-                    if self.targets[*i] != 0.0 && value == 0.0 {
-                        return Err(KnnError::NumericOverflow);
-                    }
-                    let next = sum + value;
-                    correction += if sum.abs() >= value.abs() {
-                        (sum - next) + value
-                    } else {
-                        (value - next) + sum
-                    };
-                    sum = next;
-                }
-                let mean = ((sum + correction) / self.k as f64).clamp(-1.0, 1.0) * scale;
-                Ok(mean)
+                exact_mean::checked_mean(
+                    distances[..self.k].iter().map(|(_, i)| self.targets[*i]),
+                    self.k,
+                )
             })
             .collect()
     }
