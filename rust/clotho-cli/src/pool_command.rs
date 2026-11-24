@@ -107,6 +107,20 @@ fn skill(model: f64, baseline: f64) -> Result<Option<f64>> {
     Ok(Some(result))
 }
 
+fn pooled_skill(model: f64, baseline: f64) -> Result<Option<f64>> {
+    // Preserve validation of incoming scores against the original v2 formula.
+    // For a new pooled score, subtract the RMSEs before dividing near a tie:
+    // rounding the quotient first can distort their difference by up to ~2x.
+    let score = skill(model, baseline)?;
+    if score.is_some() && model != 0.0 {
+        let ratio = model / baseline;
+        if (0.5..=2.0).contains(&ratio) {
+            return Ok(Some(((baseline - model) / baseline) * (1.0 + ratio)));
+        }
+    }
+    Ok(score)
+}
+
 fn pooled_rmse(reports: &[Report], baseline: bool, total: usize) -> Result<f64> {
     let value = |r: &Report| if baseline { r.baseline_rmse } else { r.model_rmse };
     let scale = reports.iter().map(value).fold(0.0_f64, f64::max);
@@ -206,7 +220,7 @@ pub(super) fn run(opts: &HashMap<String, String>) -> Result<()> {
         "n_reports": reports.len(), "n_rows": total,
         "model_id": manifest.model_id, "baseline_id": manifest.baseline_id,
         "identities_verified": false, "membership_verified": false,
-        "model_rmse": model, "baseline_rmse": baseline, "mse_skill": skill(model, baseline)?,
+        "model_rmse": model, "baseline_rmse": baseline, "mse_skill": pooled_skill(model, baseline)?,
         "aggregation": "row-count-weighted squared RMSE from supplied scalar reports; not average skill",
         "query_bytes_verified": false, "roster_completeness_verified": false,
         "disjointness_verified": false, "provenance_verified": false, "fit_performed": false,

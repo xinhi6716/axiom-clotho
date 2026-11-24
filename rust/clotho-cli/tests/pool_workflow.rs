@@ -227,3 +227,28 @@ fn subnormal_ratios_cannot_bypass_the_core_range_through_scalar_reports() {
     assert!(!w.run(&ARGS).status.success());
     assert!(!w.0.join("pooled.json").exists());
 }
+
+#[test]
+fn pooled_skill_retains_adjacent_rmse_differences() {
+    let lower = f64::from_bits(1.0_f64.to_bits() - 1);
+    let higher = f64::from_bits(2.7_f64.to_bits() + 1);
+    // Reference values from exact rational arithmetic on these binary64 RMSEs.
+    for (model, baseline, expected) in [
+        (1.0, lower, -2.2204460492503136e-16),
+        (2.7, higher, 3.2895497025930552e-16),
+    ] {
+        // Two equally sized reports preserve the identical RMSE in the pool.
+        // Inputs intentionally use the historical native compare-saved formula.
+        let w = setup(
+            report("a", "a", 1, model, baseline),
+            report("b", "b", 1, model, baseline),
+        );
+        let result = w.run(&ARGS);
+        assert!(result.status.success(), "{:?}", result.stderr);
+        let pooled = read(&w);
+        assert_eq!(pooled["model_rmse"].as_f64(), Some(model));
+        assert_eq!(pooled["baseline_rmse"].as_f64(), Some(baseline));
+        let actual = pooled["mse_skill"].as_f64().unwrap();
+        assert!((actual - expected).abs() < 1e-30, "{actual} vs {expected}");
+    }
+}
