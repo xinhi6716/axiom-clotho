@@ -256,3 +256,62 @@ fn distinct_currents_that_log_collapses_are_rejected() {
         FetError::NumericalRange
     );
 }
+
+#[test]
+fn maximum_cohort_preserves_noncriterion_plateaus_and_provenance() {
+    let branches: Vec<_> = (0..10)
+        .map(|device| {
+            let mut a = acquisition();
+            a.device = format!("D{device}");
+            let s: Vec<_> = (0..1000)
+                .map(|i| Sample {
+                    source_row: device * 1000 + i + 2,
+                    temperature_k: 300.0,
+                    drain_voltage_v: 1.0,
+                    body_voltage_v: 0.0,
+                    gate_voltage_v: i as f64,
+                    drain_current_a: 10.0_f64.powf(-9.0 + (i / 2) as f64 / 100.0),
+                })
+                .collect();
+            (a, s)
+        })
+        .collect();
+    let mut p = settings();
+    p.window_max_v = 999.0;
+    p.criterion_a = (branches[0].1[499].drain_current_a + branches[0].1[500].drain_current_a) / 2.0;
+    let features = extract_cohort(&branches, p).unwrap();
+    assert_eq!(features.len(), 10);
+    for (device, f) in features.iter().enumerate() {
+        assert_eq!(f.acquisition, branches[device].0);
+        assert_eq!(
+            f.criterion_source_rows,
+            [device * 1000 + 501, device * 1000 + 502]
+        );
+        assert_eq!(f.log_selected_source_rows, f.all_source_rows);
+        assert_eq!(
+            f.all_source_rows,
+            (device * 1000 + 2..device * 1000 + 1002).collect::<Vec<_>>()
+        );
+        assert!(f.log_slope_decades_per_v > 0.0);
+    }
+}
+
+#[test]
+fn reversed_negative_sweep_rejects_distinct_currents_after_a_legal_plateau() {
+    let mut s = samples();
+    s[0].drain_current_a = 1e-100;
+    s[1].drain_current_a = f64::from_bits(s[0].drain_current_a.to_bits() + 1);
+    s[2].drain_current_a = s[1].drain_current_a;
+    assert_eq!(s[0].drain_current_a.log10(), s[2].drain_current_a.log10());
+    for sample in &mut s {
+        sample.drain_current_a = -sample.drain_current_a;
+    }
+    s.reverse();
+    let mut p = settings();
+    p.positive_current = false;
+    p.criterion_a = s[0].drain_current_a;
+    assert_eq!(
+        extract_branch(&acquisition(), &s, p).unwrap_err(),
+        FetError::NumericalRange
+    );
+}

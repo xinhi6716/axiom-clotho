@@ -1,6 +1,6 @@
 //! Bounded, explicitly SI/binary64 FET branch features. Not legacy exact-decimal
 //! compatibility, physical threshold identification, or automatic window search.
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -227,12 +227,14 @@ pub fn extract_branch(a: &Acquisition, s: &[Sample], p: Settings) -> Result<Feat
         .iter()
         .map(|q| (q.drain_current_a * sign).log10())
         .collect();
-    // Reject loss of distinctions introduced by binary64 logarithms.
-    for i in 0..selected.len() {
-        for j in 0..i {
-            if selected[i].drain_current_a != selected[j].drain_current_a && logs[i] == logs[j] {
-                return Err(FetError::NumericalRange);
-            }
+    // Equal finite logarithms have the same bits except for signed zero.
+    // Keep one representative current per log in O(k log k), irrespective
+    // of the order of libm results. Identical original currents are legal.
+    let mut currents_by_log = BTreeMap::new();
+    for (sample, &log) in selected.iter().zip(&logs) {
+        let key = if log == 0.0 { 0 } else { log.to_bits() };
+        if *currents_by_log.entry(key).or_insert(sample.drain_current_a) != sample.drain_current_a {
+            return Err(FetError::NumericalRange);
         }
     }
     let n = selected.len() as f64;
