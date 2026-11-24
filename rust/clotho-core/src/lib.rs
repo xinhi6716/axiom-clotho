@@ -31,3 +31,5 @@ pub mod group_max_calibration;
 pub mod group_max_intervals;
 
 pub mod group_interval_diagnostics;
+
+pub mod group_interval_comparison;
