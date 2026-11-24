@@ -18,32 +18,32 @@ PALETTES = {
 }
 COPY = {
     "en": {
-        "eyebrow": "THE MEASUREMENT THREAD",
-        "title": "From measurements to predictions",
+        "eyebrow": "MEASUREMENT WORKFLOW",
+        "title": "Raw measurements to scored predictions",
         "desc": "Prepare device features and training targets, inspect the plan, fit and predict, then score later outcomes without refitting.",
         "steps": [
-            ("Prepare", "Features + exact IDs", "Training targets only"),
-            ("Plan", "Declared splits", "Inspect the fit budget"),
-            ("Run", "Compare + refit", "Target-free prediction"),
-            ("Score", "Join later outcomes", "No new model fits"),
+            ("Prepare", "Join exact device IDs", "Use training targets only"),
+            ("Plan", "Check declared groups", "Preview the fit count"),
+            ("Run", "Fit on training data", "Save held-out predictions"),
+            ("Score", "Match IDs to outcomes", "Score without refitting"),
         ],
-        "boundary": "LATER OUTCOMES → SCORE ONLY",
-        "note": "No future outcomes enter preparation or modeling.",
-        "mobile_note": ["No future outcomes enter", "preparation or modeling."],
+        "boundary": "LATER OUTCOMES",
+        "note": "Join later labels only at Score. No new fits.",
+        "mobile_note": ["Join later labels only at Score.", "No new fits."],
     },
     "zh-TW": {
-        "eyebrow": "量 測 之 線",
-        "title": "從量測到預測",
+        "eyebrow": "量測工作流程",
+        "title": "從原始量測到預測評分",
         "desc": "整理元件特徵與訓練端點、檢查計畫、擬合並預測，最後以日後觀測值計分，不重新擬合。",
         "steps": [
-            ("整理", "特徵與精確元件 ID", "僅使用訓練端點"),
-            ("規劃", "宣告群組切分", "檢查擬合次數預算"),
-            ("執行", "比較模型並重新擬合", "預測時不提供端點"),
-            ("評分", "配對日後觀測值", "不新增模型擬合"),
+            ("整理", "按元件 ID 精確配對", "只用訓練端點"),
+            ("規劃", "檢查已宣告的群組", "預覽擬合次數"),
+            ("執行", "以訓練資料擬合", "保存留出組的預測"),
+            ("評分", "依 ID 對照後續觀測", "只評分，不重擬合"),
         ],
-        "boundary": "日後觀測值 → 僅供評分",
-        "note": "未來觀測值不進入資料準備或建模。",
-        "mobile_note": ["未來觀測值不進入", "資料準備或建模。"],
+        "boundary": "後續觀測值",
+        "note": "只在評分時合入後續觀測值，不重擬合。",
+        "mobile_note": ["只在評分時合入後續觀測值。", "不重擬合。"],
     },
 }
 COMMANDS = ("prepare", "plan", "run", "score")
@@ -103,10 +103,14 @@ def render(language, theme, mobile):
                     text(100, y+114, second, size=21, fill="muted")]
             if language == "zh-TW":
                 out.append(text(171, y+41, COMMANDS[i], size=16, family="mono", fill="gold"))
-        out += [f'<path d="M24 765H456" stroke="{{line}}"/>',
-                text(24, 798, copy["boundary"], size=18, family="mono", fill="gold"),
-                text(24, 838, copy["mobile_note"][0], size=22, fill="muted"),
-                text(24, 870, copy["mobile_note"][1], size=22, fill="muted")]
+        out += ['<path d="M423 801H446V731" '
+                'fill="none" stroke="{gold}" stroke-width="2" stroke-dasharray="5 4"/>',
+                '<path d="M439 739L446 731L453 739" fill="none" stroke="{gold}" stroke-width="2"/>',
+                '<rect x="24" y="767" width="399" height="116" rx="8" '
+                'fill="{panel}" stroke="{line}"/>',
+                text(40, 799, copy["boundary"], size=18, family="mono", fill="gold"),
+                text(40, 833, copy["mobile_note"][0], size=22, fill="muted"),
+                text(40, 862, copy["mobile_note"][1], size=22, fill="muted")]
     else:
         out += [text(32, 42, copy["eyebrow"], size=16, fill="gold", spacing=3),
                 text(32, 84, copy["title"], size=30, family="serif"),
@@ -126,11 +130,12 @@ def render(language, theme, mobile):
             if i < 3:
                 out.append(f'<path d="M{x+267} 223H{x+287}M{x+282} 218L{x+287} 223L{x+282} 228" '
                            'fill="none" stroke="{ornament}" stroke-linecap="round"/>')
-        out += ['<path d="M32 360H1168" stroke="{line}"/>',
-                text(32, 394, copy["boundary"], size=18, family="mono", fill="gold"),
-                text(32, 427, copy["note"], size=21, fill="muted"),
-                '<path d="M1134 425V381L1127 388M1134 381L1141 388" '
-                'fill="none" stroke="{ornament}" stroke-width="1.5"/>']
+        out += ['<path d="M1035 367V331M1028 339L1035 331L1042 339" '
+                'fill="none" stroke="{gold}" stroke-width="2" stroke-dasharray="5 4"/>',
+                '<rect x="32" y="367" width="1136" height="62" rx="8" '
+                'fill="{panel}" stroke="{line}"/>',
+                text(52, 405, copy["boundary"], size=18, family="mono", fill="gold"),
+                text(375, 405, copy["note"], size=21, fill="muted")]
     out.append('</svg>\n')
     return "\n".join(out).format(**PALETTES[theme])
 

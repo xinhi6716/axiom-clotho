@@ -2,57 +2,37 @@
 
 <h1 id="axiom-clotho" align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/xinhi6716/xinhi6716/443d48c713f27d52656ad8ea3cb4c5bb9c7dd440/assets/brand-marks/v1/clotho-icon-dark.svg"><img src="https://raw.githubusercontent.com/xinhi6716/xinhi6716/443d48c713f27d52656ad8ea3cb4c5bb9c7dd440/assets/brand-marks/v1/clotho-icon-light.svg" width="40" height="40" alt=""></picture> Axiom Clotho</h1>
 
-<p align="center"><strong>Device measurements. Grouped models. Local reports.</strong></p>
-
+<p align="center"><strong>Local models and reproducible evaluation for grouped semiconductor data.</strong></p>
 <p align="center"><strong>English</strong> · <a href="README.zh-TW.md">繁體中文</a></p>
 
-<p align="center"><a href="https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.3.0b7">Beta 0.3.0b7</a></p>
+Use Clotho to turn supported RRAM or FET measurements into device-level features, or start with a feature CSV. Keep related devices, wafers or batches together when evaluating a model. Save predictions before joining later outcomes.
 
-<p align="center"><a href="#begin">Quick start</a> · <a href="#thread">Measurements</a> · <a href="#tabular-start">Your table</a> · <a href="#evidence">Reports</a> · <a href="#limits">Limits</a></p>
-
-Clotho turns supported RRAM and FET measurement tables into device-level features, compares models with your declared groups held apart, and predicts outcomes for new devices. Or start from a table.
-
-### Native Rust numeric path (experimental)
-
-A Python-free CLI now supports CSV **fit**, **predict**, and grouped
-**evaluate** with mean, ridge, kNN, logistic and prevalence-baseline models. Build it with Cargo and follow the
-[native workflow guide](docs/RUST_NATIVE_WORKFLOW.md). Its JSON model specifications
-contain training data and must be kept private. [Binary and mixed-input workflows](docs/RUST_BINARY_AND_MIXED.md)
-include explicit training-only median/one-hot preprocessing. This new protocol does not yet
-replace measurement ingestion or legacy saved-study/search contracts. A separate
-[nested numeric regression comparison](docs/RUST_NESTED_SELECTION.md) selects
-candidates on inner group folds and evaluates untouched outer folds. See the
-[full migration inventory](docs/RUST_MIGRATION_STATUS.md).
-
-### Choose your starting point
-
-| I have… | Start with… |
+| Start with | Use |
 | --- | --- |
-| No dataset yet | [A small synthetic demo](#try-the-demo) |
-| RRAM or FET measurements | [The measurement workflow](#thread) |
-| A feature table | [Grouped tabular modelling](#tabular-start) |
-| Saved predictions | [Python run reports or native saved-series scoring](#evidence) |
+| A first run or a feature table | [Python quick start](#begin) · [Grouped CSV example](#tabular-start) |
+| Raw measurements in a supported schema | [RRAM and FET workflow](#thread) |
+| A small local build without Python | [Native Rust on `main`](#native-rust) |
+| Saved predictions or a prior run | [Outputs and verification](#evidence) |
 
 <a id="begin"></a>
 <a id="get-the-reviewed-beta-core"></a>
 <a id="choose-the-version-you-mean"></a>
 
-## Start here
+<a id="start-here"></a>
 
-Use Python 3.10+ and a fresh environment. The tagged source includes the example files:
+## Python quick start
+
+Use Python 3.10+ in a clean environment. **The tagged Python beta and current source are separate:** the [v0.3.0b7 release](https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.3.0b7) is frozen; `main` contains later Python and native Rust work.
 
 ```bash
-git clone https://github.com/xinhi6716/axiom-clotho.git clotho-source
+git clone --branch v0.3.0b7 https://github.com/xinhi6716/axiom-clotho.git clotho-source
 cd clotho-source
-git checkout --detach v0.3.0b7
 python -m venv .venv
-# POSIX; on Windows use .venv\Scripts\activate instead.
+# POSIX; on Windows Command Prompt: .venv\Scripts\activate.bat
 . .venv/bin/activate
-python -m pip install -e .
+python -m pip install .
 clotho --version
 ```
-
-Installation may download build and runtime dependencies. Clotho's calculations run locally, without an account, hosted ML API or model-weight download. The package remains **`ml-super-calculator`**; `mlcalc`, `groupbench` and existing Python imports are kept for compatibility. [Installation and compatibility](docs/CLOTHO_BETA_MIGRATION.md).
 
 <a id="try-the-demo"></a>
 
@@ -62,29 +42,42 @@ Installation may download build and runtime dependencies. Clotho's calculations 
 clotho tabular demo --out runs/demo
 ```
 
-Open **`runs/demo/report.html`**. This fits models on a small invented table. Use a new output path for each example. The older `clotho demo` is a different fixed semiconductor walkthrough; use `clotho tabular demo` for this first report.
+Open `runs/demo/report.html`. The demo fits models on invented data. Use a fresh output directory for each run. The distribution is `ml-super-calculator`; the compatible CLI names are `clotho`, `mlcalc`, `groupbench` and `mlcalc-workflow`. Dependency installation may need network access; the modelling workflow runs locally.
 
-<details>
-<summary>Install a release wheel instead</summary>
+**Release wheel:** verify the matching wheel against the release's `SHA256SUMS.txt`. The [installation guide](docs/RELEASE_NOTES_0.3.0b7.md#installation-and-reproducible-example) explains offline installation when compatible dependencies are already present. The example CSVs are in the source archive, not the wheel.
 
-Download the wheel and `SHA256SUMS.txt` from the [b7 release](https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.3.0b7), then verify the checksum. In an environment that already has compatible dependencies:
+<a id="tabular-start"></a>
+<a id="bring-your-data"></a>
+<a id="plan-first-then-fit"></a>
+
+<a id="start-from-your-own-table"></a>
+
+## Evaluate a grouped CSV
+
+From the tagged source checkout:
 
 ```bash
-python -m pip install --no-index --no-deps ./ml_super_calculator-0.3.0b7-py3-none-any.whl
-clotho --version
+mlcalc plan run examples/synthetic_materials.csv --target response --group batch \
+  --features temperature_c,pressure_mpa,duration_min,material_family
+mlcalc run examples/synthetic_materials.csv --target response --group batch \
+  --features temperature_c,pressure_mpa,duration_min,material_family --out runs/grouped
 ```
 
-Required dependencies are `numpy>=1.24,<3`, `pandas>=2,<3`, `scikit-learn>=1.4,<2` and `threadpoolctl>=3,<4`. These are supported version bounds, not a fully tested matrix. The command above will not fetch missing packages. Extract the matching source archive for the example CSVs. No PyPI publication is implied. [Full installation guide](docs/RELEASE_NOTES_0.3.0b7.md#installation-and-reproducible-example).
+`plan run` previews the split and fit count without fitting. `run` holds declared groups apart and fits preprocessing on training partitions. For your own CSV, replace the path, target, group and features; exclude IDs, notes and columns unavailable at prediction time.
 
-</details>
+<a id="predict-new-rows-after-evaluation"></a>
+
+| Task | Entry point |
+| --- | --- |
+| Numeric outcome | `mlcalc run`: default comparison includes Dummy mean, Ridge and Extra Trees. |
+| Binary outcome | `mlcalc binary`: explicit 0/1 workflow with Dummy, Logistic and Extra Trees. [Binary guide](docs/BINARY_PROTOCOL.md) |
+| Predict new rows | `mlcalc predict`: select and refit on labelled training data, then predict from a feature-only CSV. This step does not return a new test score. [Prediction guide](docs/USAGE_REFERENCE.md#predict-new-rows) |
 
 <a id="thread"></a>
 <a id="what-this-beta-completes"></a>
 <a id="four-stage-quickstart"></a>
 
 ## From measurements to predictions
-
-**Prepare → Plan → Run → Score.** Keep training endpoints separate from the later outcomes used to evaluate predictions.
 
 <picture>
   <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="docs/assets/clotho-workflow-en-dark-mobile.svg">
@@ -93,270 +86,146 @@ Required dependencies are `numpy>=1.24,<3`, `pandas>=2,<3`, `scikit-learn>=1.4,<
   <img src="docs/assets/clotho-workflow-en-light.svg" width="100%" alt="Prepare device features and training targets, inspect the plan, fit and predict, then score later outcomes without refitting.">
 </picture>
 
-| Your input | Supported route |
+| Supported input | Start here |
 | --- | --- |
-| RRAM I–V measurements | Resistance features at a fixed declared condition, one row per device. [RRAM example](examples/measurement-regression/README.md) |
-| Canonical FET transfer curves | One declared acquisition per `(lot, wafer, device)`, with criterion VGS and windowed log slope. [FET example](examples/fet-device-regression/README.md) |
-| Your own measurement files | `clotho init` creates blank CSV headers, an unfinished configuration and a checklist. [Input setup](docs/WORKFLOW_INIT.md) |
+| RRAM I–V measurements | Summarize resistance at a fixed condition, one row per device. [Complete RRAM example](examples/measurement-regression/README.md) |
+| FET transfer curves in the canonical schema | Extract criterion VGS and windowed log-current slope from one declared acquisition per lot, wafer and device. [Complete FET example](examples/fet-device-regression/README.md) |
 
 ```bash
 clotho init --workflow rram --out my-measurements
-# For FET inputs, use --workflow fet.
 ```
 
-`init` does not create sample measurements, guess units or fit models. Fill in the files and declarations before running `prepare`.
+Use `--workflow fet` for the FET template. `init` writes headers, configuration and a checklist, without inventing measurements or inferring units. Fill in those files, then use `prepare`, `plan` and `run`. Only `score` takes the prediction cohort's later outcomes; it joins saved predictions and does not refit. [Input setup](docs/WORKFLOW_INIT.md) · [Measurement protocol](docs/INTEGRATED_MEASUREMENT_WORKFLOW.md)
 
-<details>
-<summary>Run the complete RRAM example</summary>
+<a id="native-rust"></a>
 
-From the tagged checkout or matching source archive, with fresh output directories:
+## Native Rust on `main`
+
+Start in a separate **current-source checkout** of `main`, not the frozen b7 tag. Rust 1.70+ is required. The first Cargo fetch needs dependency access; the locked build and examples can run offline.
 
 ```bash
-clotho prepare \
-  --input-dir examples/measurement-regression/fixtures/raw \
-  --partitions examples/measurement-regression/fixtures/partitions.csv \
-  --training-targets examples/measurement-regression/fixtures/training_targets.csv \
-  --config examples/measurement-regression/fixtures/config.json \
-  --output-dir clotho-prepared
-
-clotho plan --prepared clotho-prepared
-clotho run --prepared clotho-prepared --output-dir clotho-run
-
-# Only scoring accepts the prediction cohort's later outcomes.
-clotho score --run-dir clotho-run \
-  --outcomes examples/measurement-regression/fixtures/later_outcomes.csv \
-  --output-dir clotho-evaluation
+git clone --branch main https://github.com/xinhi6716/axiom-clotho.git clotho-native
+cd clotho-native
+cargo fetch --manifest-path rust/Cargo.toml --locked
+cargo build --manifest-path rust/Cargo.toml --release --locked --offline
+rust/target/release/clotho evaluate \
+  --csv rust/clotho-cli/examples/synthetic_process.csv --target synthetic_response \
+  --features anneal_temperature_c,film_thickness_nm \
+  --group wafer --folds 4 --model ridge --alpha 1 --out native-ridge
 ```
 
-The invented fixture has **18 devices: 12 training and 6 prediction**, with disjoint declared batches. `plan` reports **40 planned fits** without training. `run` fits the models and saves predictions; `score` evaluates all six later outcomes with **no additional fits**. These counts check the workflow, not real-device accuracy. [Inputs, outputs and expected results](examples/measurement-regression/README.md).
+Run the binary by path to distinguish it from the Python command with the same name. On Windows, the executable is `clotho.exe`. The CSV is a synthetic arithmetic example.
 
-</details>
+| Available on `main` | Details |
+| --- | --- |
+| `fit`, `predict`, `evaluate` | Mean, Ridge and kNN regression; documented binary and mixed-feature paths. [Native guide](docs/RUST_NATIVE_WORKFLOW.md) · [kNN target arithmetic](docs/RUST_KNN_BASELINE.md) · [Binary and mixed data](docs/RUST_BINARY_AND_MIXED.md) |
+| Bounded nested regression | Tune on inner group folds; reserve outer groups for scoring. [Nested selection](docs/RUST_NESTED_SELECTION.md) |
+| `extract-fet`, `extract-rram`, `prepare-measurements` | Native extraction and preparation use their own documented file schemas. [FET](docs/RUST_FET_EXTRACTION.md) · [RRAM](docs/RUST_RRAM_EXTRACTION.md) · [Preparation](docs/RUST_MEASUREMENT_PREPARATION.md) |
+| `compare-saved` | Recompute RMSE and baseline-relative MSE skill from three aligned series without fitting. A zero-error baseline leaves skill undefined. [Saved-series contract](docs/RUST_BASELINE_SKILL.md#fit-free-declared-series-cli) |
 
-<a id="tabular-start"></a>
-<a id="bring-your-data"></a>
-<a id="plan-first-then-fit"></a>
-
-## Start from your own table
-
-Choose a numeric target, a group column such as batch or wafer, and an explicit list of predictors available before the outcome. Numeric and categorical features are supported, including missing feature values.
-
-```bash
-mlcalc plan run measurements.csv \
-  --target mobility --group wafer_batch \
-  --features temperature_c,pressure_mpa,duration_min,material_family
-
-mlcalc run measurements.csv \
-  --target mobility --group wafer_batch \
-  --features temperature_c,pressure_mpa,duration_min,material_family \
-  --out runs/mobility
-```
-
-The plan checks inputs and reports the proposed splits, candidates and fit count without training. Regression compares **Dummy mean, Ridge and Extra Trees**, with preprocessing and model selection inside training partitions.
-
-Use `--features` or `--features-file` to exclude IDs, notes and post-outcome measurements. Without an allowlist, every column other than the target and group becomes a predictor. Supply comma-separated UTF-8 CSVs with decimal points; decimal commas are not converted automatically.
-
-<a id="predict-new-rows-after-evaluation"></a>
-
-For new predictions, provide a second CSV containing exactly the selected features, without target or group columns. Prediction selects and refits models on the labeled training data; it does not produce a new test score. [Prediction guide](docs/USAGE_REFERENCE.md#predict-new-rows).
-
-For 0/1 outcomes, explicitly choose `mlcalc binary`; the default command remains regression. The binary route compares Dummy, Logistic and Extra Trees with a fixed 0.5 decision threshold. [Binary workflow](docs/BINARY_PROTOCOL.md) · [All examples](examples/README.md) · [Python API](docs/USAGE_REFERENCE.md#python-api).
+Default native saved model specifications include selected training rows. Keep them private. The [opt-in Mean summary](docs/RUST_NATIVE_WORKFLOW.md#opt-in-mean-inference-summary) stores summary statistics instead. Python run bundles are not native Rust artifacts; consult the [migration inventory](docs/RUST_MIGRATION_STATUS.md) for exact coverage. Separate release environments are recommended; see the [beta migration notes](docs/CLOTHO_BETA_MIGRATION.md).
 
 <a id="evidence"></a>
 <a id="read-the-results"></a>
 
-## Read the results
+## Read and verify outputs
 
-| Open | What you get |
+| Run | Look for |
 | --- | --- |
-| `report.html` | Model comparisons, group-level errors and links to saved results. |
-| Measurement run: `prediction_rows.csv` | Device-keyed predictions, before later outcomes are supplied. |
-| Measurement score: `report.html` | A separate evaluation of saved predictions against later observations. |
-| Tabular run: `summary.json`, `predictions.csv` | Metrics, observed values, predictions and fold assignments. |
+| Python tabular | `report.html`, `summary.json`, `predictions.csv`. The HTML has English / 繁體中文 controls. |
+| Python measurements | `prediction_rows.csv` for device-keyed predictions. The separate score step produces a report against later observations. |
+| Native grouped evaluation | `predictions.csv`, `metrics.json`, and the final `COMPLETE` marker. Treat an output directory without the marker as incomplete. |
 
-Tabular reports offer **English / 繁體中文** controls; measurement summary pages are English in this beta. Language changes do not alter saved numbers. Review IDs, targets and predictions before sharing reports or committing run folders.
-
-See the [report guide](docs/USAGE_REFERENCE.md#outputs) for manifests, checksums and verification. `mlcalc verify` checks saved file bytes without fitting, but requires POSIX no-follow file access; a passing checksum does not establish scientific validity or authenticity.
-
-The experimental Rust CLI on `main` also offers [`compare-saved`](docs/RUST_BASELINE_SKILL.md#fit-free-declared-series-cli)
-for three aligned regression series: observed values, model predictions and
-baseline predictions. It reports both RMSEs and baseline-relative MSE skill
-(undefined for a zero-error baseline) without loading or fitting a model. [Optional v2 query binding](docs/RUST_BASELINE_SKILL.md#opt-in-exact-query-byte-binding-v2)
-checks the query's exact bytes against the declared digest; it does not prove
-where the values came from, that the row IDs identify real samples, or that
-the series are independent. Use the native JSON contract, not the Python run
-files in the table above. The native CLI is separate from the frozen Python b7 wheel.
+[Saved outputs and offline verification](docs/USAGE_REFERENCE.md#outputs): `mlcalc verify` checks artifact bytes on platforms with POSIX no-follow access. Checksums, [query-byte binding](docs/RUST_BASELINE_SKILL.md#opt-in-exact-query-byte-binding-v2) and declared IDs can make an analysis easier to reproduce; they do not establish physical independence or provenance. Reports can contain targets, predictions and IDs; inspect before sharing.
 
 <a id="limits"></a>
 <a id="know-the-boundaries"></a>
 <a id="horizon"></a>
 
-## Know the limits
+<a id="know-the-limits"></a>
 
-- **Groups are your declaration.** Holding batch labels apart does not reveal hidden dependencies or establish transfer to a new domain.
-- **Measurement support is specific.** RRAM and FET routes use their documented schemas and features; they are not general instrument-file importers. Measurement workflows currently support regression only.
-- **Predictions need independent evaluation.** Clotho does not provide causal identification, calibrated uncertainty, physical-unit validation or guaranteed extrapolation. Invented examples are teaching data.
-- **Numeric precision is not fully audited.** Before converting numeric feature columns to float64, Clotho rejects integer values that cannot be represented exactly. It also rejects floating dtypes wider than float64 where the underlying dtype is inspectable, including NumPy and pandas nullable or sparse dtypes; other extension dtypes keep their existing conversion behavior. Ordinary and nullable float64-or-narrower columns remain supported. This input check cannot recover precision lost during earlier parsing or conversion. For example, CSV parsing may infer a float column when integers are mixed with missing values, losing integer distinctions before this check runs. Object-typed columns remain categorical. Float64 input does not promise float64 computation throughout a model: [ExtraTrees uses float32 features internally](https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.ExtraTreesRegressor.html#sklearn.ensemble.ExtraTreesRegressor.fit) after preprocessing. Consistent saved metrics do not certify input precision or measurement resolution. Check the source resolution and intended feature representation before fitting; scaling cannot restore distinctions already lost. The regression HTML report discloses this limitation without detecting or repairing collisions.
-- **Inputs and compute are bounded differently.** File, row and feature limits reject unsupported inputs; they are not hard memory or runtime quotas. [Input and resource limits](docs/USAGE_REFERENCE.md#limits-to-understand-before-trusting-a-result).
+## Scope and limits
 
-Current source additionally offers explicit `nystroem_ridge`, `group_median` and `group_balanced_ridge` regression comparators with fold-local fitting and recorded fit details; defaults stay unchanged. Group-balanced Ridge weights only the final squared-loss estimator, not preprocessing, and makes no group-MAE improvement guarantee. These additions are not in frozen b7 downloads. [Optional families, budgets and reader compatibility](docs/OPTIONAL_REGRESSION_FAMILIES.md).
+- Choose groups from the study design. Distinct names alone do not guarantee independent wafers, chips or sources. Compare row-weighted and group-weighted errors when group sizes differ.
+- Measurement routes support specified schemas and regression. Clotho does not infer physical units, establish causality, or guarantee performance on new devices. Example data are synthetic.
+- Representation and size limits differ across the Python and native paths. Check source precision before fitting, and see [numeric and resource limits](docs/USAGE_REFERENCE.md#limits-to-understand-before-trusting-a-result) and [native input limits](docs/RUST_NATIVE_WORKFLOW.md#data-contract).
 
-The experimental Rust workspace includes both a [source-feature support diagnostic](docs/RUST_CORE.md)
-with exact Python parity checks and separate [native fitting and evaluation
-commands](docs/RUST_NATIVE_WORKFLOW.md). Neither replaces the default Python workflow. A Rust
-compiler is not required for ordinary Python Clotho use.
-[Optional numeric diagnostic setup](docs/RUST_NATIVE_NUMERIC_SUPPORT.md).
+<a id="find-your-next-step"></a>
 
-Version b7 refreshes the Clotho artwork, report presentation and documentation. It retains the b6 check that rejects nonfinite fitted regression ExtraTrees state; workflows, models, splits and metrics are unchanged. [Release notes](docs/RELEASE_NOTES_0.3.0b7.md). Broader domain modules remain on the [roadmap](ROADMAP.md).
+## Reference
 
-## Find your next step
+- [Examples](examples/README.md) · [Python reference](docs/USAGE_REFERENCE.md) · [Evaluation protocol](docs/PROTOCOL.md) · [Python API](docs/USAGE_REFERENCE.md#python-api)
+- Current-source examples: [optional grouped models](examples/optional_grouped_study_v1/README.md), [domain-inner evaluation](examples/domain-inner-tabular/README.md), [forward-window planner](docs/GROUP_FORWARD_WINDOW_PLAN.md), [fixed forward baselines](docs/GROUP_FORWARD_BASELINE_EVALUATION.md), [saved intervals](docs/SAVED_INTERVAL_EVALUATION.md), [RRAM write-pair intake audit](docs/RRAM_WRITE_PAIR_AUDIT.md), [joint dependency groups](examples/joint-dependency-tabular/README.md).
+- [Releases](https://github.com/xinhi6716/axiom-clotho/releases) · [Roadmap](ROADMAP.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [References](docs/REFERENCES.md)
 
-[Joint job-or-setting grouping example](examples/joint-dependency-tabular/README.md): validate a supplied component map and exact specimen roster without fitting.
-
-
-[Examples](examples/README.md) · [Measurement inputs](docs/CLOTHO_CSV_BETA.md) · [Evaluation protocol](docs/PROTOCOL.md) · [Full reference](docs/USAGE_REFERENCE.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
-
-<details>
-<summary>Older releases and section links</summary>
-
-For rollback, use the matching release guide in a separate environment. Historical tags and downloads stay unchanged: [b6](docs/RELEASE_NOTES_0.3.0b6.md), [b5](docs/RELEASE_NOTES_0.3.0b5.md), [b4](docs/RELEASE_NOTES_0.3.0b4.md), [b3](docs/RELEASE_NOTES_0.3.0b3.md), [b2](docs/RELEASE_NOTES_0.3.0b2.md), [b1](docs/RELEASE_NOTES_0.3.0b1.md), [a4](https://github.com/xinhi6716/axiom-clotho/releases/tag/v0.2.0a4). New installations should use b7; b1 has a known inventory-path issue.
-
-<a id="run-the-demo"></a>
-
-- [Run the demo](docs/USAGE_REFERENCE.md#run-the-demo)
-
-<a id="distinguish-missing-values-from-literal-marker-strings"></a>
-
-- [Distinguish missing values from literal marker strings](docs/USAGE_REFERENCE.md#distinguish-missing-values-from-literal-marker-strings)
-
-<a id="source-companion-fixed-environment-feature-comparison"></a>
-
-- [Source companion: fixed environment feature comparison](docs/USAGE_REFERENCE.md#source-companion-fixed-environment-feature-comparison)
-
-<a id="runnable-semiconductor-integration"></a>
-
-- [Runnable semiconductor integration](docs/USAGE_REFERENCE.md#runnable-semiconductor-integration)
-
-<a id="simulation-only-causal-design-rehearsal"></a>
-
-- [Simulation-only causal-design rehearsal](docs/USAGE_REFERENCE.md#simulation-only-causal-design-rehearsal)
-
-<a id="explicit-binary-passfail-workflow-unreleased"></a>
-
-- [Explicit binary pass/fail workflow (prerelease)](docs/USAGE_REFERENCE.md#explicit-binary-passfail-workflow-unreleased)
-
-<a id="use-your-own-regression-data"></a>
-
-- [Use your own regression data](docs/USAGE_REFERENCE.md#use-your-own-regression-data)
-
-<a id="preview-the-work-before-fitting"></a>
-
-- [Preview the work before fitting](docs/USAGE_REFERENCE.md#preview-the-work-before-fitting)
-
-<a id="predict-new-rows"></a>
-
-- [Predict new rows](docs/USAGE_REFERENCE.md#predict-new-rows)
-
-<a id="check-whether-new-inputs-were-observed-in-training"></a>
-
-- [Check whether new inputs were observed in training](docs/USAGE_REFERENCE.md#check-whether-new-inputs-were-observed-in-training)
-
-<a id="reuse-a-declared-feature-schema"></a>
-
-- [Reuse a declared feature schema](docs/USAGE_REFERENCE.md#reuse-a-declared-feature-schema)
-
-<a id="python-api"></a>
-
-- [Python API](docs/USAGE_REFERENCE.md#python-api)
-
-<a id="how-the-evaluation-is-split-and-scored"></a>
-
-- [How the evaluation is split and scored](docs/USAGE_REFERENCE.md#how-the-evaluation-is-split-and-scored)
-
-<a id="baselines-and-resource-budget"></a>
-
-- [Baselines and resource budget](docs/USAGE_REFERENCE.md#baselines-and-resource-budget)
-
-<a id="outputs"></a>
-
-- [Outputs](docs/USAGE_REFERENCE.md#outputs)
-
-<a id="verify-an-existing-bundle-offline"></a>
-
-- [Verify an existing bundle offline](docs/USAGE_REFERENCE.md#verify-an-existing-bundle-offline)
-
-<a id="limits-to-understand-before-trusting-a-result"></a>
-
-- [Limits to understand before trusting a result](docs/USAGE_REFERENCE.md#limits-to-understand-before-trusting-a-result)
-
-<a id="design-inspiration-not-copied-modeling"></a>
-
-- [Design inspiration, not copied modeling](docs/USAGE_REFERENCE.md#design-inspiration-not-copied-modeling)
-
-<a id="develop"></a>
-
-- [Develop](docs/USAGE_REFERENCE.md#develop)
-
-<a id="compare-saved-validation-budgets-locally"></a>
-
-- [Compare saved validation budgets locally](docs/USAGE_REFERENCE.md#compare-saved-validation-budgets-locally)
-
-<a id="optional-saved-prediction-consistency"></a>
-
-- [Optional saved prediction consistency](docs/USAGE_REFERENCE.md#optional-saved-prediction-consistency)
-
-</details>
-
-Original code and synthetic generators: [MIT](LICENSE). Dependencies retain their own licenses. [References](docs/REFERENCES.md) · [Artwork and font notices](docs/assets/CLOTHO_EDITORIAL_NOTICES.md).
+Source and synthetic generators: [MIT](LICENSE). Dependencies keep their own licenses. [Artwork notices](docs/assets/CLOTHO_EDITORIAL_NOTICES.md).
 
 Part of **Moirai** · [Axiom](https://github.com/xinhi6716) · [Chronos](https://github.com/xinhi6716/axiom-chronos) · [Atropos](https://github.com/xinhi6716/axiom-atropos)
 
+<details>
+<summary>Earlier section links</summary>
 
-### Opt-in tabular domain-inner selection
+<a id="run-the-demo"></a>
+- [Run the demo](docs/USAGE_REFERENCE.md#run-the-demo)
 
-For training data with declared domains, tabular regression `run`, `predict` and
-both `plan` routes now accept `--domain COLUMN --inner-strategy leave_one_domain_out`.
-Omit `--inner-splits` for this strategy; folds come from training domains. Queries
-need predictors only. Defaults are unchanged, and outer evaluation still holds
-out groups, not necessarily domains. See the [invented CLI example](examples/domain-inner-tabular/README.md)
-for commands, validation, privacy and limitations. This does not extend measurement
-or FET configuration schemas.
+<a id="distinguish-missing-values-from-literal-marker-strings"></a>
+- [Distinguish missing values from literal marker strings](docs/USAGE_REFERENCE.md#distinguish-missing-values-from-literal-marker-strings)
 
-### Metadata-only whole-group time windows
+<a id="source-companion-fixed-environment-feature-comparison"></a>
+- [Source companion: fixed environment feature comparison](docs/USAGE_REFERENCE.md#source-companion-fixed-environment-feature-comparison)
 
-Current source provides a standalone no-fit Python planner and strict JSON CLI
-for predeclared forward windows, with whole-group train/test/unused memberships
-and partial test coverage. Print the tiny invented metadata plan to stdout:
+<a id="runnable-semiconductor-integration"></a>
+- [Runnable semiconductor integration](docs/USAGE_REFERENCE.md#runnable-semiconductor-integration)
 
-```bash
-mlcalc plan-group-forward-windows examples/group_forward_window_metadata.json
-```
+<a id="simulation-only-causal-design-rehearsal"></a>
+- [Simulation-only causal-design rehearsal](docs/USAGE_REFERENCE.md#simulation-only-causal-design-rehearsal)
 
-The `groupbench` alias and `clotho tabular plan-group-forward-windows` expose the
-same command. There is no output-file option, fitting or scoring. Timing
-declarations do not prove causality or enforce downstream feature exclusion or
-preprocessing. Output retains supplied identities and timing metadata; review it
-before sharing. This is not a temporal-ML benchmark or part of the frozen b7
-download. See the [strict contract, resource limits and Python API](docs/GROUP_FORWARD_WINDOW_PLAN.md).
+<a id="explicit-binary-passfail-workflow-unreleased"></a>
+- [Explicit binary pass/fail workflow (prerelease)](docs/USAGE_REFERENCE.md#explicit-binary-passfail-workflow-unreleased)
 
-### Fixed temporal baseline evaluation (Python only)
+<a id="use-your-own-regression-data"></a>
+- [Use your own regression data](docs/USAGE_REFERENCE.md#use-your-own-regression-data)
 
-The separate [whole-group temporal evaluator](docs/GROUP_FORWARD_BASELINE_EVALUATION.md)
-previews and runs two fixed regression recipes on a predeclared typed plan. It
-uses train-only preprocessing and reports tested and untested coverage without
-selection, full-data refits, CLI integration, or saved bundles. A matching
-execution binding and finite observed targets for every row are required.
+<a id="preview-the-work-before-fitting"></a>
+- [Preview the work before fitting](docs/USAGE_REFERENCE.md#preview-the-work-before-fitting)
 
-Fixed synthetic comparison: [optional grouped models](examples/optional_grouped_study_v1/README.md), including all negative extrapolation results and the resource-monitoring qualification.
+<a id="predict-new-rows"></a>
+- [Predict new rows](docs/USAGE_REFERENCE.md#predict-new-rows)
 
-Native Rust now also offers an explicit SI/binary64 `extract-fet` command for
-constant-current and log-current-slope features. See
-[the FET contract and synthetic example](docs/RUST_FET_EXTRACTION.md).
-This is measurement extraction, not demonstrated real-device predictive
-performance or full legacy FET workflow parity.
+<a id="check-whether-new-inputs-were-observed-in-training"></a>
+- [Check whether new inputs were observed in training](docs/USAGE_REFERENCE.md#check-whether-new-inputs-were-observed-in-training)
 
-Native `extract-rram` now provides paired HRS/LRS resistance summaries; native
-`prepare-measurements` joins extracted device features to exact training-only
-endpoints and disjoint physical partitions. See
-[RRAM extraction](docs/RUST_RRAM_EXTRACTION.md) and
-[measurement preparation](docs/RUST_MEASUREMENT_PREPARATION.md). These native
-schemas do not claim full legacy workflow compatibility.
+<a id="reuse-a-declared-feature-schema"></a>
+- [Reuse a declared feature schema](docs/USAGE_REFERENCE.md#reuse-a-declared-feature-schema)
+
+<a id="python-api"></a>
+- [Python API](docs/USAGE_REFERENCE.md#python-api)
+
+<a id="how-the-evaluation-is-split-and-scored"></a>
+- [How the evaluation is split and scored](docs/USAGE_REFERENCE.md#how-the-evaluation-is-split-and-scored)
+
+<a id="baselines-and-resource-budget"></a>
+- [Baselines and resource budget](docs/USAGE_REFERENCE.md#baselines-and-resource-budget)
+
+<a id="outputs"></a>
+- [Outputs](docs/USAGE_REFERENCE.md#outputs)
+
+<a id="verify-an-existing-bundle-offline"></a>
+- [Verify an existing bundle offline](docs/USAGE_REFERENCE.md#verify-an-existing-bundle-offline)
+
+<a id="limits-to-understand-before-trusting-a-result"></a>
+- [Limits to understand before trusting a result](docs/USAGE_REFERENCE.md#limits-to-understand-before-trusting-a-result)
+
+<a id="design-inspiration-not-copied-modeling"></a>
+- [Design inspiration, not copied modeling](docs/USAGE_REFERENCE.md#design-inspiration-not-copied-modeling)
+
+<a id="develop"></a>
+- [Develop](docs/USAGE_REFERENCE.md#develop)
+
+<a id="compare-saved-validation-budgets-locally"></a>
+- [Compare saved validation budgets locally](docs/USAGE_REFERENCE.md#compare-saved-validation-budgets-locally)
+
+<a id="optional-saved-prediction-consistency"></a>
+- [Optional saved prediction consistency](docs/USAGE_REFERENCE.md#optional-saved-prediction-consistency)
+
+</details>
