@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from numbers import Integral
 
 import numpy as np
 import pandas as pd
 
-from .data import validate_groups, validate_seed
+from .data import MAX_ROWS, validate_groups, validate_seed
 
 
 class GroupKFold:
@@ -96,4 +97,109 @@ def audit_split(train: np.ndarray, test: np.ndarray, groups: np.ndarray) -> dict
         "train_group_count": len(train_groups), "test_group_count": len(test_groups),
         "overlap_count": len(overlap),
         "train_groups": sorted(train_groups), "test_groups": sorted(test_groups),
+    }
+
+
+@dataclass(frozen=True, slots=True)
+class DeviceAlias:
+    """A row's declared device label in its original source namespace."""
+
+    source: str
+    alias: str | int
+
+
+@dataclass(frozen=True, slots=True)
+class PhysicalDevice:
+    """A device identity within one declared canonical identity namespace."""
+
+    namespace: str
+    device: str | int
+
+
+@dataclass(frozen=True, slots=True)
+class DeviceAliasBinding:
+    """Resolve one source alias to its declared physical device."""
+
+    alias: DeviceAlias
+    physical: PhysicalDevice
+
+
+def _device_text(value):
+    return type(value) is str and 0 < len(value) <= 256 and value == value.strip()
+
+
+def _device_identifier(value):
+    return _device_text(value) or (type(value) is int and -(2**63) <= value < 2**63)
+
+
+def _check_device_alias(value):
+    if (type(value) is not DeviceAlias or not _device_text(value.source)
+            or not _device_identifier(value.alias)):
+        raise ValueError("Device aliases require an exact scoped label.")
+
+
+def _check_physical_device(value):
+    if (type(value) is not PhysicalDevice or not _device_text(value.namespace)
+            or not _device_identifier(value.device)):
+        raise ValueError("Physical devices require an exact scoped label.")
+
+
+def _device_partition(indices, size, name):
+    # Bound work before NumPy creates a positional array. Preserve the existing
+    # splitter's output arrays and forward-plan membership tuples.
+    if (type(indices) not in (list, tuple, np.ndarray)
+            or (type(indices) is np.ndarray and indices.ndim != 1)):
+        raise ValueError(f"Invalid split: {name} requires one-dimensional integer row positions.")
+    if len(indices) > size:
+        raise ValueError(f"Invalid split: {name} exceeds the row roster size.")
+    return _audit_positions(indices, size, name)
+
+
+def audit_physical_device_split(train, test, row_aliases, *, bindings) -> dict[str, int]:
+    """Reject alias-mediated device overlap in one declared positional split.
+
+    Supply a metadata-only roster in table order and one binding per distinct
+    alias across the entire roster. Many source aliases can map to one physical
+    device. Only train vs test are compared; unused positions do not count.
+    Namespaces are nonblank unpadded built-in strings, and IDs are such strings
+    or signed-64-bit built-in integers (1 and "1" differ). No data access, fit,
+    device identity verification or wafer-level inference is performed.
+    """
+    if type(row_aliases) not in (list, tuple) or not 1 <= len(row_aliases) <= MAX_ROWS:
+        raise ValueError(f"Device roster requires an explicit list or tuple of 1 to {MAX_ROWS} rows.")
+    row_aliases = tuple(row_aliases)
+    train, train_roster = _device_partition(train, len(row_aliases), "training")
+    test, test_roster = _device_partition(test, len(row_aliases), "validation")
+    if train_roster & test_roster:
+        raise ValueError("Invalid split: training and validation row positions overlap.")
+
+    for alias in row_aliases:
+        _check_device_alias(alias)
+    aliases = set(row_aliases)
+    if type(bindings) not in (list, tuple) or not 1 <= len(bindings) <= MAX_ROWS:
+        raise ValueError(f"Device bindings require an explicit list or tuple of 1 to {MAX_ROWS} records.")
+    by_alias = {}
+    for binding in tuple(bindings):
+        if type(binding) is not DeviceAliasBinding:
+            raise ValueError("Device bindings require DeviceAliasBinding records.")
+        _check_device_alias(binding.alias)
+        _check_physical_device(binding.physical)
+        if binding.alias in by_alias:
+            raise ValueError("Device bindings repeat a source alias.")
+        by_alias[binding.alias] = binding.physical
+    if by_alias.keys() != aliases:
+        raise ValueError("Device bindings must cover every roster alias exactly, with no extras.")
+
+    train_aliases, test_aliases = ({row_aliases[i] for i in positions} for positions in (train, test))
+    train_devices = {by_alias[alias] for alias in train_aliases}
+    test_devices = {by_alias[alias] for alias in test_aliases}
+    overlap = len(train_devices & test_devices)
+    if overlap:
+        raise ValueError(f"Invalid split: {overlap} declared physical device(s) overlap training and validation.")
+    return {
+        "train_rows": len(train), "test_rows": len(test),
+        "train_alias_count": len(train_aliases), "test_alias_count": len(test_aliases),
+        "train_physical_device_count": len(train_devices), "test_physical_device_count": len(test_devices),
+        "unused_rows": len(row_aliases) - len(train) - len(test),
+        "physical_device_overlap_count": overlap,
     }
