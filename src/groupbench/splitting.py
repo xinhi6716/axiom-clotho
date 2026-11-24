@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from numbers import Integral
+import unicodedata
 
 import numpy as np
 import pandas as pd
@@ -203,3 +204,44 @@ def audit_physical_device_split(train, test, row_aliases, *, bindings) -> dict[s
         "unused_rows": len(row_aliases) - len(train) - len(test),
         "physical_device_overlap_count": overlap,
     }
+
+
+@dataclass(frozen=True)
+class CrossedHoldout:
+    fit: tuple[str, ...]
+    new_recipe: tuple[str, ...]
+    new_device: tuple[str, ...]
+    both: tuple[str, ...]
+
+
+def _crossed_key(x):
+    return (type(x) is str and 0 < len(x) <= 256 and x == x.strip()
+            and not any(unicodedata.category(c) in ("Cc", "Cs") for c in x))
+
+
+def plan_crossed_holdout(rows, held_device, held_recipe):
+    """Partition (row_id, device_id, recipe_id) triples without outcomes.
+
+    The input is a bounded list or tuple of triples; IDs are opaque and scoped
+    by their role. Preserve input order within each quadrant. A nonempty
+    quadrant does not authenticate physical identity, support or independence.
+    Neither held device nor held recipe occurs in the fit quadrant.
+    """
+    if type(rows) not in (list, tuple) or not 1 <= len(rows) <= MAX_ROWS:
+        raise ValueError("Rows must be a nonempty bounded roster.")
+    if not _crossed_key(held_device) or not _crossed_key(held_recipe):
+        raise ValueError("Held identities must be valid text.")
+    quadrants = ([], [], [], [])
+    row_ids = set()
+    for row in rows:
+        if type(row) not in (list, tuple) or len(row) != 3 or not all(map(_crossed_key, row)):
+            raise ValueError("Rows must contain three valid identity fields.")
+        row_id, device, recipe = row
+        if row_id in row_ids:
+            raise ValueError("Declared row identities must be unique.")
+        row_ids.add(row_id)
+        index = 2 * (device == held_device) + (recipe == held_recipe)
+        quadrants[index].append(row_id)
+    if not all(quadrants):
+        raise ValueError("Each crossed quadrant must be nonempty; check held identities and support.")
+    return CrossedHoldout(*(tuple(ids) for ids in quadrants))
