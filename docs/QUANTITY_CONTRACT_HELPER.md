@@ -83,3 +83,13 @@ clipped, filled, dropped or automatically rescaled to evade an error.
 Tests use invented values only, with no model fit or external data. Future
 workflow integration must explicitly thread declarations through planning,
 training, querying and artifact versioning; this helper alone is not that work.
+
+For a declared pair entering the same binary64 comparison,
+`normalize_comparable_pair_to_float64(expected, expected_tokens, supplied,
+supplied_tokens)` checks matching measurement meaning first, normalizes both
+batches to one canonical unit, and rejects distinct decimal values that would
+collapse to the same float across either batch. It returns the canonical
+declaration and one float tuple per batch, in the original order. The 20,000
+value limit applies across both batches together. This is an explicit optional
+boundary, not an automatic ML ingestion step or evidence of physical
+comparability.

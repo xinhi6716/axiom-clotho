@@ -131,3 +131,23 @@ def decimal_to_float64(values):
         seen[result] = value
         output.append(result)
     return tuple(output)
+
+
+def normalize_comparable_pair_to_float64(expected, expected_tokens, supplied, supplied_tokens):
+    """Normalize a declared pair and guard the shared binary64 boundary.
+
+    Both batches must be nonempty and together contain at most MAX_VALUES
+    entries. Validate matching measurement meaning before parsing either
+    batch. Reject collisions across as well as within batches. Return the
+    canonical declaration and two immutable tuples in input order.
+    """
+    canonical = compare_declarations(expected, supplied, mode="normalize")
+    _values(expected_tokens)
+    _values(supplied_tokens)
+    n = len(expected_tokens)
+    if n + len(supplied_tokens) > MAX_VALUES:
+        raise ValueError("Combined values exceed the float64 comparison limit.")
+    a = normalize_decimal_tokens(expected_tokens, expected)
+    b = normalize_decimal_tokens(supplied_tokens, supplied)
+    converted = decimal_to_float64(a + b)
+    return canonical, converted[:n], converted[n:]

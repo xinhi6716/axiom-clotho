@@ -3,7 +3,8 @@ from dataclasses import replace
 from decimal import Decimal, localcontext
 import unittest
 from groupbench.quantity_contract import (QuantityDeclaration as Q,
-    compare_declarations, normalize_decimal_tokens, decimal_to_float64)
+    compare_declarations, normalize_decimal_tokens, decimal_to_float64,
+    normalize_comparable_pair_to_float64)
 
 
 def declaration(unit="A", dimension="electric_current"):
@@ -95,6 +96,21 @@ class QuantityContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "collapse"): decimal_to_float64(values)
         self.assertEqual(values, before)
         self.assertEqual(decimal_to_float64([Decimal("0.1"), Decimal("0.10")]), (0.1, 0.1))
+
+    def test_paired_boundary_rejects_cross_batch_collision_after_unit_conversion(self):
+        left, right = declaration(), declaration("nA")
+        a, b = ["0.1000000000000000001"], ["100000000.0000000002"]
+        self.assertEqual(decimal_to_float64(normalize_decimal_tokens(a, left)), (0.1,))
+        self.assertEqual(decimal_to_float64(normalize_decimal_tokens(b, right)), (0.1,))
+        with self.assertRaisesRegex(ValueError, "collapse"):
+            normalize_comparable_pair_to_float64(left, a, right, b)
+        self.assertEqual(normalize_comparable_pair_to_float64(left, ["1e-9", "-0"], right, ["1"]),
+                         (left, (1e-9, -0.0), (1e-9,)))
+        incompatible = replace(right, condition_id="different")
+        with self.assertRaisesRegex(ValueError, "declarations differ"):
+            normalize_comparable_pair_to_float64(left, [None], incompatible, [None])
+        with self.assertRaisesRegex(ValueError, "Combined values"):
+            normalize_comparable_pair_to_float64(left, ["0"]*10000, right, ["0"]*10001)
 
     def test_stateless_and_no_default_provenance(self):
         q = declaration("nA")
