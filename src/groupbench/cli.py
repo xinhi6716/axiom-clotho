@@ -448,6 +448,9 @@ The groupbench command is an alias for the same CLI.""",
         source_hash = None
         if args.command in ("demo", "run", "predict"):
             _check_output_directory(args.out)
+            if args.overwrite:
+                from .report import check_overwrite_artifact_paths
+                check_overwrite_artifact_paths(args.out, OUTPUT_NAMES)
         if args.command == "predict":
             ensure_prediction_output(args.out)
         if args.command in ("run", "predict"):

@@ -7,6 +7,7 @@ import html
 import json
 import os
 from pathlib import Path
+import stat
 import tempfile
 
 from .package_source import package_source_display
@@ -165,6 +166,21 @@ def write_report(result, output_dir, *, overwrite: bool = False) -> Path:
     return Path(output_dir) / "report.html"
 
 
+def check_overwrite_artifact_paths(output_dir, names):
+    """Reject already-present directories before replacing any payloads."""
+    out = Path(output_dir)
+    for name in names:
+        path = out / name
+        try:
+            mode = path.lstat().st_mode
+        except FileNotFoundError:
+            continue
+        # File symlinks may be replaced as directory entries without touching
+        # their targets. lstat distinguishes those from actual directories.
+        if stat.S_ISDIR(mode):
+            raise IsADirectoryError(f"Cannot overwrite report artifact {path}: it is a directory.")
+
+
 def write_payloads(payloads: dict[str, str], output_dir, *, overwrite: bool = False):
     """Write a same-directory staged bundle with atomic per-file no-clobber."""
     if not payloads:
@@ -177,7 +193,9 @@ def write_payloads(payloads: dict[str, str], output_dir, *, overwrite: bool = Fa
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
     names = tuple(payloads) + ("checksums.json",)
-    if not overwrite and any((out / name).exists() or (out / name).is_symlink() for name in names):
+    if overwrite:
+        check_overwrite_artifact_paths(out, names)
+    elif any((out / name).exists() or (out / name).is_symlink() for name in names):
         raise FileExistsError(f"Output files already exist in {out}; choose a new directory or pass overwrite=True.")
     payloads = dict(payloads)
     hashes = {name: hashlib.sha256(content.encode("utf-8")).hexdigest() for name, content in payloads.items()}

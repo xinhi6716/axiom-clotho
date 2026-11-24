@@ -59,6 +59,20 @@ class ArtifactByteTests(unittest.TestCase):
             write_payloads(self.payloads, self.out, overwrite=True)
         self.check_bytes(self.payloads)
 
+    def test_overwrite_rejects_directory_at_last_output_before_replacing_any_bytes(self):
+        write_payloads({'manifest.json': '{}', 'predictions.csv': 'old'}, self.out)
+        checksum = self.out / 'checksums.json'
+        checksum.unlink()
+        checksum.mkdir()
+        nested = checksum / 'keep'
+        nested.write_bytes(b'keep')
+        original = {name: (self.out / name).read_bytes() for name in self.payloads}
+        with self.assertRaisesRegex(IsADirectoryError, 'checksums.json'):
+            write_payloads(self.payloads, self.out, overwrite=True)
+        self.assertEqual({name: (self.out / name).read_bytes() for name in self.payloads}, original)
+        self.assertEqual(nested.read_bytes(), b'keep')
+        self.assertEqual({p.name for p in self.out.iterdir()}, {*self.payloads, 'checksums.json'})
+
     def test_no_clobber_preserves_original_bytes(self):
         write_payloads(self.payloads, self.out)
         before = {p.name:p.read_bytes() for p in self.out.iterdir()}

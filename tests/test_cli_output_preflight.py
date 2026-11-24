@@ -21,6 +21,34 @@ class OutputDirectoryPreflightTests(unittest.TestCase):
             self.assertEqual(existing.read_text(), "KEEP")
             self.assertEqual(list(root.iterdir()), [existing])
 
+    def test_overwrite_rejects_directory_at_checksum_filename_before_input_or_fit(self):
+        with tempfile.TemporaryDirectory() as temp:
+            out = Path(temp)
+            (out / "checksums.json").mkdir()
+            existing = out / "predictions.csv"
+            existing.write_bytes(b"KEEP")
+            for mode in ("demo", "run", "predict"):
+                with self.subTest(mode=mode):
+                    command = [mode]
+                    if mode != "demo":
+                        command.append("not-read-training.csv")
+                        if mode == "predict":
+                            command.append("not-read-prediction.csv")
+                        command += ["--target", "y", "--group", "lot"]
+                    command += ["--out", str(out), "--overwrite"]
+                    with patch("groupbench.cli.make_materials_fixture") as fixture, \
+                         patch("groupbench.cli._read_training") as read, \
+                         patch("groupbench.cli.benchmark") as benchmark, \
+                         patch("groupbench.cli.fit_predict") as predict, \
+                         redirect_stderr(io.StringIO()) as error, redirect_stdout(io.StringIO()):
+                        self.assertEqual(main(command), 2)
+                    for operation in (fixture, read, benchmark, predict):
+                        operation.assert_not_called()
+                    self.assertIn("checksums.json", error.getvalue())
+                    self.assertIn("directory", error.getvalue())
+            self.assertEqual(existing.read_bytes(), b"KEEP")
+            self.assertEqual({p.name for p in out.iterdir()}, {"checksums.json", "predictions.csv"})
+
     def assert_commands_reject(self, out):
         for mode in ("demo", "run", "predict"):
             for overwrite in (False, True):
