@@ -120,3 +120,57 @@ fn strict_mean_only_and_bound_saved_export() {
     assert_eq!(saved["values"], serde_json::json!([2.0, 2.0]));
     assert_eq!(saved["schema_version"], "clotho.declared_regression_series.v2");
 }
+
+#[test]
+fn valid_summary_documents_respect_the_exact_byte_cap() {
+    const CAP: usize = 64 * 1024;
+    let w = Workspace::new();
+    w.write("q.csv", "x\n1\n");
+    let padded = format!("{MODEL}{}", " ".repeat(CAP - MODEL.len()));
+    assert_eq!(padded.len(), CAP);
+    w.write("m.json", &padded);
+    let accepted = predict(&w);
+    assert!(accepted.status.success(), "{:?}", accepted.stderr);
+    assert_eq!(
+        fs::read_to_string(w.0.join("out.csv")).unwrap(),
+        "row_index,prediction\n0,2\n"
+    );
+    fs::remove_file(w.0.join("out.csv")).unwrap();
+
+    // Still the same valid JSON object; only the input byte limit can reject it.
+    w.write("m.json", &(padded + " "));
+    let rejected = predict(&w);
+    assert!(!rejected.status.success());
+    assert!(String::from_utf8_lossy(&rejected.stderr).contains("exceeds 64 KiB"));
+    assert!(!w.0.join("out.csv").exists());
+}
+
+#[test]
+fn numeric_underflow_guard_ignores_escaped_names_and_preserves_binary64_edges() {
+    for (mean, expected) in [
+        ("-0e-999", Some((-0.0_f64).to_bits())),
+        ("5e-324", Some(1)),
+        ("2e-324", None),
+    ] {
+        let w = Workspace::new();
+        // A quote and backslash must not terminate the JSON string early.
+        w.write(
+            "m.json",
+            &MODEL
+                .replace(r#""x""#, r#""x\"\\1e-999""#)
+                .replace("2.0", mean),
+        );
+        w.write("q.csv", "\"x\"\"\\1e-999\"\n1\n");
+        let result = predict(&w);
+        if let Some(bits) = expected {
+            assert!(result.status.success(), "mean={mean}: {:?}", result.stderr);
+            let actual = fs::read_to_string(w.0.join("out.csv")).unwrap();
+            let prediction = actual.lines().nth(1).unwrap().split(',').nth(1).unwrap();
+            assert_eq!(prediction.parse::<f64>().unwrap().to_bits(), bits);
+        } else {
+            assert!(!result.status.success(), "mean={mean}");
+            assert!(String::from_utf8_lossy(&result.stderr).contains("underflows binary64"));
+            assert!(!w.0.join("out.csv").exists());
+        }
+    }
+}
