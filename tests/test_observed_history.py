@@ -75,6 +75,37 @@ class ObservedHistoryTests(unittest.TestCase):
             bad = obs.copy(); bad['timestamp'] = times
             with self.subTest(times=times), self.assertRaises(ValueError): self.run_case(bad)
 
+    def test_opt_in_integer_ticks_preserve_exact_time_and_index_predictions(self):
+        obs, origins, pred = self.fixture()
+        base = 1700000000000000000
+        obs['timestamp'] = [base + i for i in (0, 1, 2, 3, 4, 0, 1, 2)]
+        with self.assertRaisesRegex(ValueError, 'not exactly representable'):
+            self.run_case(obs)
+        r = evaluate_observed_history(obs, origins=origins, saved_predictions=pred,
+                                      timestamp_mode='integer_ticks')
+        self.assertEqual(r.predictions.timestamp.dtype, np.dtype('int64'))
+        self.assertEqual(r.predictions.timestamp.tolist(), [base+2, base+3, base+2])
+        self.assertEqual(r.predictions.index_continuation.tolist(), [5., 7., 20.])
+        self.assertEqual(r.summary['timestamp_mode'], 'integer_ticks')
+        self.assertNotIn('timestamp_mode', self.run_case().summary)
+
+    def test_integer_ticks_reject_bad_values_and_order_without_coercion(self):
+        obs, origins, pred = self.fixture()
+        limits = [-(1<<63), -(1<<63)+1, (1<<63)-3, (1<<63)-2, (1<<63)-1, -1, 0, 1]
+        obs['timestamp'] = pd.Series(limits, dtype=object)
+        def evaluate():
+            return evaluate_observed_history(obs, origins=origins, saved_predictions=pred,
+                                             timestamp_mode='integer_ticks')
+        self.assertEqual(evaluate().predictions.timestamp.tolist(), [(1<<63)-3, (1<<63)-2, 1])
+        for bad in (False, np.bool_(True), 2.0, 1<<63, -(1<<63)-1, pd.NA):
+            with self.subTest(bad=bad), self.assertRaisesRegex(ValueError, 'signed-64-bit'):
+                obs.at[0, 'timestamp'] = bad
+                evaluate()
+        for bad in (limits[1], limits[1]+1):
+            with self.subTest(bad=bad), self.assertRaisesRegex(ValueError, 'strictly increasing'):
+                obs.at[0, 'timestamp'] = bad
+                evaluate()
+
     def test_wide_numpy_floats_rejected_before_scoring(self):
         if np.dtype(np.longdouble).itemsize <= np.dtype(np.float64).itemsize:
             self.skipTest('No wider NumPy floating dtype on this platform')

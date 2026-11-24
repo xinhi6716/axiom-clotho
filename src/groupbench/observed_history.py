@@ -54,6 +54,14 @@ def _numbers(values, name):
     return result
 
 
+def _integer_ticks(values):
+    ticks = list(values)
+    if any(isinstance(t, (bool, np.bool_)) or not isinstance(t, Integral)
+           or not -(1 << 63) <= int(t) < (1 << 63) for t in ticks):
+        raise ValueError('Integer timestamps must be signed-64-bit integer ticks, not floats or booleans.')
+    return np.asarray(ticks, dtype=np.int64)
+
+
 def _keys(frame, name):
     traces = list(frame['trace_id'])
     if any(not isinstance(t, str) or not t or '\x00' in t for t in traces):
@@ -68,12 +76,14 @@ def _keys(frame, name):
 
 
 def evaluate_observed_history(observations: pd.DataFrame, *, origins: pd.DataFrame,
-                              saved_predictions: pd.DataFrame) -> ObservedHistoryResult:
+                              saved_predictions: pd.DataFrame,
+                              timestamp_mode: str = 'float64') -> ObservedHistoryResult:
     """Score one saved model and two baselines on exactly the same origins.
 
     observations: columns trace_id, timestamp, value. Input order within each
     trace defines zero-based positions and must have strictly increasing finite
-    numeric timestamps. No sorting, interpolation or unit conversion occurs.
+    numeric timestamps. Use timestamp_mode='integer_ticks' for exact signed
+    64-bit integer timestamps. No sorting, interpolation or unit conversion occurs.
     origins: columns trace_id, target_index, in a caller-frozen evaluation order.
     saved_predictions: same keys in the same order, plus prediction. A missing,
     extra, duplicate or reordered origin fails rather than changing coverage.
@@ -93,7 +103,10 @@ def evaluate_observed_history(observations: pd.DataFrame, *, origins: pd.DataFra
     traces = list(observations['trace_id'])
     if any(not isinstance(t, str) or not t or '\x00' in t for t in traces):
         raise ValueError('Observation trace_id must be nonempty strings without NUL.')
-    times = _numbers(observations['timestamp'], 'timestamps')
+    if not isinstance(timestamp_mode, str) or timestamp_mode not in ('float64', 'integer_ticks'):
+        raise ValueError("timestamp_mode must be 'float64' or 'integer_ticks'.")
+    times = (_integer_ticks(observations['timestamp']) if timestamp_mode == 'integer_ticks'
+             else _numbers(observations['timestamp'], 'timestamps'))
     values = _numbers(observations['value'], 'observations')
     model = _numbers(saved_predictions['prediction'], 'saved predictions')
     positions = {}
@@ -143,6 +156,7 @@ def evaluate_observed_history(observations: pd.DataFrame, *, origins: pd.DataFra
         output[name] = prediction
     return ObservedHistoryResult(summary={
         'protocol': 'observed_history_one_step_v1',
+        **({'timestamp_mode': timestamp_mode} if timestamp_mode == 'integer_ticks' else {}),
         'evaluation_support': {
             'claim_scope': 'descriptive_observed_history',
             'n_scored_traces': len({trace for trace, _ in keys}),

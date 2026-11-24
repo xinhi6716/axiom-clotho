@@ -33,7 +33,9 @@ independent physical device. Input order within each trace defines zero-based
 positions. Numeric timestamps must be finite and strictly increasing per trace;
 duplicate/decreasing times fail, not silently sort. Interleaved traces are allowed.
 No datetime, string, boolean or complex numeric conversion is performed. Numeric
-inputs use float64; integers that cannot be represented exactly and NumPy floating
+inputs use float64 by default; exact integer timestamps are an explicit alternate
+mode described below, while values and predictions still use float64. For
+float64 inputs, integers that cannot be represented exactly and NumPy floating
 scalars wider than float64 fail. Other accepted real values are converted to
 float64 and may lose precision; this is not a complete precision audit. Precision
 already lost in caller-created arrays cannot be recovered by this helper. Review
@@ -99,3 +101,13 @@ and roster, not physical causality, prospective deployment, sensor read savings,
 independent-device generalization or a resolution of unknown physical units.
 No unit conversion is attempted. Different transformations or provenance require
 separate evidence, not a stronger label from this helper.
+
+### Exact integer timestamps
+
+The Python evaluator accepts `timestamp_mode="integer_ticks"` when the input
+column already contains signed 64-bit integer tick values (for example,
+nanoseconds). Adjacent ticks stay distinct above 2⁵³. The result records the
+mode and retains the selected ticks as `int64`; booleans, floating-point
+values and integers outside the signed 64-bit range are rejected. The default
+float64 mode and index-based baselines are unchanged. The evaluator does not
+infer the unit, calculate elapsed time, or recover upstream rounding.
