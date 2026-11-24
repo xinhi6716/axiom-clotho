@@ -261,3 +261,67 @@ fn unrelated_endpoint_cannot_substitute_for_missing_training_endpoint() {
         JoinError::EndpointMismatch
     );
 }
+
+#[test]
+fn maximum_roster_keeps_composite_order_and_training_only_targets() {
+    fn long_identity(i: usize) -> Vec<String> {
+        vec![
+            format!("{}{i:05}", "晶".repeat(123)),
+            "軸".repeat(128),
+            "量".repeat(128),
+            "測".repeat(128),
+            "晶".repeat(128),
+            "片".repeat(128),
+        ]
+    }
+
+    let features: Vec<_> = (0..20_000)
+        .rev()
+        .map(|i| DeviceFeatures {
+            identity: long_identity(i),
+            values: vec![i as f64],
+        })
+        .collect();
+    let partitions: Vec<_> = (0..20_000)
+        .map(|i| DevicePartition {
+            identity: long_identity(i),
+            partition: if i % 2 == 0 {
+                Partition::Train
+            } else {
+                Partition::Predict
+            },
+        })
+        .collect();
+    let mut endpoints: Vec<_> = (0..20_000)
+        .rev()
+        .step_by(2)
+        .map(|i| TrainingEndpoint {
+            identity: long_identity(i - 1),
+            target: -((i - 1) as f64),
+        })
+        .collect();
+
+    let result = prepare_measurements(&features, &partitions, &endpoints, 2).unwrap();
+    assert_eq!(
+        (result.training.len(), result.prediction.len()),
+        (10_000, 10_000)
+    );
+    for (i, (train, predict)) in result.training.iter().zip(&result.prediction).enumerate() {
+        for (row, index, expected_target) in [
+            (train, 2 * i, Some(-((2 * i) as f64))),
+            (predict, 2 * i + 1, None),
+        ] {
+            assert_eq!(row.identity, partitions[index].identity);
+            assert_eq!(row.group, partitions[index].identity[..2]);
+            assert_eq!(row.values, [index as f64]);
+            assert_eq!(row.target, expected_target);
+        }
+    }
+
+    // No length-only substitution when a held-out key replaces a training key.
+    endpoints[0].identity = long_identity(19_999);
+    assert_eq!(
+        prepare_measurements(&features, &partitions, &endpoints, 2).unwrap_err(),
+        JoinError::EndpointMismatch
+    );
+}

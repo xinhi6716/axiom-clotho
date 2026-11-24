@@ -87,6 +87,8 @@ pub fn prepare_measurements(
     if n_features == 0 || n_features > 100 {
         return Err(JoinError::InvalidFeatures);
     }
+    // Keep borrowed tuple keys while checking the rosters. Only the returned
+    // rows need to own their identities and group prefixes.
     let mut by_feature = BTreeMap::new();
     for row in features {
         if !valid_id(&row.identity, width) {
@@ -95,7 +97,7 @@ pub fn prepare_measurements(
         if row.values.len() != n_features || row.values.iter().any(|v| !v.is_finite()) {
             return Err(JoinError::InvalidFeatures);
         }
-        if by_feature.insert(row.identity.clone(), row).is_some() {
+        if by_feature.insert(row.identity.as_slice(), row).is_some() {
             return Err(JoinError::DuplicateIdentity);
         }
     }
@@ -105,7 +107,7 @@ pub fn prepare_measurements(
             return Err(JoinError::InvalidIdentity);
         }
         if by_partition
-            .insert(row.identity.clone(), row.partition)
+            .insert(row.identity.as_slice(), row.partition)
             .is_some()
         {
             return Err(JoinError::DuplicateIdentity);
@@ -114,27 +116,19 @@ pub fn prepare_measurements(
     if by_partition.keys().ne(by_feature.keys()) {
         return Err(JoinError::PartitionMismatch);
     }
-    let train_keys: BTreeSet<_> = by_partition
-        .iter()
-        .filter(|(_, p)| **p == Partition::Train)
-        .map(|(k, _)| k.clone())
-        .collect();
-    let prediction_keys: BTreeSet<_> = by_partition
-        .iter()
-        .filter(|(_, p)| **p == Partition::Predict)
-        .map(|(k, _)| k.clone())
-        .collect();
-    if train_keys.is_empty() || prediction_keys.is_empty() {
+    let training_keys = || {
+        by_partition
+            .iter()
+            .filter_map(|(&key, &partition)| (partition == Partition::Train).then_some(key))
+    };
+    let train_count = training_keys().count();
+    if train_count == 0 || train_count == by_partition.len() {
         return Err(JoinError::EmptyPartition);
     }
-    let train_groups: BTreeSet<_> = train_keys
-        .iter()
-        .map(|k| k[..group_prefix].to_vec())
-        .collect();
-    if prediction_keys
-        .iter()
-        .any(|k| train_groups.contains(&k[..group_prefix]))
-    {
+    let train_groups: BTreeSet<_> = training_keys().map(|key| &key[..group_prefix]).collect();
+    if by_partition.iter().any(|(&key, &partition)| {
+        partition == Partition::Predict && train_groups.contains(&key[..group_prefix])
+    }) {
         return Err(JoinError::GroupOverlap);
     }
     let mut targets = BTreeMap::new();
@@ -145,23 +139,23 @@ pub fn prepare_measurements(
         if !row.target.is_finite() {
             return Err(JoinError::InvalidEndpoint);
         }
-        if targets.insert(row.identity.clone(), row.target).is_some() {
+        if targets.insert(row.identity.as_slice(), row.target).is_some() {
             return Err(JoinError::DuplicateIdentity);
         }
     }
-    if targets.keys().ne(train_keys.iter()) {
+    if targets.keys().copied().ne(training_keys()) {
         return Err(JoinError::EndpointMismatch);
     }
-    let mut training = Vec::new();
-    let mut prediction = Vec::new();
+    let mut training = Vec::with_capacity(train_count);
+    let mut prediction = Vec::with_capacity(by_partition.len() - train_count);
     for (key, row) in by_feature {
         let prepared = PreparedRow {
             group: key[..group_prefix].to_vec(),
             values: row.values.clone(),
-            target: targets.get(&key).copied(),
-            identity: key.clone(),
+            target: targets.get(key).copied(),
+            identity: key.to_vec(),
         };
-        match by_partition[&key] {
+        match by_partition[key] {
             Partition::Train => training.push(prepared),
             Partition::Predict => prediction.push(prepared),
         }
