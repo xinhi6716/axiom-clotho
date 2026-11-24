@@ -12,6 +12,7 @@ from pathlib import Path
 import stat
 
 from .data import MAX_FEATURES
+from .verification import _signature
 
 
 MAX_MANIFEST_BYTES = 64 * 1024
@@ -48,7 +49,8 @@ def _read_regular(path):
 
     Check before opening to avoid known devices/FIFOs, then check the descriptor
     again. Nonblocking open avoids waiting on a FIFO swapped in before open on
-    platforms providing O_NONBLOCK. This is not a filesystem-atomic snapshot or
+    platforms providing O_NONBLOCK. Reject snapshot changes visible in file
+    metadata. This is not a filesystem-atomic snapshot or
     a guarantee about network-mounted storage; use trusted, idle local files.
     """
     path = Path(path)
@@ -65,6 +67,9 @@ def _read_regular(path):
             raise ValueError("Feature schema input must be a regular local file.")
         if opened.st_size > MAX_MANIFEST_BYTES:
             raise ValueError(f"Feature schema exceeds the {MAX_MANIFEST_BYTES}-byte limit.")
+        changed = "Feature schema input changed during reading; retry with an idle local file."
+        if _signature(opened) != _signature(before):
+            raise ValueError(changed)
         chunks, size = [], 0
         while True:
             chunk = os.read(fd, min(8192, MAX_MANIFEST_BYTES - size + 1))
@@ -74,6 +79,13 @@ def _read_regular(path):
             size += len(chunk)
             if size > MAX_MANIFEST_BYTES:
                 raise ValueError(f"Feature schema exceeds the {MAX_MANIFEST_BYTES}-byte limit.")
+        try:
+            stable = (size == opened.st_size and _signature(os.fstat(fd)) == _signature(opened)
+                      and _signature(path.stat()) == _signature(opened))
+        except OSError as exc:
+            raise ValueError(changed) from exc
+        if not stable:
+            raise ValueError(changed)
     finally:
         os.close(fd)
     return b"".join(chunks)

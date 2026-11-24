@@ -141,6 +141,30 @@ class FeatureManifestTests(unittest.TestCase):
                         read_feature_manifest(source)
                     opening.assert_not_called()
 
+    def test_reports_exporter_version_change_in_path_snapshot(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source, newer = root / "feature_schema.json", root / "next-export.json"
+            source.write_text(json.dumps(schema_for(["predictor_a"])))
+            newer.write_text(json.dumps(schema_for(["predictor_b"])))
+            first, published = source.stat(), newer.stat()
+            # Model two ordinary exporter versions without concurrent file operations.
+            with patch.object(Path, "stat", side_effect=[first, published]):
+                with self.assertRaisesRegex(ValueError, "changed during reading"):
+                    read_feature_manifest(source)
+            self.assertEqual(read_feature_manifest(newer), ["predictor_b"])
+
+    def test_rejects_inconsistent_read_size_even_when_schema_is_valid_json(self):
+        with tempfile.TemporaryDirectory() as temp:
+            source = Path(temp, "feature_schema.json")
+            raw = json.dumps(schema_for()).encode("utf-8")
+            source.write_bytes(raw)
+            # The extra decoded space alone would not change the schema.
+            with patch("groupbench.feature_manifest.os.read", side_effect=[raw + b" ", b""]):
+                with self.assertRaisesRegex(ValueError, "changed during reading"):
+                    read_feature_manifest(source)
+            self.assertEqual(read_feature_manifest(source), schema_for()["model_feature_allowlist"])
+
     @unittest.skipUnless(os.name == "posix", "POSIX descriptor and symlink test")
     def test_opened_descriptor_is_checked_and_closed_if_source_was_swapped(self):
         with tempfile.TemporaryDirectory() as temp:
