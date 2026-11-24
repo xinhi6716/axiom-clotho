@@ -159,6 +159,27 @@ def contrast_float(value):
     return result
 
 
+def _bounded_paired_sequence(sequence):
+    return type(sequence) in (tuple, list) and 1 <= len(sequence) <= 20_000
+
+
+def _paired_label(value):
+    return (type(value) is str and 0 < len(value) <= 256
+            and bool(value.strip()) and value == value.strip())
+
+
+def _exact_paired_number(value):
+    if type(value) not in (int, float):
+        raise ValueError("Loss inputs and weights must be real finite numbers.")
+    try:
+        converted = float(value)
+    except OverflowError:
+        raise ValueError("Loss input or weight is outside binary64 range.") from None
+    if not math.isfinite(converted) or (type(value) is int and int(converted) != value):
+        raise ValueError("Loss input or weight must be representable as binary64.")
+    return Fraction.from_float(converted)
+
+
 def scheduled_phase_paired_mae(rows, *, expected_roster, expected_cells, phase_weights):
     """Compare aligned forecasts on a predeclared device × phase panel.
 
@@ -178,38 +199,20 @@ def scheduled_phase_paired_mae(rows, *, expected_roster, expected_cells, phase_w
     physical independence, or verify when the supplied roster was frozen.
     Reconstructing the expected roster from scored rows cannot detect omission.
     """
-    def bounded(sequence):
-        return type(sequence) in (tuple, list) and 1 <= len(sequence) <= 20_000
-
-    def label(value):
-        return (type(value) is str and 0 < len(value) <= 256
-                and bool(value.strip()) and value == value.strip())
-
-    def exact(value):
-        if type(value) not in (int, float):
-            raise ValueError("Loss inputs and weights must be real finite numbers.")
-        try:
-            converted = float(value)
-        except OverflowError:
-            raise ValueError("Loss input or weight is outside binary64 range.") from None
-        if not math.isfinite(converted) or (type(value) is int and int(converted) != value):
-            raise ValueError("Loss input or weight must be representable as binary64.")
-        return Fraction.from_float(converted)
-
-    if not all(map(bounded, (rows, expected_roster, expected_cells))):
+    if not all(map(_bounded_paired_sequence, (rows, expected_roster, expected_cells))):
         raise ValueError("Rows, expected roster and expected cells must be nonempty bounded lists or tuples.")
     if type(phase_weights) is not dict or not 1 <= len(phase_weights) <= 20_000:
         raise ValueError("Supply an explicit bounded phase-weight mapping.")
     weights = {}
     for phase, value in phase_weights.items():
-        if not label(phase):
+        if not _paired_label(phase):
             raise ValueError("Invalid scheduled phase identifier.")
-        weights[phase] = exact(value)
+        weights[phase] = _exact_paired_number(value)
         if weights[phase] <= 0:
             raise ValueError("Phase weights must be strictly positive.")
     expected, devices = set(), set()
     for cell in expected_cells:
-        if type(cell) is not tuple or len(cell) != 2 or not all(map(label, cell)):
+        if type(cell) is not tuple or len(cell) != 2 or not all(map(_paired_label, cell)):
             raise ValueError("Expected cells must be (device, phase) tuples with valid identifiers.")
         if cell in expected or cell[1] not in weights:
             raise ValueError("Expected cells must be unique and use declared phases.")
@@ -220,7 +223,7 @@ def scheduled_phase_paired_mae(rows, *, expected_roster, expected_cells, phase_w
 
     roster = {}
     for entry in expected_roster:
-        if type(entry) is not tuple or len(entry) != 3 or not all(map(label, entry)):
+        if type(entry) is not tuple or len(entry) != 3 or not all(map(_paired_label, entry)):
             raise ValueError("Expected roster entries must be (row ID, device, phase) tuples.")
         row_id, device, phase = entry
         if row_id in roster:
@@ -231,7 +234,7 @@ def scheduled_phase_paired_mae(rows, *, expected_roster, expected_cells, phase_w
 
     cells, ids = {}, set()
     for row in rows:
-        if type(row) is not tuple or len(row) != 6 or not all(map(label, row[:3])):
+        if type(row) is not tuple or len(row) != 6 or not all(map(_paired_label, row[:3])):
             raise ValueError("Each row must provide a row ID, device, phase, target, and both forecasts.")
         row_id, device, phase, y, a, b = row
         if row_id in ids:
@@ -243,7 +246,7 @@ def scheduled_phase_paired_mae(rows, *, expected_roster, expected_cells, phase_w
             raise ValueError("Unexpected paired row ID outside the expected roster.")
         if roster[row_id] != (device, phase):
             raise ValueError("Paired row ID is rebound to a different device or phase.")
-        y, a, b = map(exact, (y, a, b))
+        y, a, b = map(_exact_paired_number, (y, a, b))
         state = cells.setdefault((device, phase), [0, Fraction(), Fraction()])
         state[0] += 1
         state[1] += abs(a - y)
@@ -277,3 +280,76 @@ def scheduled_phase_paired_mae(rows, *, expected_roster, expected_cells, phase_w
                                    for j in (1, 2))),
         "fixed_phase_equal_device": summary(*(total / len(devices) for total in standard)),
     }
+
+
+def paired_parent_mae_influence(rows, *, expected_roster):
+    """Describe same-roster MAE and the effect of omitting one declared parent.
+
+    Supply (row_id, device, parent, target, forecast_a, forecast_b) tuples
+    and an independently frozen (row_id, device, parent) roster. IDs are exact
+    nonblank Unicode scalar strings; use source-qualified canonical IDs.
+    Rows, devices within parent, then parents each receive equal weight at
+    their own level. All bounds are descriptive, not intervals or resampling.
+    Parent labels do not verify independence or resolve aliases. The per_parent
+    records return supplied parent labels verbatim; use pseudonymous labels
+    when sharing the report.
+    """
+    def identifier(value):
+        return _paired_label(value) and not any(0xD800 <= ord(char) <= 0xDFFF for char in value)
+
+    if not all(map(_bounded_paired_sequence, (rows, expected_roster))):
+        raise ValueError("Rows and expected roster must be nonempty bounded lists or tuples with valid Unicode identifiers.")
+    roster, device_parent = {}, {}
+    for entry in expected_roster:
+        if type(entry) is not tuple or len(entry) != 3 or not all(map(identifier, entry)):
+            raise ValueError("Expected roster entries must be (row ID, device, parent) tuples with valid Unicode identifiers.")
+        row, device, parent = entry
+        if row in roster:
+            raise ValueError("Duplicate expected roster row ID.")
+        if device_parent.setdefault(device, parent) != parent:
+            raise ValueError("Each declared device must belong to exactly one parent.")
+        roster[row] = (device, parent)
+
+    seen, devices = set(), {}
+    for row in rows:
+        if type(row) is not tuple or len(row) != 6 or not all(map(identifier, row[:3])):
+            raise ValueError("Each row must contain an ID, device, parent, target and both forecasts, with valid Unicode identifiers.")
+        row_id, device, parent, y, a, b = row
+        if row_id in seen:
+            raise ValueError("Duplicate paired row ID.")
+        if row_id not in roster:
+            raise ValueError("Unexpected paired row ID outside the expected roster.")
+        if roster[row_id] != (device, parent):
+            raise ValueError("Paired row ID is rebound to a different device or parent.")
+        seen.add(row_id)
+        y, a, b = map(_exact_paired_number, (y, a, b))
+        loss = devices.setdefault(device, [0, Fraction(), Fraction()])
+        loss[0] += 1
+        loss[1] += abs(a - y)
+        loss[2] += abs(b - y)
+    if len(seen) != len(roster):
+        raise ValueError(f"Incomplete expected roster: {len(roster) - len(seen)} missing row(s).")
+
+    parents = {}
+    for device, (n, loss_a, loss_b) in devices.items():
+        pool = parents.setdefault(device_parent[device], [0, Fraction(), Fraction()])
+        pool[0] += 1
+        pool[1] += loss_a / n
+        pool[2] += loss_b / n
+    k = len(parents)
+    total_a, total_b, effects, details = Fraction(), Fraction(), [], []
+    for parent, (n, loss_a, loss_b) in sorted(parents.items()):
+        a, b = loss_a / n, loss_b / n
+        total_a += a
+        total_b += b
+        effects.append(b - a)
+        details.append({"parent": parent, "n_devices": n, "mae_b_minus_a": contrast_float(b - a)})
+    effect_sum = total_b - total_a
+    loo = None
+    if k > 1:
+        loo = {"min": contrast_float((effect_sum - max(effects)) / (k - 1)),
+               "max": contrast_float((effect_sum - min(effects)) / (k - 1))}
+    return {"n_rows": len(rows), "n_devices": len(devices), "n_declared_parents": k,
+            "mae_a": contrast_float(total_a / k), "mae_b": contrast_float(total_b / k),
+            "mae_b_minus_a": contrast_float(effect_sum / k), "per_parent": details,
+            "leave_one_parent_out_mae_b_minus_a": loo}
