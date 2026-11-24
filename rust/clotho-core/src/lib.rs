@@ -27,3 +27,5 @@ pub mod rram;
 pub mod saved_comparison;
 
 pub mod group_max_calibration;
+
+pub mod group_max_intervals;

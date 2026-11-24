@@ -46,7 +46,7 @@ pub enum GroupMaxError {
     NonfiniteResidual,
 }
 
-fn valid_key(key: RowKey<'_>) -> bool {
+pub(crate) fn valid_key(key: RowKey<'_>) -> bool {
     [key.group, key.row].iter().all(|s| {
         s.len() <= MAX_IDENTIFIER_BYTES && !s.trim().is_empty() && !s.chars().any(char::is_control)
     })
