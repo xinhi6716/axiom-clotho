@@ -283,6 +283,76 @@ def evaluate_saved_intervals(document):
 
 
 
+def compare_saved_interval_scores(document_a, document_b):
+    """Compare two declared central intervals on the same frozen cohort.
+
+    Existing single-arm validation is applied to both documents. Expected
+    roster order is immaterial; scored identities, normalized groups,
+    observations, alpha and all metadata must match exactly. Calculations use
+    exact rational arithmetic until reporting and do not fit or resample.
+    """
+    a, b = map(evaluate_saved_intervals, (document_a, document_b))
+    if a["metadata"] != b["metadata"]:
+        raise ValueError("Paired interval metadata must match exactly.")
+    if a["alpha_exact"] is None or a["alpha_exact"] != b["alpha_exact"]:
+        raise ValueError("Paired interval scores require the same nonnull exact alpha.")
+    fields = ("row_id", "group", "observed_exact")
+    def keys(report):
+        return [tuple(row[field] for field in fields) for row in report["observations"]]
+    # Each validated document has homogeneous text or numeric groups. The
+    # single-arm display strings alone cannot distinguish those namespaces.
+    different_group_kind = (isinstance(document_a["rows"][0]["group"], str)
+                            != isinstance(document_b["rows"][0]["group"], str))
+    if different_group_kind or keys(a) != keys(b):
+        raise ValueError("Paired interval roster, row-to-group bindings and exact observations must match.")
+    alpha = Fraction(a["alpha_exact"])
+
+    def components(row):
+        y, lower, upper = (Fraction(row[field]) for field in
+                           ("observed_exact", "lower_exact", "upper_exact"))
+        lower_distance, upper_distance = max(lower - y, 0), max(y - upper, 0)
+        width = upper - lower
+        return (Fraction(lower <= y <= upper), width, lower_distance, upper_distance,
+                width + 2 * (lower_distance + upper_distance) / alpha)
+
+    # Accumulate exact group and pooled sums to avoid rounding each group's mean.
+    names = ("coverage", "width", "lower_miss_distance", "upper_miss_distance", "interval_score")
+    sums = [Fraction()] * (2 * len(names))
+    groups = {}
+    for one, two in zip(a["observations"], b["observations"]):
+        values = components(one) + components(two)
+        count, group_sums = groups.get(one["group"], (0, None))
+        if group_sums is None:
+            group_sums = [Fraction()] * len(sums)
+        for i, value in enumerate(values):
+            sums[i] += value
+            group_sums[i] += value
+        groups[one["group"]] = count + 1, group_sums
+
+    def report(means):
+        def rendered(values):
+            return {name + "_approx": _approx(value) for name, value in zip(names, values)} | {
+                "interval_score_exact": str(values[-1])}
+        n = len(names)
+        return {"a": rendered(means[:n]), "b": rendered(means[n:]),
+                "b_minus_a": rendered([means[n + i] - means[i] for i in range(n)])}
+
+    n_rows = len(a["observations"])
+    return {
+        "status": "complete_descriptive_paired_interval_scores",
+        "n_rows": n_rows, "n_declared_groups": len(groups), "metadata": a["metadata"],
+        "alpha_exact": a["alpha_exact"],
+        "row_weighted": report([total / n_rows for total in sums]),
+        "equal_group": report([_mean([totals[i] / count for count, totals in groups.values()])
+                               for i in range(len(sums))]),
+        "limitations": [
+            "Miss distances are zero for covered rows and averaged across all scored rows.",
+            "These descriptive comparisons do not establish calibration, independence or future coverage.",
+            "Completeness and identity are checked against the declared roster, not externally verified.",
+        ],
+    }
+
+
 def diagnose_saved_interval_reference(document):
     """Return an opt-in descriptive sidecar, without changing normal evaluation.
 
