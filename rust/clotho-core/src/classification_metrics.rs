@@ -2,7 +2,7 @@
 //! probabilities. These summaries do not establish calibration, independence,
 //! or scientific validity, and do not select a decision threshold.
 
-use std::fmt;
+use std::{cmp::Ordering, fmt};
 
 /// Probabilities used for log loss are clipped to
 /// `[LOG_LOSS_EPSILON, 1 - LOG_LOSS_EPSILON]`.
@@ -107,8 +107,10 @@ pub struct BinaryMetrics {
 /// average-rank ROC AUC. Metric sums use compensated addition. No inputs are
 /// changed, and errors do not include raw row values or indices. A Brier score
 /// that rounds to zero despite a nonzero error returns
-/// [`ClassificationMetricsError::BrierUnderflow`]; positive scores, including
-/// subnormals, retain binary64 rounding.
+/// [`ClassificationMetricsError::BrierUnderflow`]. Preliminary Brier results
+/// at most twice the smallest normal are checked by summing exact squares.
+/// The exact mean is rounded once when it falls in the minimum-subnormal
+/// spacing range; other scores use compensated addition.
 pub fn binary_metrics(
     y_true: &[f64],
     probability: &[f64],
@@ -160,9 +162,14 @@ pub fn binary_metrics(
     let n_positive = tp + fn_;
     let n_negative = tn + fp;
     let count = y_true.len() as f64;
-    let brier = brier_sum.total() / count;
-    if brier == 0.0 && y_true.iter().zip(probability).any(|(label, p)| label != p) {
-        return Err(ClassificationMetricsError::BrierUnderflow);
+    let mut brier = brier_sum.total() / count;
+    // Do not use the smallest normal itself as the preliminary cutoff:
+    // rounded squares can place an exact boundary result just above it.
+    if brier <= 2.0 * f64::MIN_POSITIVE && y_true.iter().zip(probability).any(|(y, p)| y != p) {
+        brier = tiny_brier_exact(y_true, probability).unwrap_or(brier);
+        if brier == 0.0 {
+            return Err(ClassificationMetricsError::BrierUnderflow);
+        }
     }
     let recall = ratio(tp as f64, n_positive as f64);
     let specificity = ratio(tn as f64, n_negative as f64);
@@ -188,6 +195,79 @@ pub fn binary_metrics(
         tn,
         fn_,
     })
+}
+
+// Integer units are 2^-2148, the square of the minimum subnormal. Even a
+// sum of (usize::MAX) unit probability errors needs at most 2212 bits on a
+// 64-bit target, so adding exact 106-bit squares cannot exhaust 35 limbs.
+fn tiny_brier_exact(labels: &[f64], probabilities: &[f64]) -> Option<f64> {
+    let mut sum = [0_u64; 35];
+    for (&label, &p) in labels.iter().zip(probabilities) {
+        // If a positive label has a nonzero error, its magnitude is at least
+        // 2^-53 even before dividing by n, far outside this tiny-score path.
+        if label == 1.0 && p != 1.0 {
+            return None;
+        }
+        if label == 1.0 || p == 0.0 {
+            continue;
+        }
+        let bits = p.to_bits();
+        let exponent = (bits >> 52) as usize;
+        let fraction = bits & ((1_u64 << 52) - 1);
+        let mantissa = u128::from(if exponent == 0 { fraction } else { fraction | (1_u64 << 52) });
+        let square = mantissa * mantissa;
+        let shift = 2 * exponent.saturating_sub(1);
+        add_shifted(&mut sum, square as u64, shift);
+        add_shifted(&mut sum, (square >> 64) as u64, shift + 64);
+    }
+
+    // Divide by n * 2^1074 to convert to minimum-subnormal quanta. Split
+    // above bit 1074 (16*64+50), leaving the low suffix for midpoint checks.
+    if sum[18] >> 50 != 0 || sum[19..].iter().any(|&word| word != 0) {
+        return None;
+    }
+    let high = u128::from(sum[16] >> 50)
+        | (u128::from(sum[17]) << 14)
+        | (u128::from(sum[18]) << 78);
+    let n = labels.len() as u128;
+    let quotient = high / n;
+    let twice_remainder = 2 * (high % n);
+    let suffix_top = sum[16] & ((1_u64 << 50) - 1);
+    let lower_nonzero = || sum[..16].iter().any(|&word| word != 0);
+    let midpoint = match twice_remainder.cmp(&n) {
+        Ordering::Equal if suffix_top != 0 || lower_nonzero() => Ordering::Greater,
+        Ordering::Less if twice_remainder + 1 == n => match suffix_top.cmp(&(1_u64 << 49)) {
+            Ordering::Equal if lower_nonzero() => Ordering::Greater,
+            other => other,
+        },
+        other => other,
+    };
+    let rounds_up =
+        midpoint == Ordering::Greater || (midpoint == Ordering::Equal && quotient % 2 != 0);
+    let rounded = quotient + u128::from(rounds_up);
+
+    // The minimum-subnormal bit spacing persists through the first normal
+    // binade. This defensive check keeps the specialized conversion scoped
+    // to that spacing, including a carry into the next binade's first value.
+    (rounded <= 1_u128 << 53).then(|| f64::from_bits(rounded as u64))
+}
+
+fn add_shifted(sum: &mut [u64; 35], word: u64, shift: usize) {
+    let index = shift / 64;
+    let intra = shift % 64;
+    add_word(sum, word << intra, index);
+    if intra != 0 {
+        add_word(sum, word >> (64 - intra), index + 1);
+    }
+}
+
+fn add_word(sum: &mut [u64; 35], mut word: u64, mut index: usize) {
+    while word != 0 {
+        let (value, carry) = sum[index].overflowing_add(word);
+        sum[index] = value;
+        word = u64::from(carry);
+        index += 1;
+    }
 }
 
 fn ratio(numerator: f64, denominator: f64) -> Option<f64> {
@@ -263,6 +343,91 @@ impl CompensatedSum {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn brier_tiny_mean_rounds_once_instead_of_rounding_squares_first() {
+        let scale = 2.0_f64.powi(-537);
+        let actual = binary_metrics(&[0.0, 0.0], &[1.125 * scale, 0.0], 0.5).unwrap();
+        assert_eq!(actual.brier.to_bits(), 1); // Exact mean: 81/128 min-subnormal.
+
+        assert_eq!(
+            binary_metrics(&[0.0, 0.0, 1.0], &[0.75 * scale, 0.75 * scale, 1.0], 0.5),
+            Err(ClassificationMetricsError::BrierUnderflow) // Exact mean: 3/8 min-subnormal.
+        );
+    }
+
+    #[test]
+    fn brier_tiny_mean_resolves_midpoints_with_even_parity() {
+        let scale = 2.0_f64.powi(-537);
+        let below = f64::from_bits(scale.to_bits() - 1);
+        let above = f64::from_bits(scale.to_bits() + 1);
+        for p in [below, scale] {
+            assert_eq!(
+                binary_metrics(&[0.0, 0.0], &[p, 0.0], 0.5),
+                Err(ClassificationMetricsError::BrierUnderflow)
+            );
+        }
+        assert_eq!(
+            binary_metrics(&[0.0, 0.0], &[above, 0.0], 0.5)
+                .unwrap()
+                .brier
+                .to_bits(),
+            1
+        );
+        // An odd denominator puts the midpoint inside the low integer suffix.
+        let half = 0.5 * scale;
+        let prev_half = f64::from_bits(half.to_bits() - 1);
+        let next_half = f64::from_bits(half.to_bits() + 1);
+        for p in [prev_half, half] {
+            assert_eq!(
+                binary_metrics(&[0.0; 3], &[p, scale, half], 0.5),
+                Err(ClassificationMetricsError::BrierUnderflow)
+            );
+        }
+        let odd = binary_metrics(&[0.0; 3], &[next_half, scale, half], 0.5).unwrap();
+        assert_eq!(odd.brier.to_bits(), 1);
+
+        // Other ties round toward the even bit pattern, in either direction.
+        for (probabilities, expected) in [
+            ([1.5 * scale, half, half, half], 1),
+            ([2.0 * scale, scale, scale, 0.0], 2), // 6 / 4 = 1.5
+            ([3.0 * scale, scale, 0.0, 0.0], 2), // 10 / 4 = 2.5
+        ] {
+            let actual = binary_metrics(&[0.0; 4], &probabilities, 0.5).unwrap();
+            assert_eq!(actual.brier.to_bits(), expected);
+        }
+    }
+
+    #[test]
+    fn brier_tiny_mean_preserves_the_subnormal_normal_boundary() {
+        let root_min = 2.0_f64.powi(-511);
+        for (p, expected) in [
+            (
+                f64::from_bits(root_min.to_bits() - 1),
+                f64::MIN_POSITIVE.to_bits() - 1,
+            ),
+            (root_min, f64::MIN_POSITIVE.to_bits()),
+            (
+                f64::from_bits(root_min.to_bits() + 1),
+                f64::MIN_POSITIVE.to_bits() + 2,
+            ),
+        ] {
+            assert_eq!(binary_metrics(&[0.0], &[p], 0.5).unwrap().brier.to_bits(), expected);
+        }
+    }
+
+    #[test]
+    fn brier_boundary_rechecks_a_preliminary_normal_successor() {
+        let probabilities = [
+            f64::from_bits(0x200b_b67a_e858_4caa),
+            f64::from_bits(0x1e63_ad69_f7f3_f385),
+            f64::from_bits(0x1e63_ad69_f7f3_f385),
+        ];
+        // Independently rounding the squares yields minimum normal + 1 ulp,
+        // but their exact mean rounds to minimum normal.
+        let actual = binary_metrics(&[0.0; 3], &probabilities, 0.5).unwrap();
+        assert_eq!(actual.brier.to_bits(), f64::MIN_POSITIVE.to_bits());
+    }
 
     #[test]
     fn brier_zero_distinguishes_perfect_predictions_from_underflow() {
