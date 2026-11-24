@@ -33,3 +33,5 @@ pub mod group_max_intervals;
 pub mod group_interval_diagnostics;
 
 pub mod group_interval_comparison;
+
+pub mod group_interval_strata;
