@@ -303,6 +303,18 @@ def file_sha256(path: str | Path) -> str:
     return h.hexdigest()
 
 
+def _fixture_dimensions(n_groups, rows_per_group):
+    if any(isinstance(v, bool) or not isinstance(v, Integral) or v < 2 for v in (n_groups, rows_per_group)):
+        raise ValueError("n_groups and rows_per_group must be integers of at least two.")
+    # Normalize accepted integer scalars before multiplying. NumPy signed and
+    # unsigned inputs can wrap or promote to float; Python ints are exact.
+    n_groups, rows_per_group = int(n_groups), int(rows_per_group)
+    n = n_groups * rows_per_group
+    if n > MAX_ROWS:
+        raise ValueError(f"The fixture must not exceed {MAX_ROWS:,} rows.")
+    return n_groups, rows_per_group, n
+
+
 def make_materials_fixture(n_groups: int = 24, rows_per_group: int = 12, random_state: int = 7) -> pd.DataFrame:
     """Generate fictitious process/property data, not a physical materials model.
 
@@ -310,12 +322,8 @@ def make_materials_fixture(n_groups: int = 24, rows_per_group: int = 12, random_
     observations within a batch dependent. No real measurements are embedded.
     """
     seed = validate_seed(random_state)
-    if any(isinstance(v, bool) or not isinstance(v, Integral) or v < 2 for v in (n_groups, rows_per_group)):
-        raise ValueError("n_groups and rows_per_group must be integers of at least two.")
-    if n_groups * rows_per_group > MAX_ROWS:
-        raise ValueError(f"The fixture must not exceed {MAX_ROWS:,} rows.")
+    n_groups, rows_per_group, n = _fixture_dimensions(n_groups, rows_per_group)
     rng = np.random.default_rng(seed)
-    n = n_groups * rows_per_group
     batch = np.repeat(np.arange(n_groups), rows_per_group)
     temperature = rng.uniform(400, 900, n)
     pressure = rng.uniform(1, 5, n)

@@ -5,7 +5,7 @@ from numbers import Integral, Real
 import numpy as np
 import pandas as pd
 
-from ..data import MAX_ROWS, prepare_data, validate_seed, validate_training_columns
+from ..data import _fixture_dimensions, prepare_data, validate_seed, validate_training_columns
 
 
 def label_contract():
@@ -108,13 +108,8 @@ def make_binary_fixture(n_groups=24, rows_per_group=12, random_state=7):
     returned, never resampled to make a split feasible or a model look good.
     """
     seed = validate_seed(random_state)
-    if any(isinstance(v, bool) or not isinstance(v, Integral) or v < 2
-           for v in (n_groups, rows_per_group)):
-        raise ValueError("n_groups and rows_per_group must be integers of at least two.")
-    if n_groups * rows_per_group > MAX_ROWS:
-        raise ValueError(f"The fixture must not exceed {MAX_ROWS:,} rows.")
+    n_groups, rows_per_group, n = _fixture_dimensions(n_groups, rows_per_group)
     rng = np.random.default_rng(seed)
-    n = n_groups * rows_per_group
     ids = np.repeat(np.arange(n_groups), rows_per_group)
     temperature, pressure = rng.normal(size=(2, n))
     tool = rng.choice(["invented-A", "invented-B", "invented-C"], size=n)
