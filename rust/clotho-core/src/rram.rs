@@ -115,7 +115,9 @@ fn settings(p: Settings) -> Result<(), RramError> {
     Ok(())
 }
 /// Extract measured current or adjacent linear interpolation in acquisition order.
-/// No sorting to repair branches, extrapolation, abs(), or state inference.
+/// The nearer endpoint supplies the offset, so reversing an otherwise valid
+/// sweep does not change the result or lose a small endpoint weight.
+/// No sorting to repair branches, extrapolation, unsigned current, or state inference.
 pub fn extract_branch(b: &Branch, p: Settings) -> Result<Readpoint, RramError> {
     settings(p)?;
     let a = &b.acquisition;
@@ -177,12 +179,23 @@ pub fn extract_branch(b: &Branch, p: Settings) -> Result<Readpoint, RramError> {
             if span > p.max_bracket_span_v {
                 return Err(RramError::BracketTooWide);
             }
-            let t = (c.read_voltage_v - w[0].voltage_v) / (w[1].voltage_v - w[0].voltage_v);
+            // The small weight must come from a small voltage difference,
+            // not from subtracting a nearly unit weight from one. Prefer the
+            // lower voltage on a tie, independent of acquisition order.
+            let d0 = (c.read_voltage_v - w[0].voltage_v).abs();
+            let d1 = (c.read_voltage_v - w[1].voltage_v).abs();
+            let (near, far, offset) =
+                if d0 < d1 || (d0 == d1 && w[0].voltage_v < w[1].voltage_v) {
+                    (&w[0], &w[1], d0)
+                } else {
+                    (&w[1], &w[0], d1)
+                };
+            let t = offset / span;
             if !(0.0 < t && t < 1.0) {
                 return Err(RramError::NumericalRange);
             }
             (
-                w[0].current_a * (1.0 - t) + w[1].current_a * t,
+                near.current_a * (1.0 - t) + far.current_a * t,
                 span,
                 vec![w[0].source_row, w[1].source_row],
             )

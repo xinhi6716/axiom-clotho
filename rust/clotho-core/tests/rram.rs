@@ -64,6 +64,86 @@ fn signed_static_readpoints_and_reversed_interpolation() {
     assert!((extract_branch(&b, settings()).unwrap().resistance_ohm - 100.0).abs() < 1e-12);
 }
 #[test]
+fn readpoint_near_an_endpoint_is_accurate_in_both_sweep_directions() {
+    let p = Settings {
+        max_bracket_span_v: 2.0,
+        ..settings()
+    };
+    for (lower_v, upper_v, expected_a) in [
+        (-1.0, 0.1_f64, 1.271_617_073_437_677_7e-8),
+        (-0.3, 1.0_f64, 8.550_177_112_501_204e-8),
+    ] {
+        // Read one representable voltage below the upper measured endpoint.
+        // Current references use the exact binary64 inputs before rounding.
+        let mut b = branch(State::Hrs, "1", 1e9, 2);
+        b.conditions.read_voltage_v = f64::from_bits(upper_v.to_bits() - 1);
+        b.samples[0].voltage_v = lower_v;
+        b.samples.push(Sample {
+            source_row: 3,
+            voltage_v: upper_v,
+            current_a: 1e-10,
+        });
+
+        let ascending = extract_branch(&b, p).unwrap();
+        b.samples.reverse();
+        let descending = extract_branch(&b, p).unwrap();
+        assert!((ascending.current_a / expected_a - 1.0).abs() < 4.0 * f64::EPSILON);
+        assert_eq!(ascending.current_a.to_bits(), descending.current_a.to_bits());
+        assert_eq!(
+            ascending.resistance_ohm.to_bits(),
+            descending.resistance_ohm.to_bits()
+        );
+        assert_eq!(ascending.selected_source_rows, [2, 3]);
+        assert_eq!(descending.selected_source_rows, [3, 2]);
+        assert_eq!(ascending.all_source_rows, [2, 3]);
+        assert_eq!(descending.all_source_rows, [3, 2]);
+    }
+}
+
+#[test]
+fn the_smaller_endpoint_weight_survives_a_wide_valid_bracket() {
+    let mut b = branch(State::Hrs, "1", 1e-150, 2);
+    b.conditions.read_voltage_v = 1e-150;
+    b.samples[0].voltage_v = 0.0;
+    b.samples.push(Sample {
+        source_row: 3,
+        voltage_v: 1e150,
+        current_a: 1e150,
+    });
+    let p = Settings {
+        max_bracket_span_v: 1e150,
+        ..settings()
+    };
+    let a = extract_branch(&b, p).unwrap();
+    b.samples.reverse();
+    let d = extract_branch(&b, p).unwrap();
+    assert!((a.current_a / 2e-150 - 1.0).abs() < 4.0 * f64::EPSILON);
+    assert_eq!(a.current_a.to_bits(), d.current_a.to_bits());
+    assert_eq!(
+        (a.selected_source_rows, d.selected_source_rows),
+        (vec![2, 3], vec![3, 2])
+    );
+}
+
+#[test]
+fn midpoint_that_interpolates_to_zero_current_remains_invalid() {
+    let mut b = branch(State::Hrs, "1", -0.25, 2);
+    b.samples[0].voltage_v = 0.5;
+    b.samples.push(Sample {
+        source_row: 3,
+        voltage_v: 1.5,
+        current_a: 0.25,
+    });
+    for _ in 0..2 {
+        assert_eq!(
+            extract_branch(&b, settings()).unwrap_err(),
+            RramError::InvalidCurrent
+        );
+        b.samples.reverse();
+    }
+}
+
+#[test]
 fn medians_are_of_paired_ratios_not_ratio_of_medians() {
     let mut bs = pair();
     bs.extend([
