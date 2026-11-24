@@ -113,7 +113,9 @@ def outer_fold_input_support(X: pd.DataFrame, groups, *, outer_splits: int = 5,
     folds = []
     for fold, (train, test) in enumerate(
             GroupKFold(outer_splits, seed).split(features, groups=labels)):
-        support = prediction_input_support(features.iloc[train], features.iloc[test])
+        # Both slices came from the same normalized, schema-aligned frame;
+        # do not re-normalize test rows or coerce their already-shared dtypes.
+        support = _input_support_aligned(features.iloc[train], features.iloc[test])
         support["reference"] = "outer_training_features_before_imputation"
         folds.append({
             "fold": fold,

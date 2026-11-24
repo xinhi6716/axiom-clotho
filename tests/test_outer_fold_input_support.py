@@ -24,6 +24,23 @@ class OuterSupportTests(unittest.TestCase):
             self.assertEqual(fold['flagged_row_fraction'],expected['rows_with_any_flag']/len(test))
         self.assertEqual(sum(f['input_support']['n_prediction_rows'] for f in out['folds']),18)
 
+    def test_normalize_once_without_changing_nullable_and_category_support(self):
+        X, groups = self.fixture()
+        X["x"] = pd.Series(range(len(X)), dtype="Int64")
+        first_test = next(GroupKFold(3, 4).split(X, groups=groups))[1]
+        X.loc[first_test, "x"] = pd.NA
+        X["kind"] = pd.Categorical(["a", None, "__GROUPBENCH_MISSING__"] * 6)
+        before = X.copy(deep=True)
+        normalized = validate_features(X)
+        with patch("groupbench.data.validate_features", wraps=validate_features) as normalize:
+            report = outer_fold_input_support(X, groups, outer_splits=3, random_state=4)
+        normalize.assert_called_once_with(X)
+        for fold, (train, test) in zip(report["folds"], GroupKFold(3, 4).split(X, groups=groups)):
+            expected = prediction_input_support(normalized.iloc[train], normalized.iloc[test])
+            expected["reference"] = "outer_training_features_before_imputation"
+            self.assertEqual(fold["input_support"], expected)
+        pd.testing.assert_frame_equal(X, before)
+
     def test_extremes_local_reference_no_query_expansion(self):
         # Derive prospective domains from the actual splitter, not target values.
         g=np.repeat(['a','b','c','d','e','f'],2);X=pd.DataFrame({'x':np.zeros(12)})
