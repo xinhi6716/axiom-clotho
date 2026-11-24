@@ -152,6 +152,16 @@ class ObservedHistoryTests(unittest.TestCase):
         p = pred.copy(); p['prediction'] = 1e-200
         with self.assertRaises(ValueError): self.run_case(bad, pred=p)
 
+    def test_finite_continuation_when_doubling_would_overflow(self):
+        origins = pd.DataFrame({'trace_id': ['a'], 'target_index': [2]})
+        for level in (2.0**1023, -2.0**1023, np.finfo(np.float64).max):
+            obs = pd.DataFrame({'trace_id': ['a'] * 3, 'timestamp': [0, 1, 2],
+                                'value': [level] * 3})
+            with self.subTest(level=level):
+                result = self.run_case(obs, origins, origins.assign(prediction=level))
+                self.assertEqual(result.predictions.index_continuation.tolist(), [level])
+                self.assertEqual(result.summary['models']['index_continuation']['overall']['mae'], 0.0)
+
     def test_constant_targets_null_r2_and_no_mutation(self):
         obs, origins, pred = self.fixture()
         obs['value'] = 4.; pred['prediction'] = 4.
