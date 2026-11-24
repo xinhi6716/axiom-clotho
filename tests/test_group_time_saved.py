@@ -1555,17 +1555,21 @@ class SeparationSideEffectsAndCompatibilityTests(SavedFixtureTestCase):
                      "write_group_forward_evaluation_bundle", "validate_group_forward_evaluation_bundle"):
             self.assertIs(getattr(groupbench, name), getattr(saved, name))
         self.assertEqual(package_source.SOURCE_FILES, tuple(sorted(package_source.SOURCE_FILES)))
-        self.assertEqual(len(package_source.SOURCE_FILES), 39)
-        self.assertEqual(set(package_source.SOURCE_FILES), set(HISTORIC_37_FILES) | {"group_time_saved.py", "process_contract.py"})
+        self.assertEqual(len(package_source.SOURCE_FILES), 40)
+        self.assertEqual(
+            set(package_source.SOURCE_FILES),
+            set(HISTORIC_37_FILES) | {"group_time_saved.py", "process_contract.py", "group_time_lineage.py"},
+        )
         self.assertEqual(Path(saved.__file__).resolve().parent, Path(groupbench.__file__).resolve().parent)
 
     def test_historic_source_maps_are_retained_without_current_source_observation(self):
         # Full exact 28--37 legacy memberships and source-absent legacy records
         # are exercised in the historical source fixture module. These are
         # additional saved-temporal examples, not regenerated fitted results.
-        for count in range(28, 38):
+        historical = HISTORIC_37_FILES + ("group_time_saved.py", "process_contract.py")
+        for count in range(28, 40):
             document = deepcopy(self.document)
-            document["environment"]["package_source"] = source_declaration(HISTORIC_37_FILES[:count])
+            document["environment"]["package_source"] = source_declaration(historical[:count])
             rebind(document)
             directory = self.install(document)
             before = (directory / "temporal_result.json").read_bytes()
