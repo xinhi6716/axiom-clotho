@@ -362,16 +362,19 @@ def duplicate_diagnostics(X: pd.DataFrame, y: np.ndarray, groups: np.ndarray) ->
     values = X.copy()
     values.columns = list(range(X.shape[1]))
     values[X.shape[1]] = y
-    duplicated = values.duplicated(keep=False).to_numpy()
     # pandas' groupby compares actual values; missing feature values form a
     # shared category here, rather than making an otherwise duplicate vanish.
     codes = values.groupby(list(values.columns), dropna=False, sort=False).ngroup().to_numpy()
+    # The same codes also count within-group or across-group duplicates;
+    # a second pass over the full feature/target columns is unnecessary.
+    population = np.bincount(codes)
+    n_duplicate_rows = int(population[population > 1].sum())
     pairs = pd.DataFrame({"signature": codes, "group": groups})
     group_counts = pairs.groupby("signature")["group"].nunique()
     cross_signatures = group_counts[group_counts > 1].index
     across = pairs["signature"].isin(cross_signatures).to_numpy()
     return {
-        "identical_feature_target_rows": int(duplicated.sum()),
+        "identical_feature_target_rows": n_duplicate_rows,
         "identical_feature_target_rows_across_groups": int(across.sum()),
         "cross_group_duplicate_patterns": len(cross_signatures),
         "action": "diagnostic_only_no_rows_removed",
