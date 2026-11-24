@@ -25,3 +25,5 @@ pub mod measurement;
 pub mod rram;
 
 pub mod saved_comparison;
+
+pub mod group_max_calibration;
