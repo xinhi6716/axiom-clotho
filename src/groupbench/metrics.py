@@ -180,6 +180,72 @@ def _exact_paired_number(value):
     return Fraction.from_float(converted)
 
 
+def paired_mae_missing_bounds(rows, *, expected_roster):
+    """Bound the full equal-row B-minus-A MAE on a frozen paired roster.
+
+    Supply (row_id, target_or_none, forecast_a, forecast_b) tuples and an
+    independently declared, nonempty roster of unique row IDs. Row and roster
+    order are irrelevant; both forecasts are required even if truth is None.
+    Numeric inputs follow the finite built-in binary64 contract. Exact means
+    and endpoints are returned as Fraction values for those input numbers,
+    not as rounded binary64 values. The available-case mean is None when
+    no target is observed.
+
+    By the reverse triangle inequality a missing row contributes between
+    −|a−b| and |a−b|, attained at y=b and y=a respectively. Since missing
+    outcomes are unrestricted across rows, averaging these contributions
+    gives sharp bounds. This is not imputation, an uncertainty interval, a
+    missingness assumption, or a claim about physical independence.
+    """
+    if not _bounded_paired_sequence(rows):
+        raise ValueError("Rows must be a nonempty bounded list or tuple.")
+    if (type(expected_roster) not in (list, tuple, set, frozenset)
+            or not 1 <= len(expected_roster) <= 20_000):
+        raise ValueError("Expected roster must be a nonempty bounded collection of row IDs.")
+
+    def valid_id(value):
+        return _paired_label(value) and not any(0xD800 <= ord(c) <= 0xDFFF for c in value)
+
+    expected = set()
+    for row_id in expected_roster:
+        if not valid_id(row_id):
+            raise ValueError("Invalid expected roster row ID.")
+        if row_id in expected:
+            raise ValueError("Duplicate expected roster row ID.")
+        expected.add(row_id)
+
+    ids = set()
+    observed_count = 0
+    observed_sum, missing_radius = Fraction(), Fraction()
+    for row in rows:
+        if type(row) is not tuple or len(row) != 4 or not valid_id(row[0]):
+            raise ValueError("Each row must provide a row ID, target or None, and both forecasts.")
+        row_id, target, pred_a, pred_b = row
+        if row_id in ids:
+            raise ValueError("Duplicate paired row ID.")
+        if row_id not in expected:
+            raise ValueError("Unexpected paired row ID outside the expected roster.")
+        ids.add(row_id)
+        a, b = map(_exact_paired_number, (pred_a, pred_b))
+        if target is None:
+            missing_radius += abs(a - b)
+        else:
+            y = _exact_paired_number(target)
+            observed_count += 1
+            observed_sum += abs(b - y) - abs(a - y)
+    if ids != expected:
+        raise ValueError("Incomplete expected roster: missing paired rows.")
+    total = len(expected)
+    return {
+        "n_rows": total,
+        "n_observed": observed_count,
+        "n_missing": total - observed_count,
+        "available_mae_b_minus_a": observed_sum / observed_count if observed_count else None,
+        "full_mae_b_minus_a_lower": (observed_sum - missing_radius) / total,
+        "full_mae_b_minus_a_upper": (observed_sum + missing_radius) / total,
+    }
+
+
 def scheduled_phase_paired_mae(rows, *, expected_roster, expected_cells, phase_weights):
     """Compare aligned forecasts on a predeclared device × phase panel.
 
