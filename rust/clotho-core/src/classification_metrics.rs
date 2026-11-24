@@ -25,6 +25,8 @@ pub enum ClassificationMetricsError {
     InvalidProbability,
     /// The threshold is not finite or is outside the closed unit interval.
     InvalidThreshold,
+    /// At least one probability error is nonzero, but its mean square rounded to zero.
+    BrierUnderflow,
 }
 
 impl fmt::Display for ClassificationMetricsError {
@@ -36,6 +38,9 @@ impl fmt::Display for ClassificationMetricsError {
             Self::InvalidProbability => "Probabilities must be finite and between zero and one.",
             Self::InvalidThreshold => {
                 "The decision threshold must be finite and between zero and one."
+            }
+            Self::BrierUnderflow => {
+                "Brier score underflowed to zero despite a nonzero probability error."
             }
         })
     }
@@ -67,6 +72,7 @@ pub struct BinaryMetrics {
     /// therefore have a small positive log loss.
     pub log_loss: f64,
     /// Mean squared error of the original, unclipped probabilities.
+    /// A returned zero requires all probabilities to equal their labels.
     pub brier: f64,
     /// Area under the receiver operating characteristic curve. Tied scores
     /// receive average ranks (equivalently, half credit for a tied pair).
@@ -99,7 +105,10 @@ pub struct BinaryMetrics {
 ///
 /// The function uses `O(n log n)` time and `O(n)` additional storage for
 /// average-rank ROC AUC. Metric sums use compensated addition. No inputs are
-/// changed, and errors do not include raw row values or indices.
+/// changed, and errors do not include raw row values or indices. A Brier score
+/// that rounds to zero despite a nonzero error returns
+/// [`ClassificationMetricsError::BrierUnderflow`]; positive scores, including
+/// subnormals, retain binary64 rounding.
 pub fn binary_metrics(
     y_true: &[f64],
     probability: &[f64],
@@ -151,6 +160,10 @@ pub fn binary_metrics(
     let n_positive = tp + fn_;
     let n_negative = tn + fp;
     let count = y_true.len() as f64;
+    let brier = brier_sum.total() / count;
+    if brier == 0.0 && y_true.iter().zip(probability).any(|(label, p)| label != p) {
+        return Err(ClassificationMetricsError::BrierUnderflow);
+    }
     let recall = ratio(tp as f64, n_positive as f64);
     let specificity = ratio(tn as f64, n_negative as f64);
     let balanced_accuracy = recall
@@ -166,7 +179,7 @@ pub fn binary_metrics(
         recall,
         f1: ratio(twice_tp, twice_tp + fp as f64 + fn_ as f64),
         log_loss: loss_sum.total() / count,
-        brier: brier_sum.total() / count,
+        brier,
         roc_auc: ranked_auc(y_true, probability, n_positive, n_negative),
         n_positive,
         n_negative,
@@ -244,5 +257,33 @@ impl CompensatedSum {
 
     fn total(self) -> f64 {
         self.sum + self.correction
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn brier_zero_distinguishes_perfect_predictions_from_underflow() {
+        for (labels, probabilities) in [
+            (&[0.0][..], &[1e-200][..]),
+            (&[0.0, 1.0, 0.0][..], &[2.3e-162, 1.0, 0.0][..]),
+        ] {
+            assert_eq!(
+                binary_metrics(labels, probabilities, 0.5),
+                Err(ClassificationMetricsError::BrierUnderflow)
+            );
+        }
+
+        let perfect = binary_metrics(&[0.0, 1.0, 0.0], &[-0.0, 1.0, 0.0], 0.5).unwrap();
+        assert_eq!(perfect.brier.to_bits(), 0);
+        assert!(perfect.log_loss > 0.0); // Only log loss clips the endpoints.
+
+        let tiny = binary_metrics(&[0.0], &[2.3e-162], 0.5).unwrap();
+        assert_eq!(tiny.brier.to_bits(), 1);
+
+        let mixed = binary_metrics(&[0.0, 1.0], &[1e-200, 0.5], 0.5).unwrap();
+        assert_eq!(mixed.brier, 0.125);
     }
 }
