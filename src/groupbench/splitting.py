@@ -58,11 +58,38 @@ class GroupKFold:
         return self.n_splits
 
 
+def _audit_positions(indices, n_rows: int, name: str):
+    # NumPy supports boolean masks and negative indexing; neither describes the
+    # literal row positions declared by a split. Reject them before indexing.
+    if np.ma.isMaskedArray(indices) or (
+        isinstance(indices, (list, tuple))
+        and any(isinstance(i, (bool, np.bool_)) or not isinstance(i, Integral) for i in indices)
+    ):
+        raise ValueError(f"Invalid split: {name} requires one-dimensional integer row positions.")
+    positions = np.asarray(indices)
+    if positions.ndim != 1 or positions.dtype.kind not in "iu":
+        raise ValueError(f"Invalid split: {name} requires one-dimensional integer row positions.")
+    if not positions.size:
+        raise ValueError(f"Invalid split: {name} requires a nonempty partition.")
+    # Check the original unsigned/signed values before converting to np.intp;
+    # a too-large uint64 otherwise wraps to a negative NumPy index.
+    if np.any(positions < 0) or np.any(positions >= n_rows):
+        raise ValueError(f"Invalid split: {name} positions outside group row bounds.")
+    positions = positions.astype(np.intp, copy=False)
+    roster = set(positions)
+    if len(roster) != positions.size:
+        raise ValueError(f"Invalid split: {name} contains duplicate row positions.")
+    return positions, roster
+
+
 def audit_split(train: np.ndarray, test: np.ndarray, groups: np.ndarray) -> dict:
+    """Report counts for disjoint positional subsets without requiring full coverage."""
+    train, train_roster = _audit_positions(train, len(groups), "training")
+    test, test_roster = _audit_positions(test, len(groups), "validation")
     train_groups = set(groups[train])
     test_groups = set(groups[test])
     overlap = train_groups & test_groups
-    if overlap or set(train) & set(test):
+    if overlap or train_roster & test_roster:
         raise ValueError("Invalid split: training and validation observations overlap.")
     return {
         "train_rows": len(train), "test_rows": len(test),
