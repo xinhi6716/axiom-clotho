@@ -27,6 +27,7 @@ _FEATURE_ROLES = frozenset({"process_setting", "material_identity", "postprocess
 _AVAILABILITY = frozenset({"before_process", "after_process", "unknown"})
 _LENGTH_UNITS = {"angstrom": 1, "nm": 10}
 _GROWTH_UNITS = {"angstrom/cycle": 1, "nm/cycle": 10}
+_UNKNOWN_IDENTITIES = frozenset({"unknown", "unreported", "not_reported"})
 _TOKEN = QuantityDeclaration("scalar", "decimal_token", "literal", "caller_declared", "dimensionless", "1")
 
 
@@ -40,7 +41,7 @@ def _member(value, choices):
 
 
 def _identity(value):
-    return _text(value) and value.casefold() not in {"unknown", "unreported", "not_reported"}
+    return _text(value) and value.casefold() not in _UNKNOWN_IDENTITIES
 
 
 def _fraction(token):
@@ -166,11 +167,15 @@ def preview_ald_contract(records, *, contract):
             valid_ids[field] = _identity(getattr(record, field))
             if not valid_ids[field]:
                 add("missing_or_invalid_provenance", field, row=position)
+        independence_key = {}
         for field in ("batch_id", "replicate_id"):
             value = getattr(record, field)
-            if value is None or (type(value) is str and value.casefold() in {"unknown", "unreported", "not_reported"}):
+            if value is None or (type(value) is str and value.casefold() in _UNKNOWN_IDENTITIES):
                 add("unknown_independence_metadata", field, row=position)
-            elif not _identity(value):
+                independence_key[field] = None
+            elif _identity(value):
+                independence_key[field] = value
+            else:
                 add("invalid_independence_metadata", field, row=position)
         if _member(record.observation_kind, {"simulation", "theory", "unknown"}):
             add("nonexperimental_or_unknown_observation", "observation_kind", row=position)
@@ -245,9 +250,10 @@ def preview_ald_contract(records, *, contract):
         # Locators and source versions do not create a new physical sample.
         # Unknown replicates share a key and remain explicitly flagged above.
         if (valid_ids["source_id"] and valid_ids["condition_id"]
-                and (record.batch_id is None or _identity(record.batch_id))
-                and (record.replicate_id is None or _identity(record.replicate_id))):
-            identities[(record.source_id, record.condition_id, record.batch_id, record.replicate_id)].append(position)
+                and len(independence_key) == 2):
+            key = (record.source_id, record.condition_id,
+                   independence_key["batch_id"], independence_key["replicate_id"])
+            identities[key].append(position)
     for positions in identities.values():
         if len(positions) > 1:
             for position in positions:

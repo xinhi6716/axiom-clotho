@@ -169,6 +169,22 @@ class ProcessContractTests(unittest.TestCase):
         self.assertEqual(preview_ald_contract([first, replace(first, batch_id="batch-2")], contract=contract())["issue_count"], 0)
         self.assertEqual(preview_ald_contract([first, replace(first, replicate_id="sample-2")], contract=contract())["issue_count"], 0)
 
+    def test_recognized_unknown_independence_keys_share_a_diagnostic_bucket(self):
+        first = observation(batch_id=None, replicate_id=None)
+        rows = [first, replace(first, batch_id="Unreported", replicate_id="unknown"),
+                replace(first, batch_id="not_reported", replicate_id="UNREPORTED"),
+                replace(first, batch_id="batch-2"), replace(first, replicate_id="sample-2"),
+                replace(first, batch_id="", replicate_id="unknown")]
+        before = deepcopy(rows)
+        result = preview_ald_contract(rows, contract=contract())
+        repeated = [issue["row_position"] for issue in result["issues"]
+                    if issue["code"] == "repeated_declared_observation_identity"]
+        self.assertEqual(repeated, [0, 1, 2])
+        self.assertEqual(result["issue_counts"]["unknown_independence_metadata"], 9)
+        self.assertEqual(result["issue_counts"]["invalid_independence_metadata"], 1)
+        self.assertEqual(result["training_admission"], "not_performed")
+        self.assertEqual(rows, before)
+
     def test_reports_do_not_echo_values_identifiers_or_feature_names(self):
         private = "SYNTHETIC_PRIVATE_SENTINEL"
         row = observation(source_id=private, source_locator=private, temperature=private,

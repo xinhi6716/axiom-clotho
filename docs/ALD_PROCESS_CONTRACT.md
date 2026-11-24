@@ -109,7 +109,10 @@ performed.
 Keep unknown `batch_id` and `replicate_id` as `None`, not an invented zero or
 invented group. Unknown declarations are flagged. The helper also flags every
 row in an exact repeated `(source_id, condition_id, batch_id, replicate_id)`
-key. Different source versions or locators do not create another observation;
+key, treating the recognized unknown strings as `None` for this check only.
+The input declarations remain unchanged, and a collision with unknown fields
+does not establish that the rows describe the same physical observation.
+Different source versions or locators do not create another observation;
 replicate names are scoped to their batch. This limited collision check cannot
 detect different identifiers for the same sample, reused data across papers,
 or prove that different keys are independent. It does not choose split groups.
