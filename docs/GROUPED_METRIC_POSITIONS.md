@@ -25,6 +25,12 @@ No measurements, model weights or remote services are downloaded. No result
 bundle or other file is written; JSON is printed to stdout. Shell redirection,
 if used, is the caller's write operation.
 
+The 100 query feature rows are copied from the beginning of the synthetic
+training feature table before target and group columns are attached. This is an
+intentional comparison of two processing paths on identical inputs, not a
+held-out prediction study. Do not use the query outputs to assess accuracy,
+leakage controls or generalization to new groups.
+
 Each case warms both paths once, then alternates their order within each pair.
 At nine repetitions this is 20 calls per case, with the current plan reporting
 14 pipeline fits per call. Allowed repetitions are 1 to 21; these counts are not
