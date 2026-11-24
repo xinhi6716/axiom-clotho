@@ -168,7 +168,7 @@ def _paired_label(value):
             and bool(value.strip()) and value == value.strip())
 
 
-def _exact_paired_number(value):
+def _validated_paired_float(value):
     if type(value) not in (int, float):
         raise ValueError("Loss inputs and weights must be real finite numbers.")
     try:
@@ -177,7 +177,21 @@ def _exact_paired_number(value):
         raise ValueError("Loss input or weight is outside binary64 range.") from None
     if not math.isfinite(converted) or (type(value) is int and int(converted) != value):
         raise ValueError("Loss input or weight must be representable as binary64.")
-    return Fraction.from_float(converted)
+    return converted
+
+
+def _exact_paired_number(value):
+    return Fraction.from_float(_validated_paired_float(value))
+
+
+# Every finite binary64 value is an integer multiple of this quantum.
+_BINARY64_QUANTUM_EXP = 1074
+_BINARY64_QUANTUM_DENOMINATOR = 1 << _BINARY64_QUANTUM_EXP
+
+
+def _paired_binary64_units(value):
+    numerator, denominator = _validated_paired_float(value).as_integer_ratio()
+    return numerator << (_BINARY64_QUANTUM_EXP + 1 - denominator.bit_length())
 
 
 def paired_mae_missing_bounds(rows, *, expected_roster):
@@ -216,7 +230,9 @@ def paired_mae_missing_bounds(rows, *, expected_roster):
 
     ids = set()
     observed_count = 0
-    observed_sum, missing_radius = Fraction(), Fraction()
+    # Accumulate dyadic sums in exact integer quantum units; construct only
+    # the final ratios rather than repeatedly reducing row-level Fractions.
+    observed_sum = missing_radius = 0
     for row in rows:
         if type(row) is not tuple or len(row) != 4 or not valid_id(row[0]):
             raise ValueError("Each row must provide a row ID, target or None, and both forecasts.")
@@ -226,23 +242,26 @@ def paired_mae_missing_bounds(rows, *, expected_roster):
         if row_id not in expected:
             raise ValueError("Unexpected paired row ID outside the expected roster.")
         ids.add(row_id)
-        a, b = map(_exact_paired_number, (pred_a, pred_b))
+        a, b = map(_paired_binary64_units, (pred_a, pred_b))
         if target is None:
             missing_radius += abs(a - b)
         else:
-            y = _exact_paired_number(target)
+            y = _paired_binary64_units(target)
             observed_count += 1
             observed_sum += abs(b - y) - abs(a - y)
     if ids != expected:
         raise ValueError("Incomplete expected roster: missing paired rows.")
     total = len(expected)
+    def mean(units, count):
+        return Fraction(units, count * _BINARY64_QUANTUM_DENOMINATOR)
+
     return {
         "n_rows": total,
         "n_observed": observed_count,
         "n_missing": total - observed_count,
-        "available_mae_b_minus_a": observed_sum / observed_count if observed_count else None,
-        "full_mae_b_minus_a_lower": (observed_sum - missing_radius) / total,
-        "full_mae_b_minus_a_upper": (observed_sum + missing_radius) / total,
+        "available_mae_b_minus_a": mean(observed_sum, observed_count) if observed_count else None,
+        "full_mae_b_minus_a_lower": mean(observed_sum - missing_radius, total),
+        "full_mae_b_minus_a_upper": mean(observed_sum + missing_radius, total),
     }
 
 

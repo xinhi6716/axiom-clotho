@@ -2,6 +2,7 @@
 from fractions import Fraction
 import math
 import unittest
+from unittest.mock import patch
 
 from groupbench.metrics import paired_mae_missing_bounds
 
@@ -48,6 +49,25 @@ class PairedMAEMissingBoundsTests(unittest.TestCase):
         self.assertIsInstance(a["available_mae_b_minus_a"], Fraction)
         b = paired_mae_missing_bounds([("a", None, huge, -huge)], expected_roster=["a"])
         self.assertEqual(b["full_mae_b_minus_a_upper"], Fraction.from_float(huge) * 2)
+
+    def test_accumulates_without_row_fractions_and_matches_independent_oracle(self):
+        scales = [math.ldexp(1., e) for e in (-1074, -600, -100, 0, 80, 500, 1023)]
+        rows = [(str(i), None if i % 3 == 0 else a, -a, b)
+                for i, (a, b) in enumerate((a, b) for a in scales for b in reversed(scales))]
+        observed, radii = [], []
+        for _, y, a, b in rows:
+            exact_a, exact_b = map(Fraction.from_float, (a, b))
+            if y is None:
+                radii.append(abs(exact_b - exact_a))
+            else:
+                truth = Fraction.from_float(y)
+                observed.append(abs(exact_b - truth) - abs(exact_a - truth))
+        observed_sum, radius = sum(observed), sum(radii)
+        with patch.object(Fraction, "from_float", side_effect=AssertionError("row Fraction conversion")):
+            result = paired_mae_missing_bounds(rows, expected_roster=[row[0] for row in rows])
+        self.assertEqual(result["available_mae_b_minus_a"], observed_sum / len(observed))
+        self.assertEqual(result["full_mae_b_minus_a_lower"], (observed_sum - radius) / len(rows))
+        self.assertEqual(result["full_mae_b_minus_a_upper"], (observed_sum + radius) / len(rows))
 
     def test_malformed_rosters_are_not_silently_rebuilt_from_available_rows(self):
         row = ("ok", 0, 0, 1)
