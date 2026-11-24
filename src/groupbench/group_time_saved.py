@@ -58,7 +58,7 @@ _CHECKED = (
     "Complete reconstructed declared temporal plan and partial test coverage.",
     "Fixed recipe, resource-limit and fit-count declarations.",
     "Tested row/group/window identities and finite observations/predictions.",
-    "Retained-prediction metrics within rel_tol=1e-10 and abs_tol=1e-12.",
+    "Retained-prediction metrics within rel_tol=1e-10 and abs_tol=1e-12; nonnegative error sign and zero/nonzero agreement.",
     "Plan/execution binding recomputation and saved source-map internal digest.",
 )
 _UNCHECKED = (
@@ -550,15 +550,24 @@ def _environment(environment):
         _reject("Saved source-map aggregate digest is inconsistent.")
 
 
-def _metric_equal(saved, expected):
+_NONNEGATIVE_ERROR_METRICS = frozenset({"mae", "rmse", "group_mae", "group_rmse", "worst_group_mae"})
+
+
+def _metric_equal(saved, expected, *, field=None):
     if type(expected) is float:
         _float_value(saved)
+        # An absolute tolerance must not turn a measured positive error into
+        # a claimed exact match or allow an impossible negative magnitude.
+        if field in _NONNEGATIVE_ERROR_METRICS and (
+            saved < 0.0 or (saved == 0.0) != (expected == 0.0)
+        ):
+            _reject("Saved error magnitude sign or zero disagrees with retained predictions.")
         if not math.isclose(saved, expected, rel_tol=1e-10, abs_tol=1e-12):
             _reject("Saved metric scores disagree with retained predictions.")
     elif type(expected) is dict:
         _keys(saved, expected.keys())
         for key in expected:
-            _metric_equal(saved[key], expected[key])
+            _metric_equal(saved[key], expected[key], field=key)
     elif type(expected) is list:
         _array(saved, len(expected), len(expected))
         for left, right in zip(saved, expected):

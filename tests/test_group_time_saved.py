@@ -898,6 +898,40 @@ class IndependentMetricTests(SavedFixtureTestCase):
         document["metrics"][0]["pooled"]["mae"] += 1e-5
         self.rejected_document(document)
 
+    def test_small_nonnegative_errors_cannot_become_zero_or_negative(self):
+        document = deepcopy(self.document)
+        for row in document["predictions"]:
+            row["observed"] = 0.0
+            row["prediction_dummy_mean"] = 3e-13
+            row["prediction_ridge_alpha_1"] = 3e-13
+        refresh_metrics(document)
+        self.assertEqual(validate(self.install(document)).n_tested_rows, 4)
+        for location, field in (
+            (("pooled",), "mae"), (("pooled",), "rmse"),
+            (("pooled",), "group_mae"), (("per_window", 0), "group_rmse"),
+            (("per_window", 1), "worst_group_mae"), (("per_group", 1), "rmse"),
+        ):
+            for replacement in (-3e-13, 0.0, -0.0):
+                changed = deepcopy(document)
+                put(changed, ("metrics", 0, *location, field), replacement)
+                with self.subTest(location=location, field=field, value=replacement):
+                    self.rejected_document(changed)
+        # Nonzero-to-nonzero rounding tolerance still applies; signed
+        # metrics retain their old near-zero behavior.
+        document["metrics"][0]["pooled"]["mae"] = 9e-13
+        document["metrics"][0]["pooled"]["bias"] = -3e-13
+        self.assertEqual(validate(self.install(document)).n_recipes, 2)
+
+    def test_recomputed_zero_error_retains_zero_without_requiring_zero_sign(self):
+        perfect = invented_document(zero=True)
+        reported = perfect["metrics"][0]["pooled"]
+        reported["mae"] = -0.0
+        self.assertEqual(validate(self.install(perfect)).n_tested_rows, 4)
+        for replacement in (3e-13, -3e-13):
+            with self.subTest(value=replacement):
+                reported["mae"] = replacement
+                self.rejected_document(perfect)
+
     def test_checked_metric_arithmetic_overflow_and_underflow_reject(self):
         for observed, prediction in ((1e308, -1e308), (1e-200, 0.0)):
             document = deepcopy(self.document)

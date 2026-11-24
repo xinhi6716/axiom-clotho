@@ -110,7 +110,11 @@ exact retained bytes, not a reserialization.
    tested-row encounter order, preserving typed IDs. Group RMSE is the arithmetic
    mean of group RMSEs, not pooled RMSE. Constant/singleton target partitions have
    null R². Counts, identities, order, keys, and nulls match exactly; finite score
-   comparisons use `math.isclose(rel_tol=1e-10, abs_tol=1e-12)`. Checked arithmetic
+   comparisons use `math.isclose(rel_tol=1e-10, abs_tol=1e-12)`. MAE, RMSE,
+   group MAE, group RMSE and worst-group MAE must additionally be nonnegative,
+   and agree with recomputation on whether the error is exactly zero. Positive
+   and negative floating-point zero are both treated as zero here; signed
+   bias and R² retain their existing tolerance. Checked arithmetic
    overflow/underflow rejects. The tolerance is not a confidence interval or a
    guarantee of detecting every edit.
 6. **Internal declaration bindings.** Recompute `plan_sha256` and
