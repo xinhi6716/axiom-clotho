@@ -4,6 +4,7 @@ from contextlib import ExitStack
 from datetime import date, timedelta
 import unittest
 from unittest.mock import patch
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -43,6 +44,20 @@ class TargetMissingnessTests(unittest.TestCase):
             np.testing.assert_array_equal(values.mask, original_mask)
         with self.assertRaisesRegex(ValueError, "missing targets"):
             validate_target(np.ma.array([1.0, 2.0], mask=True), 2)
+
+    def test_masked_scalar_labels_embedded_in_object_containers(self):
+        hidden = np.ma.array(9, mask=True)
+        for values in ([1, hidden], (1, hidden),
+                       np.array([1, hidden], dtype=object),
+                       pd.Series([1, hidden], dtype=object)):
+            with self.subTest(container=type(values).__name__):
+                with warnings.catch_warnings(record=True) as emitted:
+                    warnings.simplefilter("always")
+                    with self.assertRaisesRegex(ValueError, "missing targets"):
+                        validate_target(values, 2)
+                self.assertEqual(emitted, [])
+        self.assertTrue(hidden.mask)
+        self.assertEqual(hidden.data.item(), 9)
 
     def test_unmasked_arrays_and_existing_numeric_inputs_remain_accepted(self):
         values = ([1, 2], ["1", "2"], np.array([1, 2], dtype=np.int64),

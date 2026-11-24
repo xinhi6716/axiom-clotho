@@ -160,12 +160,11 @@ def _validate_target_precision(original):
 
 
 def validate_target(y, n_rows: int) -> np.ndarray:
-    # np.asarray discards MaskedArray masks and exposes the hidden payload.
-    # A masked label is missing even when its stored value happens to be finite.
+    missing = ("The target must have one finite numeric value per row; "
+               "missing targets are not dropped silently.")
+    # NumPy may discard masks when building a numeric array.
     if np.ma.isMaskedArray(y) and np.ma.getmaskarray(y).any():
-        raise ValueError("The target must have one finite numeric value per row; missing targets are not dropped silently.")
-    if np.iscomplexobj(y):
-        raise ValueError("Complex target values are not supported.")
+        raise ValueError(missing)
     try:
         # Do not promote a mixed Python integer/float sequence before checking
         # each scalar's precision. Existing arrays already have explicit dtypes.
@@ -173,6 +172,14 @@ def validate_target(y, n_rows: int) -> np.ndarray:
                     else np.asarray(y, dtype=object))
     except (TypeError, ValueError, OverflowError) as exc:
         raise ValueError("The target must be a one-dimensional, finite numeric vector.") from exc
+    if original.ndim != 1 or len(original) != n_rows:
+        raise ValueError(missing)
+    # Use the original dtype/object scalars rather than np.iscomplexobj(y),
+    # which can implicitly coerce a sequence and convert masked scalars.
+    if original.dtype.kind == "O" and any(
+            np.ma.isMaskedArray(value) and np.ma.getmaskarray(value).any()
+            for value in original):
+        raise ValueError(missing)
     # NumPy converts datetime/timedelta values to unit-dependent numbers,
     # including NaT to a finite minimum integer. Never infer target units
     # or mistake that missing-value sentinel for an observed outcome.
@@ -182,8 +189,8 @@ def validate_target(y, n_rows: int) -> np.ndarray:
         raise ValueError("Datetime and timedelta targets are not supported; convert observed outcomes to explicit numeric units and preserve missing targets.")
     # Object containers can hide NumPy complex scalars from np.iscomplexobj;
     # float(complex_numpy_scalar) can discard their imaginary part with a warning.
-    if original.dtype.kind == "O" and any(isinstance(value, (complex, np.complexfloating))
-                                          for value in original.flat):
+    if original.dtype.kind == "c" or (original.dtype.kind == "O" and any(
+            isinstance(value, (complex, np.complexfloating)) for value in original)):
         raise ValueError("Complex target values are not supported.")
     _validate_target_precision(original)
     try:
@@ -191,7 +198,7 @@ def validate_target(y, n_rows: int) -> np.ndarray:
     except (TypeError, ValueError, OverflowError) as exc:
         raise ValueError("The target must be a one-dimensional, finite numeric vector.") from exc
     if a.ndim != 1 or len(a) != n_rows or not np.isfinite(a).all():
-        raise ValueError("The target must have one finite numeric value per row; missing targets are not dropped silently.")
+        raise ValueError(missing)
     return a
 
 
