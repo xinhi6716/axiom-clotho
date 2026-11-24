@@ -31,10 +31,10 @@ pub(super) fn run(opts: &HashMap<String, String>) -> Result<()> {
 }
 
 // csv::Reader deliberately tolerates malformed quoting and skips empty records.
-// This command must not silently repair an ID or discard a record. Validate the
-// bounded byte buffer before parsing it, without changing bytes used for hashing.
-fn validate_csv(bytes: &[u8]) -> Result<()> {
-    std::str::from_utf8(bytes).map_err(|_| "Observed workflow CSV must be valid UTF-8")?;
+// Saved-series producers must not silently repair an ID or discard a record.
+// Validate the bounded buffer without changing the bytes used for hashing.
+pub(super) fn validate_csv(bytes: &[u8]) -> Result<()> {
+    std::str::from_utf8(bytes).map_err(|_| "Saved-series CSV must be valid UTF-8")?;
     let bytes = bytes.strip_prefix(&[0xef, 0xbb, 0xbf]).unwrap_or(bytes);
     #[derive(Clone, Copy)]
     enum State { Start, Plain, Quoted, Closed }
@@ -52,7 +52,7 @@ fn validate_csv(bytes: &[u8]) -> Result<()> {
         }
         if byte == b'\n' || byte == b'\r' {
             if !record_started {
-                return Err("Blank CSV records are not allowed in the observed workflow".into());
+                return Err("Blank CSV records are not allowed in saved-series CSV".into());
             }
             if byte == b'\r' {
                 if bytes.get(i + 1) != Some(&b'\n') {
@@ -69,7 +69,7 @@ fn validate_csv(bytes: &[u8]) -> Result<()> {
             state = match (state, byte) {
                 (State::Start, b'"') | (State::Closed, b'"') => State::Quoted,
                 (State::Plain, b'"') | (State::Closed, _) => {
-                    return Err("Malformed CSV quoting in observed workflow".into());
+                    return Err("Malformed CSV quoting in saved-series CSV".into());
                 }
                 _ => State::Plain,
             };
@@ -78,7 +78,7 @@ fn validate_csv(bytes: &[u8]) -> Result<()> {
         i += 1;
     }
     if matches!(state, State::Quoted) {
-        return Err("Unclosed CSV quote in observed workflow".into());
+        return Err("Unclosed CSV quote in saved-series CSV".into());
     }
     Ok(())
 }

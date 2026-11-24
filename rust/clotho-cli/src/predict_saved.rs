@@ -1,5 +1,5 @@
 //! Explicit regression export into the existing saved-series v2 protocol.
-use super::{read_bounded, Artifact, Result, Table};
+use super::{observed_command::validate_csv, read_bounded, Artifact, Result, Table};
 use clotho_core::saved_comparison::MAX_DECLARATION_BYTES;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
@@ -120,10 +120,17 @@ impl Export {
                     .ok_or_else(|| "Observed IDs must match the complete query roster".into())
             })
             .collect::<Result<Vec<f64>>>()?;
-        export.bytes(&values, query_bytes)
+        export.series_bytes(&values, query_bytes)
     }
 
     pub(super) fn bytes(&self, predictions: &[f64], query: &[u8]) -> Result<Vec<u8>> {
+        // Prediction still uses the legacy reader internally. Refuse to publish
+        // a bound v2 artifact if those exact bytes have ambiguous row syntax.
+        validate_csv(query)?;
+        self.series_bytes(predictions, query)
+    }
+
+    fn series_bytes(&self, predictions: &[f64], query: &[u8]) -> Result<Vec<u8>> {
         if predictions.len() != self.row_ids.len() || predictions.iter().any(|v| !v.is_finite()) {
             return Err("Invalid saved prediction values".into());
         }

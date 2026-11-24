@@ -178,3 +178,41 @@ fn mixed_regression_exports_the_same_predictions_as_legacy_csv() {
     ]).status.success());
     assert_eq!(fs::read_to_string(w.0.join("legacy.csv")).unwrap(), "row_index,prediction\n0,2\n1,2\n");
 }
+
+#[test]
+fn v2_export_refuses_lossy_query_syntax_without_changing_legacy_csv() {
+    for query in [
+        "id,x\n\"a\"b,5\nc,6\n",
+        "id,x\na,5\n\nc,6\n",
+    ] {
+        let w = setup();
+        w.write("query.csv", query);
+        let legacy = w.run(&[
+            "predict", "--artifact", "model.json", "--csv", "query.csv", "--out",
+            "legacy.csv",
+        ]);
+        assert!(legacy.status.success(), "{legacy:?}");
+        let saved = w.run(&ARGS);
+        assert_eq!(saved.status.code(), Some(2), "{saved:?}");
+        assert!(!w.0.join("saved.json").exists());
+    }
+}
+
+#[test]
+fn v2_export_keeps_original_bytes_of_unambiguous_quoted_query() {
+    use sha2::{Digest, Sha256};
+
+    let w = setup();
+    let query = "\u{feff}id,x\r\n\"a,b\",5\r\n\"φ\"\"q\",6";
+    w.write("query.csv", query);
+    let saved = w.run(&ARGS);
+    assert!(saved.status.success(), "{saved:?}");
+    let value: serde_json::Value =
+        serde_json::from_slice(&fs::read(w.0.join("saved.json")).unwrap()).unwrap();
+    assert_eq!(value["row_ids"], serde_json::json!(["a,b", "φ\"q"]));
+    assert_eq!(value["values"], serde_json::json!([2.0, 2.0]));
+    assert_eq!(
+        value["query_sha256"],
+        format!("{:x}", Sha256::digest(query.as_bytes()))
+    );
+}

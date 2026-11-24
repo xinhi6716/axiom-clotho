@@ -226,6 +226,11 @@ fields and can be passed as `--model` or `--baseline` to `compare-saved`.
 
 The query is read once: the exact byte buffer parsed for prediction is also
 SHA-256 hashed, so there is no second-read race between prediction and digest.
+Before v2 output is published, that buffer must also pass the strict CSV syntax
+checks described below for the label-separated workflow. Malformed quoting,
+blank records, and unsupported record endings cannot silently become a bound
+series. The check does not change the bytes being hashed. A rejected export can
+have computed predictions internally; it creates no output.
 Only artifact-selected feature columns feed the estimator. Other query columns,
 including a target column if present, are not treated as observations or used
 for prediction. The digest nevertheless covers the entire file, including those
@@ -295,7 +300,7 @@ labels file is not authenticated or hashed into a new provenance protocol. The
 existing v2 format, comparison boundaries and predict/compare defaults remain
 unchanged.
 
-For this command only, both CSV byte buffers undergo strict lexical validation
+For this command, both CSV byte buffers undergo strict lexical validation
 before the existing parser runs. Inputs must be valid UTF-8; one leading UTF-8
 BOM is accepted as the parser's header marker, but remains included in the query
 digest. Record endings must be LF or CRLF (an EOF without a final terminator is
@@ -305,7 +310,8 @@ quotes must be doubled, and a closing quote must be followed immediately by a
 comma, record ending or EOF. Quoted commas and quoted UTF-8 IDs are supported.
 Quoted field content is decoded by the existing CSV parser; embedded line breaks
 remain content and are subsequently rejected in IDs by the control-character
-rule. No whitespace is trimmed. Legacy predict/compare parsing is unchanged.
+rule. No whitespace is trimmed. The v2 prediction producer uses the same syntax
+check before publishing; legacy prediction CSV and byte-only comparison are unchanged.
 
 ## Pool caller-supplied scalar comparison reports
 
