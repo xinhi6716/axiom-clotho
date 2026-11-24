@@ -38,10 +38,17 @@ def render_html(result) -> str:
         name: esc(name) + (' <small class="entry-label">' + t('Selection procedure', '模型選擇程序') + '</small>' if name == "selected" else "")
         for name, _ in ranking
     }
-    bars = "".join(
-        f'<div class="bar-row"><span>{labels[name]}</span><div class="track"><div class="bar {"primary" if name == "selected" else ""}" style="width:{max(1, 100 * value["overall"]["group_mae"] / max_mae):.2f}%"></div></div><b>{_number(value["overall"]["group_mae"])}</b></div>'
-        for name, value in ranking
-    )
+    def bar_row(name, model):
+        group_mae = model["overall"]["group_mae"]
+        fill = ""
+        if group_mae > 0:
+            width = max(1, 100 * group_mae / max_mae)
+            primary_class = "primary" if name == "selected" else ""
+            fill = f'<div class="bar {primary_class}" style="width:{width:.2f}%"></div>'
+        return (f'<div class="bar-row"><span>{labels[name]}</span>'
+                f'<div class="track">{fill}</div><b>{_number(group_mae)}</b></div>')
+
+    bars = "".join(bar_row(name, model) for name, model in ranking)
     table = "".join(
         f'<tr><th scope="row">{esc(name)}</th><td>{_number(value["overall"]["group_mae"])}</td><td>{_number(value["overall"]["mae"])}</td><td>{_number(value["overall"]["rmse"])}</td><td>{_number(value["overall"]["r2"])}</td><td>{_number(value["overall"]["worst_group_mae"])}</td></tr>'
         for name, value in ranking
