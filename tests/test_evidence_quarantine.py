@@ -103,6 +103,24 @@ class EvidenceQuarantineTests(unittest.TestCase):
         self.assertEqual(report["issue_count"], len(rows) + 1)
         self.assertEqual(report["n_unmapped_scopes"], 1)
 
+    def test_overlap_keeps_exact_counts_and_original_preview_order_at_cap(self):
+        rows = [self.other, self.blocked] * (MAX_ISSUES // 2 + 2)
+        both = replace(self.scope, endpoint_names=("peak_ratio", "peak_area"))
+        unknown = replace(self.scope, endpoint_names=None)
+        result = preview(rows, [unknown, both, self.scope, unknown, both])
+        self.assertEqual(result["n_rows_with_quarantine_matches"], len(rows))
+        self.assertEqual(result["n_rows_in_unmapped_scope_groups"], len(rows))
+        self.assertEqual(result["issue_counts"], {
+            "quarantined_observation_present": 2 * len(rows) + len(rows) // 2,
+            "scope_endpoint_mapping_not_established": 2,
+        })
+        expected_preview = [None] + list(range(0, len(rows), 2)) + list(range(1, len(rows), 2))
+        self.assertEqual([issue["row_position"] for issue in result["issues"]],
+                         expected_preview[:MAX_ISSUES])
+        self.assertEqual([issue["scope_position"] for issue in result["issues"]],
+                         [0] + [1] * (MAX_ISSUES - 1))
+        self.assertTrue(result["issues_truncated"])
+
     def test_no_input_mutation_and_no_private_identity_echo(self):
         sentinel = "INVENTED_PRIVATE_SENTINEL"
         rows = [Key(sentinel, sentinel, sentinel)]

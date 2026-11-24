@@ -346,30 +346,43 @@ def preview_evidence_quarantine(observations, *, unresolved_scopes):
         indexed[(row.source_id, row.recipe_group_id)][row.endpoint_name].append(position)
 
     issues, counts = [], Counter()
-    matched_rows, potential_rows = set(), set()
-    unmapped_scopes = 0
-
-    def add(code, field, scope_position, row_position=None):
-        counts[code] += 1
-        if len(issues) < MAX_ISSUES:
-            issues.append({"code": code, "field": field, "scope_position": scope_position,
-                           "row_position": row_position})
+    matched_keys, potential_groups = set(), set()
+    matched_rows = potential_rows = unmapped_scopes = 0
 
     for scope_position, scope in enumerate(unresolved_scopes):
         if scope.endpoint_names is None:
             unmapped_scopes += 1
-            add("scope_endpoint_mapping_not_established", "scope.endpoint_names", scope_position)
+            counts["scope_endpoint_mapping_not_established"] += 1
+            if len(issues) < MAX_ISSUES:
+                issues.append({"code": "scope_endpoint_mapping_not_established",
+                               "field": "scope.endpoint_names",
+                               "scope_position": scope_position, "row_position": None})
             for group in scope.recipe_group_ids:
-                for positions in indexed.get((scope.source_id, group), {}).values():
-                    potential_rows.update(positions)
+                group_key = (scope.source_id, group)
+                if group_key in indexed and group_key not in potential_groups:
+                    potential_groups.add(group_key)
+                    potential_rows += sum(map(len, indexed[group_key].values()))
             continue
         endpoints = set(scope.endpoint_names)
         for group in scope.recipe_group_ids:
-            for endpoint, positions in indexed.get((scope.source_id, group), {}).items():
-                if endpoint in endpoints:
-                    for position in positions:
-                        matched_rows.add(position)
-                        add("quarantined_observation_present", "observation_evidence_key", scope_position, position)
+            group_key = (scope.source_id, group)
+            for endpoint, positions in indexed.get(group_key, {}).items():
+                if endpoint not in endpoints:
+                    continue
+                key = (*group_key, endpoint)
+                count = len(positions)
+                if key not in matched_keys:
+                    matched_keys.add(key)
+                    matched_rows += count
+                # Keep exact match counts across overlapping scopes without
+                # visiting a row again just to count it after the preview cap.
+                counts["quarantined_observation_present"] += count
+                remaining = MAX_ISSUES - len(issues)
+                if remaining:
+                    issues.extend({"code": "quarantined_observation_present",
+                                   "field": "observation_evidence_key",
+                                   "scope_position": scope_position, "row_position": position}
+                                  for position in positions[:remaining])
 
     total = sum(counts.values())
     status = ("quarantine_violation_found" if matched_rows else
@@ -379,8 +392,8 @@ def preview_evidence_quarantine(observations, *, unresolved_scopes):
         "action": "audit_only_no_data_changes", "training_admission": "not_performed",
         "status": status, "n_observation_rows": len(observations),
         "n_unresolved_scopes": len(unresolved_scopes), "n_unmapped_scopes": unmapped_scopes,
-        "n_rows_with_quarantine_matches": len(matched_rows),
-        "n_rows_in_unmapped_scope_groups": len(potential_rows),
+        "n_rows_with_quarantine_matches": matched_rows,
+        "n_rows_in_unmapped_scope_groups": potential_rows,
         "issue_count": total, "issue_counts": dict(sorted(counts.items())), "issues": issues,
         "issues_truncated": total > len(issues), "max_returned_issues": MAX_ISSUES,
         "limitations": [
