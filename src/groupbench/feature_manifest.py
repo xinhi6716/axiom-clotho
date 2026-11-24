@@ -33,10 +33,17 @@ def _reject_constant(_value):
     raise ValueError("Feature schema must contain strict JSON without non-finite constants.")
 
 
+def _valid_text(value):
+    # JSON escape syntax can produce lone UTF-16 surrogates after the raw
+    # UTF-8 check. NUL likewise cannot safely round-trip as a CSV identifier.
+    return (isinstance(value, str) and bool(value.strip()) and "\x00" not in value
+            and not any(0xD800 <= ord(ch) <= 0xDFFF for ch in value))
+
+
 def _names(value, field, *, nonempty=False):
     if (not isinstance(value, list) or len(value) > MAX_FEATURES
             or (nonempty and not value)
-            or any(not isinstance(name, str) or not name.strip() or name != name.strip() for name in value)):
+            or any(not _valid_text(name) or name != name.strip() for name in value)):
         raise ValueError(f"Feature schema {field} must be a list of at most {MAX_FEATURES} non-blank, unpadded names"
                          + (" with at least one entry." if nonempty else "."))
     if len(value) != len(set(value)):
@@ -117,9 +124,9 @@ def read_feature_manifest(path):
         raise ValueError("Feature schema roles conflict: predictors, metadata and targets must be disjoint; row_key must be metadata.")
     units = schema["feature_units"]
     if (not isinstance(units, dict) or set(units) != set(features)
-            or any(not isinstance(unit, str) or not unit.strip() for unit in units.values())):
+            or any(not _valid_text(unit) for unit in units.values())):
         raise ValueError("Feature schema feature_units must declare one non-blank string for each allowed feature only.")
     warnings = schema["warnings"]
-    if not isinstance(warnings, list) or any(not isinstance(item, str) or not item.strip() for item in warnings):
+    if not isinstance(warnings, list) or any(not _valid_text(item) for item in warnings):
         raise ValueError("Feature schema warnings must be a list of non-blank strings.")
     return list(features)

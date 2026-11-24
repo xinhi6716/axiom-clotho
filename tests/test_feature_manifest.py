@@ -47,6 +47,19 @@ class FeatureManifestTests(unittest.TestCase):
             with self.subTest(raw=raw[:30]), self.assertRaises(ValueError):
                 self.read_raw(raw)
 
+    def test_decoded_nul_and_surrogates_are_rejected_without_data_echo(self):
+        for marker in ("\x00", "\ud800", "\udfff"):
+            key = f"private{marker}suffix"
+            for schema, field in ((schema_for([key]), "model_feature_allowlist"),
+                                  ({**schema_for(), "warnings": [key]}, "warnings"),
+                                  ({**schema_for(["x"]), "feature_units": {"x": key}}, "feature_units")):
+                with self.subTest(field=field, codepoint=ord(marker)):
+                    with self.assertRaisesRegex(ValueError, field) as caught:
+                        self.read_raw(json.dumps(schema, ensure_ascii=True).encode("ascii"))
+                    self.assertNotIn("private", str(caught.exception))
+        # A well-formed escaped surrogate pair decodes to one Unicode scalar.
+        self.assertEqual(self.read_raw(json.dumps(schema_for(["\U0001f9ea"])).encode("ascii")), ["\U0001f9ea"])
+
     def test_duplicate_object_keys_at_any_depth_are_rejected(self):
         raw = json.dumps(schema_for()).encode("utf-8")
         for duplicate in (raw.replace(b'"schema_version": 1', b'"schema_version": 1, "schema_version": 1'),
