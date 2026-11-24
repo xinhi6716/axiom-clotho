@@ -151,6 +151,23 @@ class GroupMedianTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "feature count"):
             estimator.predict(np.ones((2, 2)))
 
+    def test_temporal_features_are_rejected_on_fit_and_predict(self):
+        good = pd.DataFrame({"timestamp": [1.0, 2.0]})
+        estimator = self.estimator([4, 5], ["a", "b"], good)
+        dated = np.array([["2026-01-01"], ["2026-01-02"]], dtype="datetime64[D]")
+        elapsed = np.array([[1], [2]], dtype="timedelta64[s]")
+        cases = {"numpy datetime": dated, "numpy timedelta": elapsed,
+                 "pandas datetime": pd.DataFrame({"timestamp": dated[:, 0]}),
+                 "pandas timedelta": pd.DataFrame({"timestamp": elapsed[:, 0]})}
+        for kind, bad in cases.items():
+            with self.subTest(kind=kind, action="fit"):
+                with self.assertRaisesRegex(ValueError, "not temporal or complex"):
+                    estimator.fit(bad, [99, 100], groups=["a", "b"])
+                np.testing.assert_array_equal(estimator.predict(good), [4, 4])
+            with self.subTest(kind=kind, action="predict"):
+                with self.assertRaisesRegex(ValueError, "not temporal or complex"):
+                    estimator.predict(bad)
+
     def test_named_schema_unknown_reordered_or_missing_columns_rejected(self):
         frame = pd.DataFrame({"a": [1, 2], "b": [3, 4]})
         estimator = self.estimator([1, 2], ["a", "b"], frame)

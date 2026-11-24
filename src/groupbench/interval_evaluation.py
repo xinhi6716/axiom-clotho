@@ -339,6 +339,44 @@ def diagnose_saved_interval_reference(document):
     }
 
 
+def diagnose_saved_interval_whole_group_coverage(document):
+    """Describe coverage of every declared row within each supplied group.
+
+    The exact expected row roster and saved-interval rules are checked before
+    counting one vote per declared group. The declared row roster and row-to-
+    group assignments are not independently verified. Missing groups or rows
+    omitted from both inputs are undetectable. The result is not an estimate
+    of simultaneous future-group coverage or a calibration diagnostic.
+    """
+    report = evaluate_saved_intervals(document)
+    groups = [
+        {"group": row["group"], "n_rows": row["n_rows"], "n_covered": row["n_covered"],
+         "all_rows_covered": row["n_rows"] == row["n_covered"]}
+        for row in report["groups"]
+    ]
+    n_covered = sum(row["all_rows_covered"] for row in groups)
+    return {
+        "schema_id": "mlcalc.saved_interval_whole_group_coverage",
+        "schema_version": "1.0",
+        "claim_scope": "descriptive_supplied_cohort_only",
+        "provenance_verified": False,
+        "boundary_rule": report["boundary_rule"],
+        "cohort": dict(report["cohort"]),
+        "whole_group": {
+            "observed_coverage_exact": str(Fraction(n_covered, len(groups))),
+            "n_groups": len(groups),
+            "n_groups_all_rows_covered": n_covered,
+        },
+        "groups": groups,
+        "limitations": [
+            "Each group counts once and is covered only if every declared row is covered.",
+            "The supplied group assignments and physical independence are not verified.",
+            "Groups and rows absent from both declarations and input are undetectable.",
+            "No interval construction, calibration or future-group coverage guarantee.",
+        ],
+    }
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="mlcalc evaluate-intervals", description=__doc__)
     parser.add_argument("input", type=Path, help="Regular local saved-interval JSON; report goes to stdout only")

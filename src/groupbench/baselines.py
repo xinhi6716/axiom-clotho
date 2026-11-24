@@ -91,6 +91,7 @@ def _matrix_and_names(X):
         # the documented CSR/CSC boundary explicit, before any mask can be lost.
         raise ValueError("Only CSR or CSC sparse inputs are supported; other formats are not converted implicitly.")
     _reject_masked(X, "X")
+    _reject_temporal_or_complex(X)
     columns = getattr(X, "columns", None)
     names = None
     if columns is not None:
@@ -210,7 +211,7 @@ def _ridge_numerical_stage(stage):
         ) from exc
 
 
-def _ridge_real_input(value):
+def _reject_temporal_or_complex(value):
     """Reject temporal/complex features before float conversion loses type."""
     pending = [(iter((value,)), 0)]
     finished = {}
@@ -281,7 +282,7 @@ def _ridge_matrix_and_names(X):
     if sparse.issparse(X) and X.format not in ("csr", "csc"):
         raise ValueError("Only CSR or CSC sparse inputs are supported; other formats are not converted implicitly.")
     _reject_masked(X, "X")
-    _ridge_real_input(X)
+    _reject_temporal_or_complex(X)
     shape = getattr(X, "shape", None)
     if shape is not None and (len(shape) != 2 or not 1 <= shape[0] <= MAX_ROWS
                               or not 1 <= shape[1] <= MAX_RIDGE_FEATURES):
