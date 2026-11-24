@@ -157,3 +157,123 @@ def contrast_float(value):
     if not math.isfinite(result) or (value != 0 and result == 0):
         raise ValueError("paired contrast outside supported representable range")
     return result
+
+
+def scheduled_phase_paired_mae(rows, *, expected_roster, expected_cells, phase_weights):
+    """Compare aligned forecasts on a predeclared device × phase panel.
+
+    Each row is (row_id, device, phase, target, forecast_a, forecast_b).
+    Pair by row ID before calling; each row carries both forecasts, so no
+    positional join occurs here. Supply an independently frozen roster of
+    (row_id, device, phase) tuples and a schedule of unique (device, phase)
+    pairs with one positive weight per phase. Row order is irrelevant.
+    Every device must have every declared phase, with at least one observed
+    row per cell, and no extras. IDs are nonblank strings; numeric inputs
+    are built-in ints exactly representable as binary64, or finite floats.
+    Each ordered container is bounded to 20,000 entries.
+
+    The fixed-phase estimand averages loss within cell, weights phases by
+    their declared relative weights, and then averages across devices.
+    This finite-roster diagnostic does not infer missing cells, establish
+    physical independence, or verify when the supplied roster was frozen.
+    Reconstructing the expected roster from scored rows cannot detect omission.
+    """
+    def bounded(sequence):
+        return type(sequence) in (tuple, list) and 1 <= len(sequence) <= 20_000
+
+    def label(value):
+        return (type(value) is str and 0 < len(value) <= 256
+                and bool(value.strip()) and value == value.strip())
+
+    def exact(value):
+        if type(value) not in (int, float):
+            raise ValueError("Loss inputs and weights must be real finite numbers.")
+        try:
+            converted = float(value)
+        except OverflowError:
+            raise ValueError("Loss input or weight is outside binary64 range.") from None
+        if not math.isfinite(converted) or (type(value) is int and int(converted) != value):
+            raise ValueError("Loss input or weight must be representable as binary64.")
+        return Fraction.from_float(converted)
+
+    if not all(map(bounded, (rows, expected_roster, expected_cells))):
+        raise ValueError("Rows, expected roster and expected cells must be nonempty bounded lists or tuples.")
+    if type(phase_weights) is not dict or not 1 <= len(phase_weights) <= 20_000:
+        raise ValueError("Supply an explicit bounded phase-weight mapping.")
+    weights = {}
+    for phase, value in phase_weights.items():
+        if not label(phase):
+            raise ValueError("Invalid scheduled phase identifier.")
+        weights[phase] = exact(value)
+        if weights[phase] <= 0:
+            raise ValueError("Phase weights must be strictly positive.")
+    expected, devices = set(), set()
+    for cell in expected_cells:
+        if type(cell) is not tuple or len(cell) != 2 or not all(map(label, cell)):
+            raise ValueError("Expected cells must be (device, phase) tuples with valid identifiers.")
+        if cell in expected or cell[1] not in weights:
+            raise ValueError("Expected cells must be unique and use declared phases.")
+        expected.add(cell)
+        devices.add(cell[0])
+    if len(expected) != len(devices) * len(weights):
+        raise ValueError("Expected cells must declare every phase for every device.")
+
+    roster = {}
+    for entry in expected_roster:
+        if type(entry) is not tuple or len(entry) != 3 or not all(map(label, entry)):
+            raise ValueError("Expected roster entries must be (row ID, device, phase) tuples.")
+        row_id, device, phase = entry
+        if row_id in roster:
+            raise ValueError("Duplicate expected roster row ID.")
+        if (device, phase) not in expected:
+            raise ValueError("Expected roster entry outside the declared schedule.")
+        roster[row_id] = (device, phase)
+
+    cells, ids = {}, set()
+    for row in rows:
+        if type(row) is not tuple or len(row) != 6 or not all(map(label, row[:3])):
+            raise ValueError("Each row must provide a row ID, device, phase, target, and both forecasts.")
+        row_id, device, phase, y, a, b = row
+        if row_id in ids:
+            raise ValueError("Duplicate paired row ID.")
+        ids.add(row_id)
+        if (device, phase) not in expected:
+            raise ValueError("Observed row outside the declared schedule.")
+        if row_id not in roster:
+            raise ValueError("Unexpected paired row ID outside the expected roster.")
+        if roster[row_id] != (device, phase):
+            raise ValueError("Paired row ID is rebound to a different device or phase.")
+        y, a, b = map(exact, (y, a, b))
+        state = cells.setdefault((device, phase), [0, Fraction(), Fraction()])
+        state[0] += 1
+        state[1] += abs(a - y)
+        state[2] += abs(b - y)
+    if len(cells) != len(expected):
+        raise ValueError(f"Incomplete scheduled roster: {len(expected) - len(cells)} missing cell(s).")
+
+    if len(ids) != len(roster):
+        raise ValueError(f"Incomplete expected roster: {len(roster) - len(ids)} missing row(s).")
+
+    by_device, micro, standard = {}, [Fraction(), Fraction()], [Fraction(), Fraction()]
+    weight_sum = sum(weights.values())
+    for (device, phase), (n, a, b) in cells.items():
+        device_sum = by_device.setdefault(device, [0, Fraction(), Fraction()])
+        device_sum[0] += n
+        for j, loss in enumerate((a, b)):
+            micro[j] += loss
+            device_sum[j + 1] += loss
+            standard[j] += weights[phase] / weight_sum * (loss / n)
+
+    def summary(a, b):
+        difference = b - a
+        return {"mae_a": contrast_float(a), "mae_b": contrast_float(b),
+                "mae_b_minus_a": contrast_float(difference),
+                "better": "A" if difference > 0 else "B" if difference < 0 else "tie"}
+
+    return {
+        "n_rows": len(rows), "n_devices": len(devices), "n_scheduled_cells": len(expected),
+        "micro": summary(*(total / len(rows) for total in micro)),
+        "equal_device": summary(*(sum(v[j] / v[0] for v in by_device.values()) / len(devices)
+                                   for j in (1, 2))),
+        "fixed_phase_equal_device": summary(*(total / len(devices) for total in standard)),
+    }
