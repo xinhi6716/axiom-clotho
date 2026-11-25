@@ -173,8 +173,15 @@ def _output_bound(metadata):
     UTF-8 length. Keep this proof and bound tests in sync with the serializer.
     """
     rows, spans, windows = metadata["row_groups"], metadata["group_spans"], metadata["windows"]
-    rbytes = sum(len(_json(group)) for group in rows)
-    gbytes = sum(len(_json(span["group"])) for span in spans)
+    # Repeated observations of one group contribute the same escaped length.
+    # Cache lengths, not encoded labels; int and string identities stay distinct.
+    lengths = {group: len(_json(group)) for group in dict.fromkeys(rows)}
+    rbytes = sum(lengths[group] for group in rows)
+    gbytes = 0
+    for span in spans:
+        group = span["group"]
+        length = lengths.get(group)
+        gbytes += len(_json(group)) if length is None else length
     dbytes = len(_json(metadata["time_unit"])) + len(_json(metadata["clock_id"]))
     r, g, w = len(rows), len(spans), len(windows)
     return (8192 + 32 * r + 256 * g + rbytes + 4 * gbytes + dbytes

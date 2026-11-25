@@ -307,6 +307,22 @@ class ResourcePreflightTests(unittest.TestCase):
         with patch.object(transport, "plan_group_forward_windows", side_effect=AssertionError("no core")), self.assertRaisesRegex(ValueError, "serialized-output bound"):
             rendered(value)
 
+    def test_bound_reuses_each_escaped_group_length_without_merging_typed_ids(self):
+        value = metadata()
+        value["row_groups"] = [1, "1", "雪", 1, "1", "雪"] * 30
+        value["group_spans"][2]["group"] = "雪"
+        with patch.object(transport, "_json", wraps=transport._json) as encode:
+            bound = transport._output_bound(value)
+        self.assertEqual([call.args[0] for call in encode.call_args_list],
+                         [1, "1", "雪", value["time_unit"], value["clock_id"]])
+        r, g, w = len(value["row_groups"]), len(value["group_spans"]), len(value["windows"])
+        # Serialized identity lengths: 1 for the integer, 3 for the quoted
+        # string, 8 for the quoted Unicode escape. Each is repeated 60 times.
+        lengths = 1 + 3 + 8
+        declarations = sum(len(json.dumps(value[key])) for key in ("time_unit", "clock_id"))
+        self.assertEqual(bound, 8192 + 32*r + 256*g + 64*lengths + declarations
+                         + w*(512 + 16*r + 256*g + 2*lengths))
+
     def test_output_preflight_exact_boundary_and_next_byte(self):
         value = metadata(); bound = transport._output_bound(value)
         with patch.object(transport, "MAX_OUTPUT_BYTES", bound):
