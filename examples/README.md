@@ -35,6 +35,20 @@ For your own measurements, [clotho init](../docs/WORKFLOW_INIT.md) creates blank
 | Can changing units change a model's predictions? | [A versus nA](numeric-unit-equivalence/README.md): twelve fixed fits comparing raw models and train-only scaling. Requires scikit-learn 1.8.0 and the documented source hash; saved results can be read without fitting. |
 | How does adjusting for an intermediary change a causal question? | [Causal-design rehearsal](causal-design-rehearsal/README.md): OLS and paired interventions in an invented model. Requires the simulation-only flag; it is not a real-data causal estimator. |
 
+## Choose the measurement before choosing the model
+
+| If you need to check… | Run this small example | What to record in your own study |
+| --- | --- | --- |
+| Whether two sources define track height the same way | [Order of profile aggregation](profile-aggregation-order/README.md) | Transverse registration, baseline, along-track span, and whether averaging precedes peak extraction. Equal areas do not resolve a ranking reversal. |
+| Whether derived printability quantities can replace measured height | [Derived bead geometry](derived-bead-geometry-alias/README.md) | Keep measured bead height, melt depth, hatch spacing and design layer thickness as distinct endpoints. |
+| Whether a penetration reading establishes adhesion | [Penetration and adhesion](penetration-is-not-adhesion/README.md) | Count all attempted tracks. Keep zero depth, missing depth and measured adhesion status separate. |
+| Whether two resistance reads satisfy the same prediction schedule | [Scheduled reads versus first-after reads](scheduled-anchor-vs-first-after/README.md) | Record the declared slot and actual elapsed time; a read after the cutoff cannot silently replace a missing scheduled read. |
+
+Run these standard-library examples from the repository root. They inspect
+invented observations and do not train models. To check a real forecast's
+feature timing, use the separate [as-of lineage declaration](../docs/GROUP_TIME_LINEAGE.md);
+the examples do not attest to instrument records or physical device identity.
+
 ## Optional models and later outcomes
 
 Follow the [tiny grouped-model walkthrough](optional-model-delayed-scoring/README.md)
