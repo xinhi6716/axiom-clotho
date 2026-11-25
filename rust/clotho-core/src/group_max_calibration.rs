@@ -79,31 +79,32 @@ pub fn calibrate_group_max(
     {
         return Err(GroupMaxError::InvalidKey);
     }
-    if !matches_roster(roster, rows) {
-        return Err(GroupMaxError::RosterMismatch);
-    }
-
-    let mut maxima = BTreeMap::<_, f64>::new();
-    for r in rows {
-        if !r.observed.is_finite() || !r.prediction.is_finite() {
-            return Err(GroupMaxError::NonfiniteResidual);
+    let order = match_roster(roster, rows).ok_or(GroupMaxError::RosterMismatch)?;
+    let (groups, rank, mut ordered) = match order {
+        RosterMatch::InGroupOrder => {
+            let maxima = ordered_group_maxima(rows)?;
+            let groups = maxima.len();
+            let rank = cutoff_rank(groups, numerator, denominator);
+            if rank > groups {
+                return Ok(GroupMaxCutoff::InsufficientFinite { groups, rank });
+            }
+            (groups, rank, maxima)
         }
-        let score = (r.observed - r.prediction).abs();
-        if !score.is_finite() {
-            return Err(GroupMaxError::NonfiniteResidual);
+        RosterMatch::Arbitrary => {
+            let mut maxima = BTreeMap::<_, f64>::new();
+            for r in rows {
+                let score = residual(r)?;
+                let current = maxima.entry(r.key.group).or_insert(0.0);
+                *current = current.max(score);
+            }
+            let groups = maxima.len();
+            let rank = cutoff_rank(groups, numerator, denominator);
+            if rank > groups {
+                return Ok(GroupMaxCutoff::InsufficientFinite { groups, rank });
+            }
+            (groups, rank, maxima.into_values().collect())
         }
-        let current = maxima.entry(r.key.group).or_insert(0.0);
-        *current = current.max(score);
-    }
-    let groups = maxima.len();
-    // groups <= MAX_CALIBRATION_ROWS; even the largest u64 fraction fits u128.
-    let n = (groups as u128 + 1) * u128::from(numerator);
-    let d = u128::from(denominator);
-    let rank = ((n + d - 1) / d) as usize;
-    if rank > groups {
-        return Ok(GroupMaxCutoff::InsufficientFinite { groups, rank });
-    }
-    let mut ordered: Vec<_> = maxima.into_values().collect();
+    };
     ordered.sort_unstable_by(f64::total_cmp);
     Ok(GroupMaxCutoff::Finite {
         groups,
@@ -112,9 +113,53 @@ pub fn calibrate_group_max(
     })
 }
 
-fn matches_roster(roster: &[RowKey<'_>], rows: &[CalibrationRow<'_>]) -> bool {
+fn cutoff_rank(groups: usize, numerator: u64, denominator: u64) -> usize {
+    // groups <= MAX_CALIBRATION_ROWS; even the largest u64 fraction fits u128.
+    let n = (groups as u128 + 1) * u128::from(numerator);
+    let d = u128::from(denominator);
+    ((n + d - 1) / d) as usize
+}
+
+fn residual(row: &CalibrationRow<'_>) -> Result<f64, GroupMaxError> {
+    if !row.observed.is_finite() || !row.prediction.is_finite() {
+        return Err(GroupMaxError::NonfiniteResidual);
+    }
+    let score = (row.observed - row.prediction).abs();
+    if !score.is_finite() {
+        return Err(GroupMaxError::NonfiniteResidual);
+    }
+    Ok(score)
+}
+
+fn ordered_group_maxima(rows: &[CalibrationRow<'_>]) -> Result<Vec<f64>, GroupMaxError> {
+    let mut maxima = Vec::new();
+    let Some(first) = rows.first() else {
+        return Ok(maxima);
+    };
+    let mut previous_group = first.key.group;
+    let mut maximum = 0.0_f64;
+    for row in rows {
+        let score = residual(row)?;
+        let group = row.key.group;
+        if previous_group != group {
+            maxima.push(maximum);
+            previous_group = group;
+            maximum = 0.0;
+        }
+        maximum = maximum.max(score);
+    }
+    maxima.push(maximum);
+    Ok(maxima)
+}
+
+enum RosterMatch {
+    InGroupOrder,
+    Arbitrary,
+}
+
+fn match_roster(roster: &[RowKey<'_>], rows: &[CalibrationRow<'_>]) -> Option<RosterMatch> {
     if roster.len() != rows.len() {
-        return false;
+        return None;
     }
     // A strictly ordered roster proves uniqueness. If the supplied keys
     // follow it directly or in reverse, there is nothing to index.
@@ -125,7 +170,7 @@ fn matches_roster(roster: &[RowKey<'_>], rows: &[CalibrationRow<'_>]) -> bool {
     if first_difference.is_some_and(|i| i + 1 == roster.len()) {
         // With every other pair unchanged, one differing final key cannot
         // be a permutation. This also rejects a repeated last key cheaply.
-        return false;
+        return None;
     }
     if first_difference.is_none()
         || roster
@@ -141,7 +186,9 @@ fn matches_roster(roster: &[RowKey<'_>], rows: &[CalibrationRow<'_>]) -> bool {
                 pair[0] > pair[1]
             }
         }) {
-            return true;
+            // Whole keys are ordered by (group, row). Exact alignment or
+            // reversal therefore keeps each group's rows contiguous.
+            return Some(RosterMatch::InGroupOrder);
         }
     }
 
@@ -153,10 +200,10 @@ fn matches_roster(roster: &[RowKey<'_>], rows: &[CalibrationRow<'_>]) -> bool {
             .iter()
             .any(|r| !remaining.remove(&(r.key.group, r.key.row)))
     {
-        return false;
+        return None;
     }
     debug_assert!(remaining.is_empty());
-    true
+    Some(RosterMatch::Arbitrary)
 }
 
 #[cfg(test)]
@@ -262,6 +309,47 @@ mod tests {
             }
         }
         assert_eq!(covered, 19);
+    }
+
+    #[test]
+    fn contiguous_maxima_agree_with_shuffled_groups_in_both_directions() {
+        let roster = [
+            key("a", "1"),
+            key("a", "2"),
+            key("b", "1"),
+            key("b", "2"),
+            key("c", "1"),
+            key("d", "1"),
+            key("d", "2"),
+        ];
+        let rows = [
+            obs(roster[0], -0.0),
+            obs(roster[1], 9.0),
+            obs(roster[2], -8.0),
+            obs(roster[3], 1.0),
+            obs(roster[4], -0.0),
+            obs(roster[5], -2.0),
+            obs(roster[6], 3.0),
+        ];
+        let reversed = [rows[6], rows[5], rows[4], rows[3], rows[2], rows[1], rows[0]];
+        let shuffled = [rows[3], rows[1], rows[0], rows[6], rows[4], rows[2], rows[5]];
+        for (numerator, expected) in [0.0, 3.0, 8.0, 9.0].into_iter().enumerate() {
+            for order in [rows, reversed, shuffled] {
+                let result = calibrate_group_max(&roster, &order, (numerator + 1) as u64, 5);
+                let Ok(GroupMaxCutoff::Finite { groups, rank, radius }) = result else {
+                    panic!("expected a finite cutoff, got {result:?}");
+                };
+                assert_eq!(groups, 4);
+                assert_eq!(rank, numerator + 1);
+                assert_eq!(radius.to_bits(), f64::to_bits(expected));
+            }
+        }
+        let mut invalid = rows;
+        invalid[6].prediction = f64::NEG_INFINITY;
+        assert_eq!(
+            calibrate_group_max(&roster, &invalid, 99, 100),
+            Err(GroupMaxError::NonfiniteResidual)
+        );
     }
 
     #[test]
