@@ -194,11 +194,15 @@ pub fn extract_branch(b: &Branch, p: Settings) -> Result<Readpoint, RramError> {
             if !(0.0 < t && t < 1.0) {
                 return Err(RramError::NumericalRange);
             }
-            (
-                near.current_a * (1.0 - t) + far.current_a * t,
-                span,
-                vec![w[0].source_row, w[1].source_row],
-            )
+            // Preserve a constant segment exactly. Rounding two weighted
+            // products can otherwise invent a current difference, even
+            // against an exact read with the very same endpoint current.
+            let current = if near.current_a == far.current_a {
+                near.current_a
+            } else {
+                near.current_a * (1.0 - t) + far.current_a * t
+            };
+            (current, span, vec![w[0].source_row, w[1].source_row])
         };
     if current == 0.0 || (current > 0.0) != (c.read_voltage_v > 0.0) {
         return Err(RramError::InvalidCurrent);

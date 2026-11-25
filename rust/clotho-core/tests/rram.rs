@@ -383,3 +383,37 @@ fn paired_ratio_preserves_inversion_when_rounded_resistances_tie() {
         assert_eq!(result[0].ratio_below_one_cycle_count, 1);
     }
 }
+
+#[test]
+fn constant_interpolation_cannot_manufacture_a_cycle_inversion() {
+    let equal_current = 0.21_f64;
+    for sign in [1.0, -1.0] {
+        for reverse in [false, true] {
+            let mut hrs = branch(State::Hrs, "1", sign * equal_current, 2);
+            hrs.conditions.read_voltage_v = sign * 0.375;
+            hrs.samples[0].voltage_v = 0.0;
+            hrs.samples.push(Sample {
+                source_row: 3,
+                voltage_v: sign,
+                current_a: sign * equal_current,
+            });
+            if reverse {
+                hrs.samples.reverse();
+            }
+            let mut lrs = branch(State::Lrs, "1", sign * equal_current, 4);
+            lrs.conditions.read_voltage_v = sign * 0.375;
+            lrs.samples[0].voltage_v = lrs.conditions.read_voltage_v;
+            let result = extract_cohort(&[hrs, lrs], settings()).unwrap();
+            let pair = &result[0].pairs[0];
+            assert_eq!(result[0].ratio_below_one_cycle_count, 0);
+            assert_eq!(pair.resistance_ratio, 1.0);
+            assert_eq!(pair.hrs.current_a.to_bits(), pair.lrs.current_a.to_bits());
+            assert_eq!(
+                pair.hrs.resistance_ohm.to_bits(),
+                pair.lrs.resistance_ohm.to_bits()
+            );
+            assert_eq!(pair.hrs.bracket_span_v, 1.0);
+            assert_eq!(pair.lrs.bracket_span_v, 0.0);
+        }
+    }
+}
