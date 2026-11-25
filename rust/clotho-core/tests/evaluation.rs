@@ -426,3 +426,20 @@ fn rms_only_streaming_preserves_overflow_rescue_and_tiny_error_refusal() {
         0
     );
 }
+
+#[test]
+fn grouped_split_complements_preserve_input_order_at_run_boundaries() {
+    let groups = ["b", "a", "c", "a", "b", "d", "a", "d", "e", "e", "e", "e"]
+        .map(str::to_owned);
+    let pair = grouped_kfold(&groups, 2).unwrap();
+    assert_eq!(pair[0].train_indices, pair[1].test_indices);
+    assert_eq!(pair[1].train_indices, pair[0].test_indices);
+    assert_partition(&groups, &pair);
+    let folds = grouped_kfold(&groups, 3).unwrap();
+    assert_eq!(folds[0].test_indices, [8, 9, 10, 11]);
+    assert_eq!(folds[0].train_indices, [0, 1, 2, 3, 4, 5, 6, 7]);
+    assert_eq!(folds[1].test_indices, [1, 2, 3, 6]);
+    assert_eq!(folds[1].train_indices, [0, 4, 5, 7, 8, 9, 10, 11]);
+    assert_eq!(folds[2].test_indices, [0, 4, 5, 7]);
+    assert_eq!(folds[2].train_indices, [1, 2, 3, 6, 8, 9, 10, 11]);
+}

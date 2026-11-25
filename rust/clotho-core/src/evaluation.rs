@@ -380,26 +380,32 @@ pub fn grouped_kfold(groups: &[String], n_splits: usize) -> Result<Vec<Fold>, Ev
             loads[fold] = load;
         }
     }
-    for id in &mut assignment {
-        *id = group_folds[*id as usize];
-    }
-    Ok(loads
+    let mut folds: Vec<_> = loads
         .into_iter()
-        .enumerate()
-        .map(|(fold, test_size)| {
-            let mut train_indices = Vec::with_capacity(groups.len() - test_size);
-            let mut test_indices = Vec::with_capacity(test_size);
-            for (row, &assigned) in assignment.iter().enumerate() {
-                if assigned as usize == fold {
-                    test_indices.push(row);
-                } else {
-                    train_indices.push(row);
-                }
-            }
-            Fold {
-                train_indices,
-                test_indices,
-            }
+        .map(|test_size| Fold {
+            train_indices: Vec::with_capacity(groups.len() - test_size),
+            test_indices: Vec::with_capacity(test_size),
         })
-        .collect())
+        .collect();
+    // Each row contributes once to its test bucket in input order.
+    for (row, id) in assignment.into_iter().enumerate() {
+        let fold = group_folds[id as usize] as usize;
+        folds[fold].test_indices.push(row);
+    }
+    // With exactly two folds, each training complement is the other test set.
+    if let [left, right] = folds.as_mut_slice() {
+        left.train_indices.extend_from_slice(&right.test_indices);
+        right.train_indices.extend_from_slice(&left.test_indices);
+        return Ok(folds);
+    }
+    // Sorted held indices split the training complement into contiguous runs.
+    for fold in &mut folds {
+        let mut start = 0;
+        for &held in &fold.test_indices {
+            fold.train_indices.extend(start..held);
+            start = held + 1;
+        }
+        fold.train_indices.extend(start..groups.len());
+    }
+    Ok(folds)
 }
