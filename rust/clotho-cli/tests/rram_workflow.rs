@@ -307,3 +307,68 @@ fn readpoint_support_counts_are_disjoint_per_feature_row() {
         assert!(pairs.iter().all(|pair| pair["resistance_ratio"] == 2.0));
     }
 }
+
+#[test]
+fn sampled_only_policy_rejects_each_interpolation_pattern_without_partial_output() {
+    let gate = ["--require-sampled-readpoints", "true"];
+    let read = "B,W,D,1,R1,H,HRS,C,P,1,300,0,1,0.01";
+    let regular: Vec<_> = DATA.lines().collect();
+    let exact = format!("{}\n{read}\n{}\n", regular[0], regular[3]);
+    let sampled = Workspace::new();
+    sampled.write(&exact);
+    let result = sampled.run(&gate);
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let j: serde_json::Value =
+        serde_json::from_slice(&fs::read(sampled.0.join("out/extraction.json")).unwrap()).unwrap();
+    assert_eq!(j["settings"]["require_sampled_readpoints"], true);
+    assert!(sampled.0.join("out/COMPLETE").is_file());
+
+    let lrs_bracket = "B,W,D,1,R1,L,LRS,C,P,1,300,0,0.5,0.1\nB,W,D,1,R1,L,LRS,C,P,1,300,0,1.5,0.1";
+    for trace in [
+        DATA.to_owned(), // HRS only
+        format!("{}\n{read}\n{lrs_bracket}\n", regular[0]),
+        format!("{}\n{}\n{}\n{lrs_bracket}\n", regular[0], regular[1], regular[2]),
+    ] {
+        let old = Workspace::new();
+        old.write(&trace);
+        assert!(old.run(&[]).status.success());
+        let new = Workspace::new();
+        new.write(&trace);
+        let rejected = new.run(&gate);
+        assert!(!rejected.status.success());
+        assert!(String::from_utf8_lossy(&rejected.stderr).contains("requires sampled RRAM readpoints"));
+        assert!(!new.0.join("out").exists());
+    }
+
+    let mixed = format!(
+        "{exact}{}\n{}\n{}\n",
+        regular[1].replace(",D,1,R1,", ",D,2,R2,"),
+        regular[2].replace(",D,1,R1,", ",D,2,R2,"),
+        regular[3].replace(",D,1,R1,", ",D,2,R2,"),
+    );
+    let unconfigured = Workspace::new();
+    unconfigured.write(&mixed);
+    assert!(unconfigured.run(&[]).status.success());
+    let off = Workspace::new();
+    off.write(&mixed);
+    assert!(off.run(&["--require-sampled-readpoints", "false"]).status.success());
+    for file in ["features.csv", "measurement_input.csv", "extraction.json", "COMPLETE"] {
+        assert_eq!(
+            fs::read(unconfigured.0.join("out").join(file)).unwrap(),
+            fs::read(off.0.join("out").join(file)).unwrap()
+        );
+    }
+    let strict = Workspace::new();
+    strict.write(&mixed);
+    assert!(!strict.run(&gate).status.success());
+    assert!(!strict.0.join("out").exists());
+
+    let invalid = Workspace::new();
+    invalid.write(&exact);
+    assert!(!invalid.run(&["--require-sampled-readpoints", "1"]).status.success());
+    assert!(!invalid.0.join("out").exists());
+}

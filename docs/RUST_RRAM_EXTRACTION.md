@@ -48,6 +48,10 @@ and positive where resistance/ratio is required. This is not arbitrary precision
   between adjacent samples. No extrapolation. Interpolated bracket span must not
   exceed the explicitly supplied positive bound. Descending branches retain their
   original source-row order in lineage.
+- Use `--require-sampled-readpoints true` to require an exact sampled read
+  in both states of every cycle. An interpolated read rejects the whole cohort
+  before any output is saved. The default still permits valid interpolation;
+  an exact read means a binary64 voltage match, not proof of instrument accuracy.
 - Static terminal resistance is signed `V_read / I_read`; zero or opposite-sign
   read current fails. No absolute-value correction, differential resistance,
   contact correction, SET/RESET detection or microscopic mechanism inference.

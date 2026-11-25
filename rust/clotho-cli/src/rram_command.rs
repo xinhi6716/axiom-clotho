@@ -41,12 +41,13 @@ fn lineage(p: &Readpoint) -> serde_json::Value {
     serde_json::json!({"branch":a.branch,"replicate":a.replicate,"all_source_rows":p.all_source_rows,"selected_source_rows":p.selected_source_rows,"current_A":p.current_a,"resistance_ohm":p.resistance_ohm,"bracket_span_V":p.bracket_span_v})
 }
 pub fn run(opts: &HashMap<String, String>) -> Result<()> {
-    const ALLOWED: [&str; 5] = [
+    const ALLOWED: [&str; 6] = [
         "--csv",
         "--out",
         "--max-bracket-v",
         "--accept-assumptions",
         "--feature-row-unit",
+        "--require-sampled-readpoints",
     ];
     if opts.keys().any(|k| !ALLOWED.contains(&k.as_str())) {
         return Err("Unknown RRAM extraction option".into());
@@ -54,6 +55,11 @@ pub fn run(opts: &HashMap<String, String>) -> Result<()> {
     if required(opts, "--accept-assumptions")? != "true" {
         return Err("Explicit --accept-assumptions true is required".into());
     }
+    let require_sampled = match opts.get("--require-sampled-readpoints").map(String::as_str) {
+        None | Some("false") => false,
+        Some("true") => true,
+        Some(_) => return Err("--require-sampled-readpoints must be true or false".into()),
+    };
     let by_condition = match opts
         .get("--feature-row-unit")
         .map(String::as_str)
@@ -165,6 +171,13 @@ pub fn run(opts: &HashMap<String, String>) -> Result<()> {
         branches[index].samples.push(sample);
     }
     let features = extract_cohort(&branches, settings)?;
+    if require_sampled
+        && features.iter().flat_map(|f| &f.pairs).any(|pair| {
+            pair.hrs.selected_source_rows.len() != 1 || pair.lrs.selected_source_rows.len() != 1
+        })
+    {
+        return Err("Sampled-only policy requires sampled RRAM readpoints for both states".into());
+    }
     let mut writer = csv::Writer::from_writer(Vec::new());
     writer.write_record([
         "batch",
@@ -227,9 +240,11 @@ pub fn run(opts: &HashMap<String, String>) -> Result<()> {
     let csv = writer.into_inner()?;
     let input_sha256 = format!("{:x}", Sha256::digest(&raw));
     let features_sha256 = format!("{:x}", Sha256::digest(&csv));
-    let report = serde_json::to_vec_pretty(
-        &serde_json::json!({"schema_version":"clotho.rram_si_binary64.v1","status":"complete","input_sha256":input_sha256,"features_sha256":features_sha256,"measurement_rows":count,"feature_rows":features.len(),"ml_fits":0,"feature_row_unit":if by_condition {"device-condition"} else {"device"},"source_row_convention":"logical CSV data record index plus header; not physical lines","input_units":"explicit SI binary64; no conversion","settings":{"max_bracket_span_V":settings.max_bracket_span_v,"assumptions_accepted":true},"feature_allowlist":["hrs_resistance_median_ohm","lrs_resistance_median_ohm","resistance_ratio_median"],"limitations":["Not legacy exact-decimal numerical or bundle compatibility","Declared states and conditions are not independently verified","Linear interpolation assumes local linearity; static V/I is not differential resistance","Cycles and condition rows are repeated observations, not independent devices; group downstream by physical_device_group or broader split_group","Ratio is derived from HRS/LRS observations; do not predict it from those resistances","No target joins, model training, confidence intervals or physical independence validation","Input and feature hashes identify exact bytes, not authenticated provenance"],"lineage":records}),
-    )?;
+    let mut report = serde_json::json!({"schema_version":"clotho.rram_si_binary64.v1","status":"complete","input_sha256":input_sha256,"features_sha256":features_sha256,"measurement_rows":count,"feature_rows":features.len(),"ml_fits":0,"feature_row_unit":if by_condition {"device-condition"} else {"device"},"source_row_convention":"logical CSV data record index plus header; not physical lines","input_units":"explicit SI binary64; no conversion","settings":{"max_bracket_span_V":settings.max_bracket_span_v,"assumptions_accepted":true},"feature_allowlist":["hrs_resistance_median_ohm","lrs_resistance_median_ohm","resistance_ratio_median"],"limitations":["Not legacy exact-decimal numerical or bundle compatibility","Declared states and conditions are not independently verified","Linear interpolation assumes local linearity; static V/I is not differential resistance","Cycles and condition rows are repeated observations, not independent devices; group downstream by physical_device_group or broader split_group","Ratio is derived from HRS/LRS observations; do not predict it from those resistances","No target joins, model training, confidence intervals or physical independence validation","Input and feature hashes identify exact bytes, not authenticated provenance"],"lineage":records});
+    if require_sampled {
+        report["settings"]["require_sampled_readpoints"] = true.into();
+    }
+    let report = serde_json::to_vec_pretty(&report)?;
     let mut builder = std::fs::DirBuilder::new();
     #[cfg(unix)]
     {
