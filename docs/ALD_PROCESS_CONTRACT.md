@@ -92,8 +92,13 @@ text. Its default is `"0"`; equality at an explicitly supplied absolute
 tolerance passes. A nonzero tolerance is a caller decision, not an inferred
 measurement uncertainty or a recommended accuracy threshold. It applies only
 to this arithmetic check. Global Decimal precision does not change the result.
-There is no physical sign test: even negative thickness and a matching negative
-average can agree arithmetically and still require a physical/source review.
+By default, even negative thickness and a matching negative average can agree
+arithmetically. If the numerator is declared as the total film thickness, pass
+`check_nonnegative_derived_thickness=True` to independently flag a negative
+thickness or a negative declared average, even when they agree within tolerance.
+Exact zero, including a signed decimal zero, is allowed. This preview does not
+reinterpret a signed thickness change as total thickness, constrain a
+steady-growth slope, or establish measurement validity.
 
 ### Evidence and experimental identity
 

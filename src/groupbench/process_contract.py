@@ -124,7 +124,8 @@ class ALDObservation:
     derivation: ThicknessCycleDerivation | None = None
 
 
-def preview_ald_contract(records, *, contract, check_absolute_temperature=False):
+def preview_ald_contract(records, *, contract, check_absolute_temperature=False,
+                         check_nonnegative_derived_thickness=False):
     """Return declaration conflicts for a bounded list/tuple of observations.
 
     Inputs and frozen declarations are rechecked on every call. Missing or
@@ -132,10 +133,14 @@ def preview_ald_contract(records, *, contract, check_absolute_temperature=False)
     not evidence that declarations are true, source-verified or independent.
     No output row subset or model-ready table is produced. With the explicit
     temperature check, a finite valid token strictly below absolute zero in
-    its declared unit is flagged; the default remains declaration-only.
+    its declared unit is flagged. The independent thickness check flags strictly
+    negative declared total thickness and its derived average; it does not
+    constrain steady slopes or mutate values. The default remains declaration-only.
     """
     if type(check_absolute_temperature) is not bool:
         raise ValueError("check_absolute_temperature must be an explicit bool.")
+    if type(check_nonnegative_derived_thickness) is not bool:
+        raise ValueError("check_nonnegative_derived_thickness must be an explicit bool.")
     if type(contract) is not ALDExperimentalContract:
         raise ValueError("An explicit ALDExperimentalContract is required.")
     ALDExperimentalContract.__post_init__(contract)
@@ -226,6 +231,9 @@ def preview_ald_contract(records, *, contract, check_absolute_temperature=False)
             add("invalid_decimal_token", "target", row=position)
 
         if _member(record.target_method, {"total_thickness_div_cycles"}):
+            if (check_nonnegative_derived_thickness and target is not None
+                    and _member(record.target_unit, _GROWTH_UNITS) and target < 0):
+                add("negative_derived_average", "target", row=position)
             recipe = record.derivation
             if type(recipe) is not ThicknessCycleDerivation:
                 add("missing_or_invalid_derivation", "derivation", row=position)
@@ -249,6 +257,8 @@ def preview_ald_contract(records, *, contract, check_absolute_temperature=False)
                     thickness = _fraction(recipe.thickness)
                 except ValueError:
                     add("invalid_decimal_token", "derivation.thickness", row=position)
+                if check_nonnegative_derived_thickness and thickness is not None and unit_ok and thickness < 0:
+                    add("negative_total_thickness", "derivation.thickness", row=position)
                 if target is not None and _member(record.target_unit, _GROWTH_UNITS) and thickness is not None and unit_ok and cycles_ok:
                     expected = thickness * _LENGTH_UNITS[recipe.thickness_unit] / recipe.cycle_count
                     actual = target * _GROWTH_UNITS[record.target_unit]

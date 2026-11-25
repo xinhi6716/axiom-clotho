@@ -107,6 +107,43 @@ class ProcessContractTests(unittest.TestCase):
             with self.subTest(choice=choice), self.assertRaisesRegex(ValueError, "explicit bool"):
                 preview_ald_contract([observation()], contract=contract(), check_absolute_temperature=choice)
 
+    def test_opt_in_derived_absolute_thickness_and_average_sign(self):
+        row = observation()
+        for unit, magnitude, target in (
+                ("nm", "-12.5", "-0.5"),
+                ("angstrom", "-1e-200", "-1e-200"),
+        ):
+            recipe = replace(row.derivation, thickness_unit=unit, thickness=magnitude)
+            candidate = replace(row, derivation=recipe, target=target)
+            with self.subTest(unit=unit), localcontext() as ctx:
+                ctx.prec, ctx.Emax, ctx.Emin = 1, 1, -1
+                # Use a valid text bound for the target and accept the tiny
+                # arithmetic difference explicitly without hiding its sign.
+                selected = contract(derived_target_tolerance_angstrom_per_cycle="1e-200")
+                self.assertEqual(preview_ald_contract([candidate], contract=selected)["issue_counts"], {})
+                r = preview_ald_contract([candidate], contract=selected,
+                                         check_nonnegative_derived_thickness=True)
+                self.assertEqual(r["issue_counts"], {"negative_derived_average": 1,
+                                                      "negative_total_thickness": 1})
+                self.assertEqual(r["n_rows_with_issues"], 1)
+                self.assertEqual({i["field"] for i in r["issues"]}, {"target", "derivation.thickness"})
+        for token in ("0", "-0.0", "-0e-200"):
+            candidate = replace(row, target=token, derivation=replace(row.derivation, thickness=token))
+            r = preview_ald_contract([candidate], contract=contract(),
+                                     check_nonnegative_derived_thickness=True)
+            self.assertEqual(r["issue_counts"], {})
+        malformed = replace(row, target="-1", target_unit="not-a-growth-unit",
+                            derivation=replace(row.derivation, thickness="-1", thickness_unit="not-a-length"))
+        self.assertEqual(preview_ald_contract([malformed], contract=contract(),
+                                             check_nonnegative_derived_thickness=True)["issue_counts"],
+                         {"unsupported_growth_unit": 1, "unsupported_thickness_unit": 1})
+        slope = replace(row, target_method="steady_growth_slope", target="-0.1", derivation=None)
+        self.assertEqual(preview_ald_contract([slope], contract=contract(target_method="steady_growth_slope"),
+                                             check_nonnegative_derived_thickness=True)["issue_counts"], {})
+        for switch in (None, 0, 1, "true"):
+            with self.subTest(switch=switch), self.assertRaisesRegex(ValueError, "explicit bool"):
+                preview_ald_contract([row], contract=contract(), check_nonnegative_derived_thickness=switch)
+
     def test_steady_slope_is_not_proved_by_average_thickness(self):
         declared = contract(target_method="steady_growth_slope")
         clean = observation(target_method="steady_growth_slope", target="-0.1", derivation=None)
