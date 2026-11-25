@@ -50,18 +50,20 @@ def _input_support_aligned(training, incoming):
     for name in training:
         source, query = training[name], incoming[name]
         source_missing, query_missing = source.isna(), query.isna().to_numpy()
-        observed = source[~source_missing]
-        all_missing = len(observed) == 0
-        unsupported = ~query_missing if all_missing else np.zeros(len(incoming), dtype=bool)
+        n_source_missing = int(source_missing.sum())
+        all_missing = n_source_missing == len(source)
+        n_query_missing = int(query_missing.sum())
         flags["missing_value"] |= query_missing
-        flags["non_missing_value_in_all_missing_training_feature"] |= unsupported
+        if all_missing:
+            flags["non_missing_value_in_all_missing_training_feature"] |= ~query_missing
         numeric = pd.api.types.is_numeric_dtype(source)
         feature = {
             "name": name, "kind": "numeric" if numeric else "categorical",
-            "training_missing_count": int(source_missing.sum()),
+            "training_missing_count": n_source_missing,
             "training_support": "unavailable_all_missing" if all_missing else "observed_non_missing_values",
-            "prediction_missing_count": int(query_missing.sum()),
-            "prediction_non_missing_without_training_values_count": int(unsupported.sum()),
+            "prediction_missing_count": n_query_missing,
+            "prediction_non_missing_without_training_values_count":
+                len(incoming) - n_query_missing if all_missing else 0,
         }
         if numeric:
             # Normalization already rejects infinities. Direct comparisons
@@ -69,14 +71,24 @@ def _input_support_aligned(training, incoming):
             feature["below_training_min_count"] = None
             feature["above_training_max_count"] = None
             if not all_missing:
-                below = query.to_numpy() < observed.min()
-                above = query.to_numpy() > observed.max()
+                if source.dtype == np.dtype(np.float64):
+                    # The canonical numeric dtype carries missingness as NaN.
+                    # Reduce the existing buffer instead of copying observed
+                    # rows into a pandas Series just to take its extrema.
+                    values = source.to_numpy(copy=False)
+                    minimum, maximum = np.nanmin(values), np.nanmax(values)
+                else:
+                    observed = source[~source_missing]
+                    minimum, maximum = observed.min(), observed.max()
+                q = query.to_numpy()
+                below, above = q < minimum, q > maximum
                 feature["below_training_min_count"] = int(below.sum())
                 feature["above_training_max_count"] = int(above.sum())
                 flags["numeric_outside_training_range"] |= below | above
         else:
             # Source categories, not imputed/encoded categories: a literal
             # missing marker is a normal string; NaN is counted separately.
+            observed = source[~source_missing]
             unseen = ~query_missing & ~query.isin(observed.unique()).to_numpy()
             feature["unseen_category_count"] = int(unseen.sum())
             flags["unseen_category"] |= unseen

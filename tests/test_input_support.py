@@ -73,6 +73,25 @@ class SourceSupportTests(unittest.TestCase):
         self.assertEqual(result["features"][1]["below_training_min_count"], 2)
         json.dumps(result, allow_nan=False)
 
+    def test_float64_range_does_not_materialize_filtered_training_values(self):
+        from groupbench.input_support import _input_support_aligned
+
+        train = pd.DataFrame({"x": [np.nan, -2., 5., np.nan]})
+        query = pd.DataFrame({"x": [np.nan, -3., -2., 5., 6.]})
+        old_getitem = pd.Series.__getitem__
+
+        def no_numeric_subset(series, key):
+            if series.dtype == np.dtype(np.float64) and isinstance(key, pd.Series):
+                raise AssertionError("canonical float64 support should use the original buffer")
+            return old_getitem(series, key)
+
+        with patch.object(pd.Series, "__getitem__", no_numeric_subset):
+            report = _input_support_aligned(train, query)
+        feature = report["features"][0]
+        self.assertEqual((feature["below_training_min_count"], feature["above_training_max_count"]), (1, 1))
+        self.assertEqual(feature["training_missing_count"], 2)
+        self.assertEqual(report["rows_with_any_flag"], 3)
+
     def test_all_missing_training_is_explicitly_unavailable(self):
         train = pd.DataFrame({"x": [np.nan, np.nan], "kind": pd.Series([None, None], dtype=object)})
         new = pd.DataFrame({"x": [1., np.nan, -1.], "kind": ["new", None, "__GROUPBENCH_MISSING__"]})
