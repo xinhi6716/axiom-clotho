@@ -21,11 +21,16 @@ def triplet(chip="chipA", key="t1", start=0):
 
 
 class WritePairAudit(unittest.TestCase):
-    def run_rows(self, rows, header=HEADER, extra=()):
+    def run_rows(self, rows, header=HEADER, extra=(), roster=None):
         with tempfile.TemporaryDirectory() as tmp:
             p = Path(tmp) / "input.csv"
             with p.open("w", newline="", encoding="utf-8") as out:
                 csv.writer(out).writerows([header, *rows])
+            if roster is not None:
+                roster_path = Path(tmp) / "roster.csv"
+                with roster_path.open("w", newline="", encoding="utf-8") as out:
+                    csv.writer(out).writerows([HEADER[:4], *roster])
+                extra = (*extra, "--expected-transitions", str(roster_path))
             return subprocess.run([sys.executable, str(TOOL), str(p), *extra],
                                   text=True, capture_output=True, check=False)
 
@@ -38,6 +43,34 @@ class WritePairAudit(unittest.TestCase):
         self.assertEqual(report["eligible_declared_cells"], 2)
         self.assertEqual(report["eligible_declared_chips"], 2)
         self.assertNotIn("privateCell", result.stdout)
+
+    def test_expected_roster_distinguishes_missing_unexpected_and_present_ineligible(self):
+        a, b = triplet(), triplet("chipB")
+        roster = [b[0][:4], a[0][:4]]  # The roster is an exact set, not capture order.
+        self.assertEqual(self.run_rows(a).returncode, 0)
+        for captured, expected_exit, counts in (
+            (a + b, 0, (0, 0, 0)),
+            (a, 1, (1, 0, 0)),
+            (a + triplet("chipC"), 1, (1, 1, 0)),
+            (a + b[:2], 1, (0, 0, 1)),
+            ([], 1, (2, 0, 0)),
+        ):
+            with self.subTest(counts=counts):
+                result = self.run_rows(captured, roster=roster)
+                self.assertEqual(result.returncode, expected_exit, result.stderr)
+                self.assertNotIn("privateCell", result.stdout)
+                self.assertEqual(json.loads(result.stdout)["expected_roster"], {
+                    "expected_transitions": 2,
+                    "missing_expected_transitions": counts[0],
+                    "unexpected_captured_transitions": counts[1],
+                    "present_expected_ineligible_transitions": counts[2],
+                })
+        for bad in ([], [roster[0], roster[0]], [["wrong", "", "three", "four"]]):
+            result = self.run_rows(a, roster=bad)
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("roster", result.stderr)
+            self.assertNotIn("privateCell", result.stderr)
+            self.assertFalse(result.stdout)
 
     def test_eligible_chips_with_disjoint_protocols_have_no_shared_strata(self):
         a, b = triplet(), triplet("chipB")

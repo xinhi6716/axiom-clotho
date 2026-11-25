@@ -43,8 +43,7 @@ def coverage(entries):
     }
 
 
-def audit(path):
-    """Return redacted counts, rejecting invalid identities and local timelines."""
+def _csv_reader(path):
     if not stat.S_ISREG(path.stat().st_mode):
         raise ValueError("input must be a regular file")
     with path.open("rb") as source:
@@ -53,7 +52,35 @@ def audit(path):
         raise ValueError("input exceeds byte limit")
     if b"\x00" in raw:
         raise ValueError("input contains NUL")
-    reader = csv.reader(io.StringIO(raw.decode("utf-8-sig"), newline=""), strict=True)
+    return csv.reader(io.StringIO(raw.decode("utf-8-sig"), newline=""), strict=True)
+
+
+def _expected_transitions(path):
+    columns = FIELDS[:4]
+    reader = _csv_reader(path)
+    header = next(reader, [])
+    if len(header) != len(columns) or set(header) != set(columns):
+        raise ValueError("roster must have the four identity columns exactly once")
+    indices = [header.index(name) for name in columns]
+    keys = set()
+    for count, row in enumerate(reader, 1):
+        if count > MAX_ROWS or len(row) != len(columns):
+            raise ValueError("roster row limit exceeded or wrong field count")
+        key = tuple(row[i] for i in indices)
+        if not all(IDENTIFIER.fullmatch(s) for s in key):
+            raise ValueError("invalid roster identity")
+        if key in keys:
+            raise ValueError("duplicate roster transition identity")
+        keys.add(key)
+    if not keys:
+        raise ValueError("roster must not be empty")
+    return keys
+
+
+def audit(path, *, expected_path=None):
+    """Return redacted counts, rejecting invalid identities and local timelines."""
+    expected = _expected_transitions(expected_path) if expected_path is not None else None
+    reader = _csv_reader(path)
     header = next(reader, [])
     if len(header) != len(FIELDS) or set(header) != set(FIELDS):
         raise ValueError("input must have the declared columns exactly once")
@@ -119,7 +146,7 @@ def audit(path):
             action_signature = read_signature + (events[1][1], events[1][4])
             read_coverage.append((read_signature, key[0]))
             action_coverage.append((action_signature, key[0]))
-    return {
+    report = {
         "schema": "clotho.rram_write_pair_audit.v1",
         "events": count,
         "declared_transitions": len(transitions),
@@ -130,6 +157,15 @@ def audit(path):
         "declared_read_condition_coverage": coverage(read_coverage),
         "declared_exact_action_coverage": coverage(action_coverage),
     }
+    if expected is not None:
+        captured = transitions.keys()
+        report["expected_roster"] = {
+            "expected_transitions": len(expected),
+            "missing_expected_transitions": len(expected - captured),
+            "unexpected_captured_transitions": len(captured - expected),
+            "present_expected_ineligible_transitions": len((expected & captured) - set(eligible)),
+        }
+    return report
 
 
 def main():
@@ -137,9 +173,11 @@ def main():
     parser.add_argument("csv", type=Path)
     parser.add_argument("--require-shared-action", action="store_true",
                         help="also require a declared exact action shared across chip labels")
+    parser.add_argument("--expected-transitions", type=Path,
+                        help="identity-only CSV roster; require exact captured transition coverage")
     args = parser.parse_args()
     try:
-        report = audit(args.csv)
+        report = audit(args.csv, expected_path=args.expected_transitions)
     except (OSError, UnicodeError, csv.Error):
         parser.exit(2, "error: input could not be read as UTF-8 CSV\n")
     except ValueError as exc:
@@ -147,6 +185,9 @@ def main():
     print(json.dumps(report, indent=2, sort_keys=True))
     if (not report["eligible_transitions"]
             or report["eligible_transitions"] != report["declared_transitions"]):
+        return 1
+    roster = report.get("expected_roster")
+    if roster is not None and (roster["missing_expected_transitions"] or roster["unexpected_captured_transitions"]):
         return 1
     if args.require_shared_action and not report["declared_exact_action_coverage"]["multi_chip_strata"]:
         return 1

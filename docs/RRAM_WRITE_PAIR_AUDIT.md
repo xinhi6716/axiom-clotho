@@ -47,6 +47,17 @@ physical provenance, independence, or adequate support per action.
 Before fitting, reconcile protocol aliases, verify independent die IDs, and
 preserve actual post-write delay and read window in the mapping receipt.
 
+To distinguish an omitted transition from a recorded but ineligible one,
+supply `--expected-transitions roster.csv` with an independently frozen,
+nonempty identity-only roster: `chip,cell,episode,transition`, no other
+columns and no duplicate exact identities. The audit adds redacted counts for
+missing expected, unexpected captured, and present-but-ineligible expected
+transitions. Any mismatch returns 1 even when every captured triplet is valid;
+a malformed roster returns 2. A valid roster declares the intended collection
+plan, not proof that a device was triggered or a pulse delivered. The audit
+does not authenticate or freeze the roster and never imputes a missing event.
+Without the option, the legacy report and exit behavior are unchanged.
+
 The tool accepts up to 8 MiB / 100,000 records. Exit 0 means nonempty and all
 declared transitions structurally eligible; 1 means zero eligible or one or more
 rejected (JSON is still emitted); 2 means the file/timeline is invalid.
