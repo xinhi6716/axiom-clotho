@@ -1,4 +1,4 @@
-"""Fail closed on NUL group IDs; original synthetic validation-only probes."""
+"""Fail closed on NUL and invalid Unicode group IDs; synthetic probes."""
 
 from contextlib import ExitStack
 import unittest
@@ -32,6 +32,33 @@ class TextGroupIdentityTests(unittest.TestCase):
                     groups = container(["ordinary", value, "another"])
                     with self.assertRaisesRegex(ValueError, "NUL \\(U\\+0000\\)"):
                         validate_groups(groups, 3)
+
+    def test_lone_surrogates_fail_without_disclosing_identifier(self):
+        for unit in ("\ud800", "\udc00", "\udfff", "\ud83d\ude42"):
+            bad = "PRIVATE_IDENTIFIER" + unit
+            for container in (list, lambda values: np.array(values, dtype=object),
+                              lambda values: pd.Series(values, dtype=object)):
+                with self.subTest(unit=ascii(unit), container=container):
+                    values = container(["ordinary", bad, "another"])
+                    with self.assertRaisesRegex(ValueError, "surrogate code points") as error:
+                        validate_groups(values, 3)
+                    self.assertNotIn("PRIVATE_IDENTIFIER", str(error.exception))
+
+    def test_surrogate_rejection_precedes_factorizing_and_fingerprinting(self):
+        frame = fixture()
+        frame.loc[8:11, "g"] = "bad\ud800"
+        with patch("groupbench.splitting.pd.factorize", side_effect=AssertionError("Must not factorize")):
+            with self.assertRaisesRegex(ValueError, "surrogate code points"):
+                list(GroupKFold(3).split(groups=frame.g))
+        for runner, path in ((benchmark, "groupbench.evaluation.data_fingerprint"),
+                             (benchmark_binary, "groupbench.binary.workflow.data_fingerprint")):
+            with self.subTest(runner=runner.__name__), patch(
+                path, side_effect=AssertionError("Must not fingerprint")
+            ) as fingerprint:
+                with self.assertRaisesRegex(ValueError, "surrogate code points"):
+                    runner(frame, target="y", group="g", outer_splits=3, inner_splits=2,
+                           baselines=("dummy",))
+                fingerprint.assert_not_called()
 
     def test_diagnostic_does_not_disclose_identifier(self):
         with self.assertRaises(ValueError) as caught:

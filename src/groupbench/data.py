@@ -16,6 +16,7 @@ from pandas.api.types import is_bool_dtype, is_numeric_dtype
 
 MAX_ROWS = 20_000
 MAX_FEATURES = 100
+_SURROGATE_CODE_POINT = re.compile("[\ud800-\udfff]")
 
 
 def validate_seed(seed: int) -> int:
@@ -247,6 +248,10 @@ def validate_groups(groups, n_rows: int) -> np.ndarray:
         raise ValueError("Group identifiers cannot contain NUL (U+0000) characters; explicitly repair the source identifiers before use.")
     if any(not v.strip() for v in a):
         raise ValueError("Group identifiers cannot be blank strings.")
+    # Python strings can retain surrogate code points, but they cannot be
+    # written as UTF-8 IDs. Catch them before grouping or fingerprinting.
+    if any(not str.isascii(v) and _SURROGATE_CODE_POINT.search(v) for v in a):
+        raise ValueError("Group identifiers cannot contain Unicode surrogate code points; explicitly repair the source identifiers before use.")
     return a.astype(str).astype(object)
 
 
