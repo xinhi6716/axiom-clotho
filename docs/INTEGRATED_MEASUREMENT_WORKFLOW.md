@@ -72,8 +72,23 @@ required. No state or physical identity is inferred. Review the full pinned
 [measurement contract](../src/mlworkflow/_vendor/semiconductor/examples/measurement-to-features/README.md)
 before adapting the format; `features --help` exposes all existing options.
 
-Output is `features.csv` plus five schema/provenance reports. Use
-`feature_schema.json`'s allowlist deliberately; audit IDs, cycle counts and the
+### Feature export files
+
+The feature export contains these six files:
+
+| File | Purpose |
+| --- | --- |
+| `features.csv` | Extracted features and their device/condition identifiers. |
+| `feature_schema.json` | Column roles, units, predictor allowlist and empty target list. |
+| `iv_readpoints.json` | Readpoint extraction results, brackets and source-row references. |
+| `resistance_input.csv` | Derived resistance measurements sent to the paired-window evaluator; includes per-device IDs, cycles and state. |
+| `rram_windows.json` | Paired resistance windows and descriptive summaries. |
+| `provenance.json` | Input and code digests, declared conditions and source references. |
+
+The resistance input is an intermediate measurement table, not a feature table
+or a metadata-only report. Review it and the JSON files for device identifiers
+and measurement values before sharing. Use `feature_schema.json`'s allowlist
+deliberately; audit IDs, cycle counts and the
 condition/group columns are not automatic model predictors. The default row is
 one device at one fixed condition. `--feature-row-unit device-condition` keeps
 multiple conditions separate; repeated conditions do not become independent

@@ -4,6 +4,7 @@ import copy
 import hashlib
 import io
 import json
+import re
 import os
 from pathlib import Path
 import shutil
@@ -120,7 +121,13 @@ class WorkflowTests(unittest.TestCase):
                                        capture_output=True, text=True, timeout=15)
         self.assertEqual(direct_result.returncode, 0, direct_result.stderr)
         self.assertEqual(files(output), files(direct))
-        self.assertEqual(len(files(output)), 6)
+        guide = (Path(__file__).resolve().parents[1] / "docs" /
+                 "INTEGRATED_MEASUREMENT_WORKFLOW.md").read_text(encoding="utf-8")
+        export_section = guide.split("### Feature export files", 1)[1].split("\n##", 1)[0]
+        documented = re.findall(r"^\| `([A-Za-z_]+\.(?:csv|json))` \|", export_section, re.M)
+        self.assertEqual(len(documented), len(set(documented)))
+        self.assertEqual(set(documented), {p.name for p in output.iterdir()})
+        self.assertEqual(len(documented), 6)
         schema = json.loads((output / "feature_schema.json").read_bytes())
         self.assertEqual(schema["target_columns"], [])
         before = files(output)
