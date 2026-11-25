@@ -230,7 +230,10 @@ def evaluate_saved_intervals(document):
     for row in source:
         _keys(row, {"row_id", "group", "observed", "lower", "upper", "status"}, "row")
         ids.append(_label(row["row_id"]))
-        if row["status"] != "ok":
+        # Array equality can produce a truthy single-element mask rather
+        # than a literal success marker in the direct Python API.
+        status = row["status"]
+        if type(status) is not str or status != "ok":
             raise ValueError("Failed/non-ok row: entire cohort rejected; no failures are dropped")
     if len(set(ids)) != len(ids):
         raise ValueError("Duplicate observed row identifier")

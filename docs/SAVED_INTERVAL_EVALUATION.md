@@ -59,7 +59,7 @@ Version 1 requires exactly the following document keys:
 - `alpha`: `null`, or **one fixed miscoverage** strictly between 0 and 1 for
   every row. For example, `0.2` declares nominal coverage `0.8`, not `0.2`.
 - `rows`: each row has exactly `row_id`, `group`, `observed`, `lower`, `upper`,
-  `status`. The only accepted status is `"ok"`.
+  `status`. The only accepted status is the literal string `"ok"`.
 
 Both lists must contain 1–20,000 entries. Row identifiers are case-sensitive,
 nonempty trimmed text, at most 256 characters, without C0 control characters (U+0000–U+001F).

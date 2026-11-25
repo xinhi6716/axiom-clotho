@@ -3,7 +3,12 @@ from copy import deepcopy
 from decimal import Decimal
 import unittest
 
-from groupbench.interval_evaluation import compare_saved_interval_scores
+import numpy as np
+
+from groupbench.interval_evaluation import (
+    compare_saved_interval_scores,
+    diagnose_saved_interval_whole_group_coverage,
+)
 
 
 def document(last, scale=1, offset=0):
@@ -19,6 +24,18 @@ def document(last, scale=1, offset=0):
 
 
 class PairedIntervalScoreTests(unittest.TestCase):
+    def test_direct_python_status_must_be_literal_text(self):
+        good = document(-1)
+        for status in (np.array("ok"), np.array(["ok"]), np.array(["failed", "ok"])):
+            bad = deepcopy(good)
+            bad["rows"][0]["status"] = status
+            with self.subTest(shape=status.shape):
+                with self.assertRaisesRegex(ValueError, "non-ok row"):
+                    diagnose_saved_interval_whole_group_coverage(bad)
+                with self.assertRaisesRegex(ValueError, "non-ok row"):
+                    compare_saved_interval_scores(good, bad)
+        self.assertEqual(compare_saved_interval_scores(good, good)["n_rows"], 10)
+
     def test_same_coverage_and_width_unequal_miss_distance_and_score(self):
         a, b = document(-1), document(-10)
         before = deepcopy((a, b))
