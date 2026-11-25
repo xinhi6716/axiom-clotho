@@ -103,6 +103,12 @@ device IDs. Targets must be supplied finite decimal measurements in your declare
 unit. A prediction-device label in this file is an error, not a convenient join.
 The tool does not derive a target from HRS/LRS features, impute missing targets,
 choose endpoints, or decide whether their timing and semantics are meaningful.
+For the Python measurement workflow's numeric fields, nonzero decimal
+magnitudes must lie between `1e-100` and `1e100` inclusive. These bounds apply
+before conversion to binary64 and are independent of the caller's Decimal
+arithmetic context. A token just outside the range does not become admissible
+because it would round onto a bound. Accepted decimal fields still use
+binary64 for model inputs and scoring; this is not a lossless numeric parser.
 
 `later_outcomes.csv` has the same two-column format, but must match exactly the
 saved prediction cohort. Partial scoring, duplicate IDs, extra rows and omitted

@@ -20,6 +20,8 @@ INVENTORIES = {
 MAX_BYTES = 8 * 1024 * 1024
 MAX_ROWS = 10000
 NUMBER = re.compile(r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]{1,4})?\Z")
+_MIN_NONZERO_MAGNITUDE = Decimal("1e-100")
+_MAX_MAGNITUDE = Decimal("1e100")
 DECLARATIONS = {"global_physical_ids", "pre_outcome_features", "endpoint_not_derived_from_features", "measurement_assumptions_accepted"}
 CONFIG_KEYS = {"schema_version", "endpoint_name", "target_unit", "group_by", "features", "max_bracket_span_V", "outer_splits", "inner_splits", "baselines", "seed", "objective", "max_fits", "declarations"}
 
@@ -89,7 +91,9 @@ def number(value):
         exact = Decimal(value)
         if len(exact.as_tuple().digits) > 32 or abs(exact.as_tuple().exponent) > 200:
             raise WorkflowError("numeric precision exceeds the supported range; rescale explicitly")
-        if exact and not Decimal("1e-100") <= abs(exact) <= Decimal("1e100"):
+        # Decimal abs() obeys context precision, rounding and traps. The
+        # admission bounds apply to the original decimal, not a rounded copy.
+        if exact and not _MIN_NONZERO_MAGNITUDE <= exact.copy_abs() <= _MAX_MAGNITUDE:
             raise WorkflowError("numeric magnitude exceeds the supported range; rescale explicitly")
         result = float(exact)
         if not math.isfinite(result):

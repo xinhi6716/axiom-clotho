@@ -1,6 +1,7 @@
 """Real CSV contracts: complete joins, no leakage, bounded fitting and saved scoring."""
 import copy
 import csv
+from decimal import Inexact, ROUND_DOWN, ROUND_UP, localcontext
 import hashlib
 import importlib.util
 import json
@@ -108,6 +109,40 @@ class MeasurementRegressionTests(unittest.TestCase):
                         self.prepare()
                     self.assertFalse(self.prepared.exists())
             (self.inputs / name).write_bytes(original)
+
+    def test_prepare_rejects_exact_target_beyond_magnitude_even_if_binary64_rounds_to_bound(self):
+        path = self.inputs / "training_targets.csv"
+        original = path.read_bytes()
+        columns = ("device", "target")
+        for token in ("1.000000000000000000000000000001e100", "-9.999999999999999999999999999999e-101"):
+            if self.prepared.exists():
+                shutil.rmtree(self.prepared)
+            rows = c.parse_csv(original, columns)
+            rows[0]["target"] = token
+            path.write_bytes(c.csv_bytes(columns, rows))
+            with self.subTest(token=token):
+                with self.assertRaisesRegex(c.WorkflowError, "numeric magnitude"):
+                    self.prepare()
+                self.assertFalse(self.prepared.exists())
+
+    def test_measurement_number_admission_is_independent_of_decimal_context(self):
+        rejected = (
+            "1.000000000000000000000000000001e100", "-1.000000000000000000000000000001e100",
+            "9.999999999999999999999999999999e-101", "-9.999999999999999999999999999999e-101",
+        )
+        accepted = ("-0.34", "1e100", "-1e100", "1e-100", "-1e-100", "-0")
+        for rounding in (ROUND_DOWN, ROUND_UP):
+            with self.subTest(rounding=rounding), localcontext() as context:
+                context.prec = 1
+                context.Emin, context.Emax = -1, 1
+                context.rounding = rounding
+                context.traps[Inexact] = True
+                for token in accepted:
+                    with self.subTest(token=token):
+                        self.assertEqual(c.number(token).hex(), float(token).hex())
+                for token in rejected:
+                    with self.subTest(token=token), self.assertRaisesRegex(c.WorkflowError, "numeric magnitude"):
+                        c.number(token)
 
     def test_future_targets_cannot_enter_training_file(self):
         train = self.rows("training_targets.csv", ("device", "target"))
