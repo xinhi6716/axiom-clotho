@@ -5,7 +5,7 @@
 //! independently of calibration. This function checks neither assumption.
 //! It does not consume query labels, construct bounds, or read any files.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, HashSet};
 
 pub const MAX_CALIBRATION_ROWS: usize = 20_000;
 pub const MAX_IDENTIFIER_BYTES: usize = 256;
@@ -79,9 +79,7 @@ pub fn calibrate_group_max(
     {
         return Err(GroupMaxError::InvalidKey);
     }
-    let expected: BTreeSet<_> = roster.iter().copied().collect();
-    let supplied: BTreeSet<_> = rows.iter().map(|r| r.key).collect();
-    if expected.len() != roster.len() || supplied.len() != rows.len() || expected != supplied {
+    if !matches_roster(roster, rows) {
         return Err(GroupMaxError::RosterMismatch);
     }
 
@@ -112,6 +110,53 @@ pub fn calibrate_group_max(
         rank,
         radius: ordered[rank - 1],
     })
+}
+
+fn matches_roster(roster: &[RowKey<'_>], rows: &[CalibrationRow<'_>]) -> bool {
+    if roster.len() != rows.len() {
+        return false;
+    }
+    // A strictly ordered roster proves uniqueness. If the supplied keys
+    // follow it directly or in reverse, there is nothing to index.
+    let first_difference = roster
+        .iter()
+        .zip(rows)
+        .position(|(key, row)| *key != row.key);
+    if first_difference.is_some_and(|i| i + 1 == roster.len()) {
+        // With every other pair unchanged, one differing final key cannot
+        // be a permutation. This also rejects a repeated last key cheaply.
+        return false;
+    }
+    if first_difference.is_none()
+        || roster
+            .iter()
+            .zip(rows.iter().rev())
+            .all(|(key, row)| *key == row.key)
+    {
+        let ascending = roster.first() <= roster.last();
+        if roster.windows(2).all(|pair| {
+            if ascending {
+                pair[0] < pair[1]
+            } else {
+                pair[0] > pair[1]
+            }
+        }) {
+            return true;
+        }
+    }
+
+    // Consume each unique declared pair exactly once, irrespective of order.
+    // A repeated or unexpected supplied key cannot remove an entry.
+    let mut remaining = HashSet::with_capacity(roster.len());
+    if roster.iter().any(|key| !remaining.insert((key.group, key.row)))
+        || rows
+            .iter()
+            .any(|r| !remaining.remove(&(r.key.group, r.key.row)))
+    {
+        return false;
+    }
+    debug_assert!(remaining.is_empty());
+    true
 }
 
 #[cfg(test)]
@@ -233,8 +278,55 @@ mod tests {
             Err(GroupMaxError::RosterMismatch)
         );
         assert_eq!(
+            calibrate_group_max(&[a, b, c], &[obs(a, 1.0), obs(b, 1.0), obs(b, 1.0)], 1, 2),
+            Err(GroupMaxError::RosterMismatch)
+        );
+        assert_eq!(
             calibrate_group_max(&[a, a, c], &[obs(a, 1.0), obs(b, 1.0), obs(c, 3.0)], 1, 2),
             Err(GroupMaxError::RosterMismatch)
+        );
+    }
+
+    #[test]
+    fn aligned_or_reversed_rosters_still_require_unique_pairs() {
+        let a = key("a", "only");
+        let b = key("b", "only");
+        let c = key("c", "only");
+        let order = [a, b, c];
+        let duplicate = [a, a, c];
+        for roster in [order, duplicate] {
+            let rows = roster.map(|key| obs(key, 1.0));
+            let expected = if roster == order {
+                Ok(GroupMaxCutoff::Finite {
+                    groups: 3,
+                    rank: 2,
+                    radius: 1.0,
+                })
+            } else {
+                Err(GroupMaxError::RosterMismatch)
+            };
+            assert_eq!(calibrate_group_max(&roster, &rows, 1, 2), expected);
+            let reversed = [rows[2], rows[1], rows[0]];
+            assert_eq!(calibrate_group_max(&roster, &reversed, 1, 2), expected);
+        }
+    }
+
+    #[test]
+    fn validates_all_keys_before_matching_and_roster_before_residuals() {
+        let a = key("group", "first");
+        let b = key("group", "second");
+        let bad = key("group", "\n");
+        assert_eq!(
+            calibrate_group_max(&[a, a], &[obs(a, 0.0), obs(bad, f64::NAN)], 1, 2),
+            Err(GroupMaxError::InvalidKey)
+        );
+        assert_eq!(
+            calibrate_group_max(&[a, b], &[obs(a, f64::NAN), obs(a, 0.0)], 1, 2),
+            Err(GroupMaxError::RosterMismatch)
+        );
+        assert_eq!(
+            calibrate_group_max(&[a, b], &[obs(b, 0.0), obs(a, f64::NAN)], 1, 2),
+            Err(GroupMaxError::NonfiniteResidual)
         );
     }
 
