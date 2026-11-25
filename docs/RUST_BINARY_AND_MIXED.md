@@ -59,6 +59,16 @@ mean log loss and accuracy use every group. Mean group balanced accuracy uses
 only groups where that metric is defined, and explicitly records its denominator.
 AUC is not naively averaged across incomparable groups.
 
+Pooled out-of-fold ROC AUC compares all positive–negative pairs, including
+scores from different fitted fold models. Score offsets or unequal training
+prevalence can change this pooled ranking without changing any within-fold
+ranking. In the synthetic two-wafer prevalence-baseline test, each fold's
+AUC is 0.5 and the pooled AUC is 0.25. The pooled field is neither a
+within-fold average nor the AUC of one final model. For the latter, evaluate
+one frozen fit on a separate cohort representing the intended ranking
+population. See [Numminen et al., §2.2](https://doi.org/10.1007/s00180-022-01288-3)
+for the cross-fit interpretation.
+
 ## Explicit mixed preprocessing
 
 The default remains strict numeric input. Enable the mixed path deliberately:
