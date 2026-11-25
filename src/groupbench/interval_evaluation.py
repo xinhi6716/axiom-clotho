@@ -167,37 +167,47 @@ def _mean(values):
     return sum(values, Fraction()) / len(values)
 
 
-def _summary(rows, alpha):
+def _group_statistics(rows, alpha):
+    covered = below = above = 0
+    width = score = Fraction()
+    for row in rows:
+        covered += row["covered"]
+        below += row["below_lower"]
+        above += row["above_upper"]
+        width += row["width"]
+        if alpha is not None:
+            score += row["score"]
+    return len(rows), covered, below, above, width, score
+
+
+def _summary(stats, alpha):
+    n, covered, _, _, width, score = stats
     return {
-        "n_rows": len(rows),
-        "n_covered": sum(row["covered"] for row in rows),
-        "empirical_coverage_approx": _approx(Fraction(sum(row["covered"] for row in rows), len(rows))),
-        "mean_width_approx": _approx(_mean([row["width"] for row in rows])),
-        "mean_interval_score_approx": None if alpha is None else _approx(_mean([row["score"] for row in rows])),
+        "n_rows": n,
+        "n_covered": covered,
+        "empirical_coverage_approx": _approx(Fraction(covered, n)),
+        "mean_width_approx": _approx(width / n),
+        "mean_interval_score_approx": None if alpha is None else _approx(score / n),
     }
 
 
-def _tail_misses(rows, by_group):
+def _tail_misses(total, grouped):
     """Describe direction of misses, without testing equal-tail calibration."""
-    def summarize(items):
-        return {"n_rows": len(items), **{
-            key: sum(row[key] for row in items)
-            for key in ("below_lower", "above_upper")
-        }, **{
-            key + "_rate_approx": _approx(Fraction(sum(row[key] for row in items), len(items)))
-            for key in ("below_lower", "above_upper")
-        }}
+    def summarize(stats):
+        n, _, below, above, _, _ = stats
+        return {"n_rows": n, "below_lower": below, "above_upper": above,
+                "below_lower_rate_approx": _approx(Fraction(below, n)),
+                "above_upper_rate_approx": _approx(Fraction(above, n))}
 
     return {
         "rule": "below_lower: observed < lower; above_upper: observed > upper; endpoints are covered",
         "interpretation": "Descriptive tail misses only; no calibration test, independence claim or future-coverage guarantee.",
-        "row_weighted": summarize(rows),
-        "groups": [{"group": group, **summarize(items)} for group, items in sorted(by_group.items())],
-        "equal_group": {"n_groups": len(by_group), **{
+        "row_weighted": summarize(total),
+        "groups": [{"group": group, **summarize(stats)} for group, stats in grouped.items()],
+        "equal_group": {"n_groups": len(grouped), **{
             key + "_rate_approx": _approx(_mean([
-                Fraction(sum(row[key] for row in items), len(items))
-                for items in by_group.values()]))
-            for key in ("below_lower", "above_upper")
+                Fraction(stats[i], stats[0]) for stats in grouped.values()]))
+            for key, i in (("below_lower", 2), ("above_upper", 3))
         }},
     }
 
@@ -259,13 +269,18 @@ def evaluate_saved_intervals(document):
     by_group = {}
     for row in evaluated:
         by_group.setdefault(row["group"], []).append(row)
-    group_rows = [{"group": group, **_summary(rows, alpha)} for group, rows in sorted(by_group.items())]
-    # Aggregate exact group means, never the rounded per-group output numbers.
+    # One exact accumulation per group feeds all report views. Summing
+    # group totals and averaging exact means are separate weighting rules.
+    grouped = {group: _group_statistics(rows, alpha) for group, rows in sorted(by_group.items())}
+    total = tuple(sum(column) for column in zip(*grouped.values()))
+    group_rows = [{"group": group, **_summary(stats, alpha)} for group, stats in grouped.items()]
     equal = {
-        "n_groups": len(by_group),
-        "empirical_coverage_approx": _approx(_mean([Fraction(sum(r["covered"] for r in rows), len(rows)) for rows in by_group.values()])),
-        "mean_width_approx": _approx(_mean([_mean([r["width"] for r in rows]) for rows in by_group.values()])),
-        "mean_interval_score_approx": None if alpha is None else _approx(_mean([_mean([r["score"] for r in rows]) for rows in by_group.values()])),
+        "n_groups": len(grouped),
+        "empirical_coverage_approx": _approx(_mean([
+            Fraction(stats[1], stats[0]) for stats in grouped.values()])),
+        "mean_width_approx": _approx(_mean([stats[4] / stats[0] for stats in grouped.values()])),
+        "mean_interval_score_approx": None if alpha is None else _approx(_mean([
+            stats[5] / stats[0] for stats in grouped.values()])),
     }
     observations = [{key: value for key, value in row.items() if key not in ("width", "score")} |
                     {"width_approx": _approx(row["width"]),
@@ -278,9 +293,9 @@ def evaluate_saved_intervals(document):
         "nominal_coverage_exact": None if alpha is None else str(1 - alpha),
         "nominal_coverage_approx": None if alpha is None else _approx(1 - alpha),
         "cohort": {"expected_rows": len(expected), "input_rows": len(source), "scored_rows": len(evaluated), "omitted_rows": 0},
-        "row_weighted": _summary(evaluated, alpha), "equal_group": equal,
+        "row_weighted": _summary(total, alpha), "equal_group": equal,
         "groups": group_rows, "observations": observations,
-        "tail_misses": _tail_misses(evaluated, by_group),
+        "tail_misses": _tail_misses(total, grouped),
         "limitations": list(LIMITATIONS),
     }
 

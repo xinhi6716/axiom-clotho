@@ -45,6 +45,29 @@ class SavedIntervalTests(unittest.TestCase):
         self.assertEqual(report["metadata"]["value_unit"], "V")
         self.assertFalse(report["provenance_verified"])
 
+    def test_exact_totals_feed_row_and_group_scoring_without_shared_rounding(self):
+        observations = (
+            ("a", "x", "-.01", "0", ".1"),
+            ("b", "x", ".03", "0", ".1"),
+            ("c", "y", ".16", "0", ".11"),
+        )
+        doc = fixture()
+        doc["alpha"] = Decimal(".11")
+        doc["expected_row_ids"] = [r[0] for r in observations[::-1]]
+        doc["rows"] = [dict(row_id=k, group=g, observed=Decimal(v), lower=Decimal(lo),
+                            upper=Decimal(hi), status="ok") for k,g,v,lo,hi in observations]
+        r = evaluate_saved_intervals(doc)
+        a = Fraction(1,10) + 2*Fraction(1,100)/Fraction(11,100)
+        b = Fraction(1,10)
+        c = Fraction(11,100) + 2*Fraction(5,100)/Fraction(11,100)
+        self.assertEqual(r["row_weighted"]["mean_interval_score_approx"], float((a+b+c)/3))
+        self.assertEqual(r["equal_group"]["mean_interval_score_approx"], float(((a+b)/2+c)/2))
+        self.assertEqual(r["row_weighted"]["mean_width_approx"], float(Fraction(31,300)))
+        self.assertEqual(r["equal_group"]["mean_width_approx"], float(Fraction(21,200)))
+        self.assertEqual(r["tail_misses"]["row_weighted"]["below_lower_rate_approx"], 1/3)
+        self.assertEqual(r["tail_misses"]["equal_group"]["below_lower_rate_approx"], 1/4)
+        self.assertEqual(r["tail_misses"]["equal_group"]["above_upper_rate_approx"], 1/2)
+
     def test_closed_endpoints_degenerate_and_both_penalties(self):
         for y, lower, upper, hit, width, score in [(0, 0, 2, True, 2, 2), (2, 0, 2, True, 2, 2),
                 (1, 1, 1, True, 0, 0), (0, 1, 1, False, 0, 10), (-1, 0, 2, False, 2, 12), (3, 0, 2, False, 2, 12)]:
