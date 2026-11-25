@@ -108,3 +108,47 @@ fn reloaded_neighbor_mean_preserves_finite_exact_zero() {
         .unwrap();
     assert_eq!(value.to_bits(), 0.0_f64.to_bits());
 }
+
+#[test]
+fn knn_fit_preserves_the_scaling_underflow_boundary_and_reloads() {
+    let w = Workspace::new();
+    w.write("underflow.csv", "x,y\n5e-324,7\n2,9\n");
+    w.write("representable.csv", "x,y\n1e-323,7\n2,9\n");
+    w.write("query.csv", "x\n1e-323\n2\n");
+    let fit = |input, output| {
+        w.run(&[
+            "fit", "--csv", input, "--features", "x", "--target", "y", "--model", "knn",
+            "--k", "1", "--out", output,
+        ])
+    };
+
+    // The minimum subnormal divided by two is a tie that rounds to zero.
+    let rejected = fit("underflow.csv", "rejected.json");
+    assert!(!rejected.status.success());
+    assert!(String::from_utf8_lossy(&rejected.stderr)
+        .contains("Values exceed the numeric range supported by fitted scaling"));
+    assert!(!w.0.join("rejected.json").exists());
+
+    // The next subnormal divided by two remains representable.
+    let accepted = fit("representable.csv", "model.json");
+    assert!(
+        accepted.status.success(),
+        "{}",
+        String::from_utf8_lossy(&accepted.stderr)
+    );
+    let predicted = w.run(&[
+        "predict", "--artifact", "model.json", "--csv", "query.csv", "--out", "out.csv",
+    ]);
+    assert!(
+        predicted.status.success(),
+        "{}",
+        String::from_utf8_lossy(&predicted.stderr)
+    );
+    let csv = fs::read_to_string(w.0.join("out.csv")).unwrap();
+    let values: Vec<_> = csv
+        .lines()
+        .skip(1)
+        .map(|line| line.split(',').nth(1).unwrap().parse::<f64>().unwrap())
+        .collect();
+    assert_eq!(values, [7.0, 9.0]);
+}

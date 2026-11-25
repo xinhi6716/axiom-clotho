@@ -67,18 +67,15 @@ impl KnnRegressor {
                 *s = 1.0;
             }
         }
-        let training: Vec<Vec<f64>> = x
-            .iter()
-            .map(|r| r.iter().zip(&scales).map(|(v, s)| v / s).collect())
-            .collect();
-        if x.iter()
-            .flatten()
-            .zip(training.iter().flatten())
-            .any(|(original, scaled)| *original != 0.0 && *scaled == 0.0)
-        {
+        // Keep validating original-to-scaled underflow, but the model
+        // stores original coordinates, not a second normalized table.
+        if x.iter().any(|row| {
+            row.iter()
+                .zip(&scales)
+                .any(|(&value, &scale)| value != 0.0 && value / scale == 0.0)
+        }) {
             return Err(KnnError::NumericOverflow);
         }
-        drop(training);
         Ok(Self {
             training: x.to_vec(),
             targets: y.to_vec(),
