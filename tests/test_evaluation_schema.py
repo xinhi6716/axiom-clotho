@@ -2,6 +2,7 @@
 import hashlib
 import io
 import json
+import math
 from pathlib import Path
 import tempfile
 import unittest
@@ -117,6 +118,33 @@ class EvaluationSchemaTests(unittest.TestCase):
         path.write_text("\n".join([header, *subnormal]) + "\n")
         self.rehash()
         self.assertEqual(validate_evaluation_bundle(self.root).n_rows, 8)
+
+    def test_perfect_r2_cannot_exceed_one_within_recompute_tolerance(self):
+        # A transparent noiseless fixture gives nonconstant targets in
+        # every group and emits a replayable perfect regression bundle.
+        frame = pd.DataFrame({"g": ["a", "b", "c", "d"] * 2,
+                              "x": range(8), "y": range(8)})
+        def perfect(features):
+            prediction = features["x"].to_numpy(dtype=float)
+            return {"dummy": prediction, "selected": prediction}
+        with patch("groupbench.model.GroupBenchRegressor.predict_baselines", side_effect=perfect):
+            result = benchmark(frame, target="y", group="g", baselines=("dummy",),
+                               outer_splits=2, inner_splits=2)
+        result.write(self.root, overwrite=True)
+        self.assertEqual(validate_evaluation_bundle(self.root).n_rows, 8)
+        for location in ("overall", "per_fold", "per_group"):
+            with self.subTest(location=location):
+                result.write(self.root, overwrite=True)
+                def corrupt(summary):
+                    row = summary["models"]["selected"][location]
+                    if isinstance(row, list):
+                        row = row[0]
+                    self.assertEqual(row["r2"], 1.0)
+                    row["r2"] = math.nextafter(1.0, math.inf)
+                self.mutate_json("summary.json", corrupt)
+                self.assertEqual(verify_bundle(self.root).bundle_type, "evaluation")
+                with self.assertRaisesRegex(ValueError, "R2 must not exceed one"):
+                    validate_evaluation_bundle(self.root)
 
     def test_checksum_symlink_and_bound(self):
         with patch('groupbench.evaluation_schema.MAX_CSV_BYTES', 8):

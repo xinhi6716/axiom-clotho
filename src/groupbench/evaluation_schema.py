@@ -65,6 +65,8 @@ def _compare(actual, expected, *, field=None):
         if field in _NONNEGATIVE_ERROR_METRICS and (
                 actual < 0.0 or (actual == 0.0) != (expected == 0.0)):
             _fail("saved error magnitude sign or zero disagrees with retained predictions.")
+        if field == "r2" and actual > 1.0:
+            _fail("saved R2 must not exceed one.")
     elif type(actual) is not type(expected) or actual != expected:
         _fail("count, identity, or null metric differs.")
 
