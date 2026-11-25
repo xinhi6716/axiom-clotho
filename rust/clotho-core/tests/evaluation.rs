@@ -376,3 +376,26 @@ fn rmse_only_is_not_invalidated_by_unrelated_r2_overflow() {
         Err(EvaluationError::NumericOverflow)
     );
 }
+
+#[test]
+fn many_equal_load_ties_remain_lexical_with_shuffled_singleton_groups() {
+    let groups: Vec<_> = (0..MAX_GROUPED_ROWS)
+        .map(|i| format!("device-{:05}", (i * 331) % MAX_GROUPED_ROWS))
+        .collect();
+    let folds = grouped_kfold(&groups, MAX_GROUPED_SPLITS).unwrap();
+    for (fold, result) in folds.iter().enumerate() {
+        assert_eq!(
+            result.test_indices.len(),
+            MAX_GROUPED_ROWS / MAX_GROUPED_SPLITS
+        );
+        assert_eq!(
+            result.train_indices.len(),
+            MAX_GROUPED_ROWS - result.test_indices.len()
+        );
+        for &row in &result.test_indices {
+            assert_eq!((row * 331) % MAX_GROUPED_ROWS % MAX_GROUPED_SPLITS, fold);
+        }
+        assert!(result.test_indices.windows(2).all(|pair| pair[0] < pair[1]));
+        assert!(result.train_indices.windows(2).all(|pair| pair[0] < pair[1]));
+    }
+}

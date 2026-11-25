@@ -5,7 +5,8 @@
 //! rows. Group labels must describe the leakage boundary appropriate to the
 //! study; splitting supplied labels cannot establish scientific independence.
 
-use std::collections::BTreeMap;
+use std::cmp::Reverse;
+use std::collections::{BinaryHeap, HashMap};
 use std::fmt;
 
 /// Maximum input rows for materialized grouped folds.
@@ -282,31 +283,58 @@ pub fn grouped_kfold(groups: &[String], n_splits: usize) -> Result<Vec<Fold>, Ev
     if groups.len() > MAX_GROUPED_ROWS || n_splits > MAX_GROUPED_SPLITS {
         return Err(EvaluationError::Capacity);
     }
-    let mut members: BTreeMap<&str, Vec<usize>> = BTreeMap::new();
-    for (index, group) in groups.iter().enumerate() {
-        members.entry(group.as_str()).or_default().push(index);
+    // Keep one flat row-to-group table rather than allocating a membership
+    // vector for every group. Map iteration order never determines a fold.
+    let mut group_ids = HashMap::with_capacity(groups.len().min(16));
+    // Both ordinals and eventual fold indices fit under the configured caps.
+    const _: () = assert!(MAX_GROUPED_ROWS <= u16::MAX as usize);
+    let mut assignment = Vec::with_capacity(groups.len());
+    for label in groups {
+        let next_id = group_ids.len() as u16;
+        let (id, count) = group_ids.entry(label.as_str()).or_insert((next_id, 0_u16));
+        *count += 1;
+        assignment.push(*id);
     }
-    if n_splits > members.len() {
+    if n_splits > group_ids.len() {
         return Err(EvaluationError::InsufficientGroups);
     }
-    let mut ordered: Vec<_> = members.into_iter().collect();
-    ordered.sort_unstable_by(|(label_a, rows_a), (label_b, rows_b)| {
-        rows_b.len().cmp(&rows_a.len()).then(label_a.cmp(label_b))
+    let mut ordered: Vec<_> = group_ids
+        .into_iter()
+        .map(|(label, (id, count))| (label, count, id))
+        .collect();
+    ordered.sort_unstable_by(|(label_a, count_a, _), (label_b, count_b, _)| {
+        count_b.cmp(count_a).then(label_a.cmp(label_b))
     });
-    let mut loads = vec![0_usize; n_splits];
-    let mut assignment = vec![0_usize; groups.len()];
-    for (_, rows) in ordered {
-        // n_splits >= 2, and iteration order resolves load ties deterministically.
-        let mut fold = 0;
-        for candidate in 1..n_splits {
-            if loads[candidate] < loads[fold] {
-                fold = candidate;
+
+    let mut loads = vec![0; n_splits];
+    let mut group_folds = vec![0; ordered.len()];
+    if n_splits <= 8 {
+        // A short direct scan avoids heap overhead on ordinary small folds.
+        for (_, count, id) in ordered {
+            let mut fold = 0;
+            for candidate in 1..n_splits {
+                if loads[candidate] < loads[fold] {
+                    fold = candidate;
+                }
             }
+            loads[fold] += count as usize;
+            group_folds[id as usize] = fold as u16;
         }
-        loads[fold] += rows.len();
-        for row in rows {
-            assignment[row] = fold;
+    } else {
+        // The minimum pair picks the lightest fold and lowest index on ties.
+        let mut available: BinaryHeap<_> = (0..n_splits).map(|fold| Reverse((0, fold))).collect();
+        for (_, count, id) in ordered {
+            let mut lightest = available.peek_mut().unwrap();
+            let Reverse((load, fold)) = *lightest;
+            *lightest = Reverse((load + count as usize, fold));
+            group_folds[id as usize] = fold as u16;
         }
+        for Reverse((load, fold)) in available {
+            loads[fold] = load;
+        }
+    }
+    for id in &mut assignment {
+        *id = group_folds[*id as usize];
     }
     Ok(loads
         .into_iter()
@@ -315,7 +343,7 @@ pub fn grouped_kfold(groups: &[String], n_splits: usize) -> Result<Vec<Fold>, Ev
             let mut train_indices = Vec::with_capacity(groups.len() - test_size);
             let mut test_indices = Vec::with_capacity(test_size);
             for (row, &assigned) in assignment.iter().enumerate() {
-                if assigned == fold {
+                if assigned as usize == fold {
                     test_indices.push(row);
                 } else {
                     train_indices.push(row);
