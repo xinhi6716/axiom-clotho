@@ -522,17 +522,26 @@ def _checked_grouped(y, prediction, groups):
 
 
 def _metrics(records, plan):
+    y = np.asarray([record["observed"] for record in records], dtype=np.float64)
+    groups = tuple(record["group"] for record in records)
+    positions_by_window = {}
+    for position, record in enumerate(records):
+        positions_by_window.setdefault(record["window_index"], []).append(position)
+    # Preserve tested-roster order within each window, even with interleaved
+    # positions. Both fixed recipes use the same outcomes and these same joins.
+    windows = []
+    for fold in plan.folds:
+        indices = positions_by_window.get(fold.index, [])
+        windows.append((fold.index, indices, y[indices], tuple(groups[i] for i in indices)))
+
     result = []
     for name in _RECIPE_NAMES:
-        y = np.asarray([record["observed"] for record in records], dtype=np.float64)
         predictions = np.asarray([record["prediction_" + name] for record in records], dtype=np.float64)
-        groups = tuple(record["group"] for record in records)
         pooled, per_group = _checked_grouped(y, predictions, groups)
         per_window = []
-        for fold in plan.folds:
-            indices = [i for i, record in enumerate(records) if record["window_index"] == fold.index]
-            scores, _ = _checked_grouped(y[indices], predictions[indices], tuple(groups[i] for i in indices))
-            per_window.append({"window_index": fold.index, **scores})
+        for window, indices, truth, labels in windows:
+            scores, _ = _checked_grouped(truth, predictions[indices], labels)
+            per_window.append({"window_index": window, **scores})
         result.append({"recipe": name, "pooled": pooled, "per_window": per_window,
                        "per_group": per_group})
     return result
