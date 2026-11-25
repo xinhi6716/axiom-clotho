@@ -121,6 +121,17 @@ class EvidenceQuarantineTests(unittest.TestCase):
                          [0] + [1] * (MAX_ISSUES - 1))
         self.assertTrue(result["issues_truncated"])
 
+    def test_sparse_named_lookup_preserves_first_endpoint_order_and_counts(self):
+        rows = [replace(self.blocked, endpoint_name=f"listed-{i}") for i in range(32)]
+        rows += [rows[19], rows[3], rows[19]]
+        narrow = replace(self.scope, endpoint_names=("listed-19", "listed-3", "missing"))
+        report = preview(rows, [narrow] * 260)
+        self.assertEqual(report["n_rows_with_quarantine_matches"], 5)
+        self.assertEqual(report["issue_count"], 1300)
+        self.assertTrue(report["issues_truncated"])
+        self.assertEqual([issue["row_position"] for issue in report["issues"]],
+                         [3, 33, 19, 32, 34] * (MAX_ISSUES // 5))
+
     def test_no_input_mutation_and_no_private_identity_echo(self):
         sentinel = "INVENTED_PRIVATE_SENTINEL"
         rows = [Key(sentinel, sentinel, sentinel)]

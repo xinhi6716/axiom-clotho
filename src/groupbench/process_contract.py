@@ -376,7 +376,16 @@ def preview_evidence_quarantine(observations, *, unresolved_scopes):
         endpoints = set(scope.endpoint_names)
         for group in scope.recipe_group_ids:
             group_key = (scope.source_id, group)
-            for endpoint, positions in indexed.get(group_key, {}).items():
+            observed = indexed.get(group_key)
+            if not observed:
+                continue
+            items = observed.items()
+            if len(endpoints) * 4 <= len(observed):
+                # Narrow declarations need not rescan all observed endpoints.
+                # Keep the insertion order used in capped issue previews.
+                items = sorted(((endpoint, observed[endpoint]) for endpoint in endpoints
+                                if endpoint in observed), key=lambda item: item[1][0])
+            for endpoint, positions in items:
                 if endpoint not in endpoints:
                     continue
                 key = (*group_key, endpoint)
