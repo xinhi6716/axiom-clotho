@@ -216,11 +216,12 @@ pub fn extract_branch(a: &Acquisition, s: &[Sample], p: Settings) -> Result<Feat
         if !(0.0 < t && t < 1.0) {
             return Err(FetError::NumericalRange);
         }
-        (
-            near.gate_voltage_v * (1.0 - t) + far.gate_voltage_v * t,
-            span,
-            vec![w[0].source_row, w[1].source_row],
-        )
+        let estimate = near.gate_voltage_v * (1.0 - t) + far.gate_voltage_v * t;
+        let lo = near.gate_voltage_v.min(far.gate_voltage_v);
+        let hi = near.gate_voltage_v.max(far.gate_voltage_v);
+        // The current crossing is already strictly inside this measured
+        // bracket. Roundoff in the weighted sum must not extrapolate.
+        (estimate.clamp(lo, hi), span, vec![w[0].source_row, w[1].source_row])
     };
     let mut selected: Vec<_> = s
         .iter()

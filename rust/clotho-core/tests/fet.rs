@@ -396,3 +396,29 @@ fn regression_acceptance_does_not_depend_on_acquisition_direction() {
         assert_eq!(reverse.log_selected_source_rows, [4, 3, 2]);
     }
 }
+
+#[test]
+fn interior_current_crossing_cannot_round_outside_adjacent_gate_bracket() {
+    let low = 0.01_f64;
+    let high = f64::from_bits(low.to_bits() + 1);
+    for polarity in [1., -1.] {
+        for reverse in [false, true] {
+            let mut s = samples();
+            s.truncate(3);
+            for ((sample, gate), current) in s.iter_mut().zip([low, high, 0.02]).zip([1., 26., 100.]) {
+                sample.gate_voltage_v = gate;
+                sample.drain_current_a = polarity * current;
+            }
+            if reverse {
+                s.reverse();
+            }
+            let mut p = settings();
+            p.positive_current = polarity > 0.;
+            p.criterion_a = polarity * 2.;
+            let feature = extract_branch(&acquisition(), &s, p).unwrap();
+            assert_eq!(feature.criterion_gate_voltage_v.to_bits(), low.to_bits());
+            assert_eq!(feature.bracket_span_v, high - low);
+            assert_eq!(feature.criterion_source_rows, if reverse { vec![3, 2] } else { vec![2, 3] });
+        }
+    }
+}
