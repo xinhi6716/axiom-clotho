@@ -200,7 +200,13 @@ pub fn extract_branch(b: &Branch, p: Settings) -> Result<Readpoint, RramError> {
             let current = if near.current_a == far.current_a {
                 near.current_a
             } else {
-                near.current_a * (1.0 - t) + far.current_a * t
+                let estimate = near.current_a * (1.0 - t) + far.current_a * t;
+                // Rounding the weighted terms separately can extrapolate
+                // even between distinct, adjacent measured currents.
+                estimate.clamp(
+                    near.current_a.min(far.current_a),
+                    near.current_a.max(far.current_a),
+                )
             };
             (current, span, vec![w[0].source_row, w[1].source_row])
         };

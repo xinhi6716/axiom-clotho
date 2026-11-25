@@ -417,3 +417,30 @@ fn constant_interpolation_cannot_manufacture_a_cycle_inversion() {
         }
     }
 }
+
+#[test]
+fn readpoint_between_distinct_adjacent_currents_cannot_extrapolate() {
+    let lower = f64::from_bits(0x3ff1_8072_e8f9_c859);
+    let upper = f64::from_bits(0x3ff1_8072_e8f9_c85a);
+    let offset = f64::from_bits(0x3f8d_071e_f258_3660);
+    for polarity in [1.0, -1.0] {
+        let mut b = branch(State::Hrs, "1", polarity * lower, 2);
+        b.conditions.read_voltage_v = polarity * offset;
+        b.samples[0].voltage_v = 0.0;
+        b.samples.push(Sample {
+            source_row: 3,
+            voltage_v: polarity,
+            current_a: polarity * upper,
+        });
+        // The exact weighted current lies closer to the endpoint at zero
+        // voltage. Independent rounding of the products used to cross it.
+        for ordering in [[2, 3], [3, 2]] {
+            let point = extract_branch(&b, settings()).unwrap();
+            assert_eq!(point.current_a.to_bits(), (polarity * lower).to_bits());
+            assert_eq!(point.resistance_ohm.to_bits(), (offset / lower).to_bits());
+            assert_eq!(point.selected_source_rows, ordering);
+            assert_eq!(point.all_source_rows, ordering);
+            b.samples.reverse();
+        }
+    }
+}
