@@ -425,7 +425,7 @@ The separate `verify` command below has stricter POSIX **no-symlink** semantics.
 
 ## Python API
 
-Pass `features` as a collection of complete column names, not a comma-separated string. For a column literally named `xy`, use `features=["xy"]` (or `("xy",)`), **not** `features="xy"`; `features=["x", "y"]` selects two different columns. `features=None` uses all columns other than the target and group, so supply an explicit allowlist when other columns are IDs or post-outcome information. The CLI's `--features x,y` syntax is different from the Python API.
+Pass `features` as an ordered collection of complete column names, not a comma-separated string. Sets and frozensets are rejected: their iteration order can change feature positions and results even with a fixed model seed. For a column literally named `xy`, use `features=["xy"]` (or `("xy",)`), **not** `features="xy"`; `features=["x", "y"]` selects two different columns. `features=None` uses all columns other than the target and group, so supply an explicit allowlist when other columns are IDs or post-outcome information. The CLI's `--features x,y` syntax is different from the Python API.
 
 For frame-based regression and binary planning/execution APIs, selected feature
 names must be nonempty strings without NUL (U+0000). Empty/NUL names are rejected

@@ -3,7 +3,7 @@ import hashlib
 import json
 import numpy as np
 import pandas as pd
-from .data import prepare_data, validate_groups
+from .data import _ordered_feature_names, prepare_data, validate_groups
 
 GROUP = "group_kfold"
 DOMAIN = "leave_one_domain_out"
@@ -73,10 +73,10 @@ def prepare_domain_data(frame, target, group, features, domain, strategy, inner_
         raise ValueError("domain must name a separate declared metadata column.")
     if not frame.columns.is_unique:
         raise ValueError("Column names must be unique.")
-    if features is not None and not isinstance(features, (str, bytes)):
+    if features is not None:
         # Membership consumes a one-shot iterator. Retain its names and order
-        # for prepare_data; bare strings/bytes still reach its common guard.
-        features = list(features)
+        # before checking whether it mentions the domain.
+        features = _ordered_feature_names(features)
         if domain in features:
             raise ValueError("Domain metadata cannot be a predictor.")
     X, y, groups = prepare_data(frame.drop(columns=[domain]), target, group, features)

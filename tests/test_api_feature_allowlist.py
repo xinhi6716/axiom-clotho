@@ -1,4 +1,4 @@
-"""A bare API string must not be silently split into character predictors."""
+"""Python feature allowlists keep explicit, reproducible positional order."""
 
 from contextlib import ExitStack
 import unittest
@@ -51,6 +51,25 @@ class APIFeatureAllowlistTests(unittest.TestCase):
                         workflow(source, outer_splits=3, **options)
                 for operation in blocked:
                     operation.assert_not_called()
+
+    def test_unordered_feature_sets_reject_before_planning_or_fitting(self):
+        source = frame().assign(site=np.repeat(["A", "B", "C"], 8))
+        query = source[["x", "y"]].iloc[:2]
+        workflows = ((plan_benchmark, False, False), (fit_predict, True, False),
+                     (plan_benchmark, False, True), (fit_predict, True, True),
+                     (plan_binary_benchmark, False, False), (fit_predict_binary, True, False))
+        for workflow, prediction, domain in workflows:
+            for collection in ({"x", "y"}, frozenset({"x", "y"})):
+                with self.subTest(workflow=workflow.__name__, domain=domain, kind=type(collection)):
+                    options = dict(target="outcome", group="lot", features=collection,
+                                   baselines=("dummy",), inner_splits=2)
+                    if domain:
+                        options.update(domain="site", inner_strategy="leave_one_domain_out", inner_splits=None)
+                    with self.assertRaisesRegex(ValueError, "declared order"):
+                        if prediction:
+                            workflow(source, query, **options)
+                        else:
+                            workflow(source, outer_splits=3, **options)
 
     def test_real_name_collections_preserve_selection_order_and_defaults(self):
         source = frame()

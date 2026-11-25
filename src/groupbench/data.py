@@ -286,12 +286,18 @@ def validate_training_columns(frame: pd.DataFrame, target: str, group: str):
         raise ValueError("target and group must identify two distinct existing columns.")
 
 
-def prepare_data(frame: pd.DataFrame, target: str, group: str, features=None):
-    validate_training_columns(frame, target, group)
+def _ordered_feature_names(features):
     if isinstance(features, (str, bytes)):
         raise ValueError("features must be a sequence of column names, not a bare string or bytes. "
                          "For one feature, pass a one-item list such as ['feature_name'].")
-    names = list(features) if features is not None else [c for c in frame if c not in (target, group)]
+    if isinstance(features, (set, frozenset)):
+        raise ValueError("features must have a declared order; use a list or tuple, not a set or frozenset.")
+    return list(features)
+
+
+def prepare_data(frame: pd.DataFrame, target: str, group: str, features=None):
+    validate_training_columns(frame, target, group)
+    names = _ordered_feature_names(features) if features is not None else [c for c in frame if c not in (target, group)]
     if target in names or group in names:
         raise ValueError("The target and grouping column cannot be input features.")
     if len(names) != len(set(names)) or any(c not in frame for c in names):
