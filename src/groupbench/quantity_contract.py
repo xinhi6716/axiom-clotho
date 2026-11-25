@@ -9,7 +9,7 @@ import math
 import re
 import unicodedata
 
-REGISTRY_VERSION = "electrical-decimal-v1"
+REGISTRY_VERSION = "electrical-decimal-v2"
 MAX_VALUES = 20_000
 # dimension, canonical unit, exact base-ten exponent
 _UNITS = {
@@ -24,6 +24,16 @@ _UNITS = {
     "ohm": ("resistance", "ohm", 0),
     "kohm": ("resistance", "ohm", 3),
     "Mohm": ("resistance", "ohm", 6),
+    "S": ("electric_conductance", "S", 0),
+    "mS": ("electric_conductance", "S", -3),
+    "uS": ("electric_conductance", "S", -6),
+    "nS": ("electric_conductance", "S", -9),
+    "pS": ("electric_conductance", "S", -12),
+    "s": ("elapsed_time", "s", 0),
+    "ms": ("elapsed_time", "s", -3),
+    "us": ("elapsed_time", "s", -6),
+    "ns": ("elapsed_time", "s", -9),
+    "ks": ("elapsed_time", "s", 3),
     "1": ("dimensionless", "1", 0),
 }
 _NUMBER = re.compile(r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE]([+-]?[0-9]+))?\Z")

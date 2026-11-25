@@ -33,6 +33,31 @@ class QuantityContractTests(unittest.TestCase):
                 self.assertEqual(normalize_decimal_tokens(["1.25"], q), (Decimal("1.25") * Decimal(10) ** power,))
                 self.assertEqual(compare_declarations(q, q), q)
 
+    def test_read_clock_and_conductance_units_are_exact_and_distinct(self):
+        for dimension, unit, scaled, raw, canonical in (
+            ("electric_conductance", "S", "uS", "12.5", "0.0000125"),
+            ("electric_conductance", "S", "pS", "12.5", "0.0000000000125"),
+            ("elapsed_time", "s", "ms", "1020", "1.02"),
+            ("elapsed_time", "s", "ns", "20", "0.00000002"),
+            ("elapsed_time", "s", "ks", "100", "100000"),
+        ):
+            with self.subTest(unit=scaled), localcontext() as ctx:
+                ctx.prec = 1
+                left = Q("x", dimension, "instantaneous", "same_protocol", dimension, unit)
+                right = replace(left, unit=scaled)
+                self.assertEqual(normalize_decimal_tokens([raw], right), (Decimal(canonical),))
+                self.assertEqual(normalize_comparable_pair_to_float64(
+                    left, [canonical], right, [raw]), (left, (float(canonical),), (float(canonical),)))
+                with self.assertRaises(ValueError):
+                    compare_declarations(left, replace(right, condition_id="different_clock_or_bias"),
+                                         mode="normalize")
+        with self.assertRaises(ValueError):
+            compare_declarations(declaration("ohm", "resistance"),
+                                 declaration("S", "electric_conductance"), mode="normalize")
+        for unit in ("m", "µS", "Hz", "hours", "S/cm"):
+            with self.subTest(unit=unit), self.assertRaises(ValueError):
+                declaration(unit, "electric_conductance")
+
     def test_semantic_fields_are_not_units(self):
         q = declaration()
         for field, value in [("column", "y"), ("quantity_id", "current_density"),

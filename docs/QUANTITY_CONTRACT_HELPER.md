@@ -36,13 +36,20 @@ The helper neither reads files nor constructs estimators.
 | electric_current | A, mA, uA, nA, pA | A |
 | electric_potential | V, mV, uV | V |
 | resistance | ohm, kohm, Mohm | ohm |
+| electric_conductance | S, mS, uS, nS, pS | S |
+| elapsed_time | s, ms, us, ns, ks | s |
 | dimensionless | 1 | 1 |
 
-Registry version is `electrical-decimal-v1`. Spelling/case are exact; no aliases,
+Registry version is `electrical-decimal-v2`. Spelling/case are exact; no aliases,
 unit suffix parsing, magnitude inference, reciprocal slopes, log transforms,
 area normalization, affine temperatures or percentage conversion are supported.
 `dimensionless` is a dimension, not an accepted unit spelling; use `1` explicitly.
 Unknown, arbitrary, blank and mixed labels are rejected, not guessed.
+Version 2 adds conductance and elapsed-time scales without changing version 1
+unit behavior. A conductance unit does not define read bias or authorize inverse
+resistance conversion. An elapsed-time unit does not identify the reference
+event, distinguish pulse-on duration from wall time, or align different clocks;
+use the declared quantity and condition IDs to represent those distinctions.
 
 Column, quantity ID, statistic ID, condition ID and dimension must agree exactly.
 Thus mean versus median, different protocols, or two different ratio statistics
