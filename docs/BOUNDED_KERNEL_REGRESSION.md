@@ -35,6 +35,9 @@ Constructor parameters:
 | `rank_cap=64` | Integer from 1 through 64, not Boolean |
 | `random_state=0` | The same explicit bounded integer seed contract used by GroupBench |
 
+These are dimensionless parameters. NumPy timedelta scalars are rejected,
+even when their raw tick counts could be converted to valid numbers.
+
 Each fit chooses `k = min(rank_cap, n_training_rows)` and sets RBF gamma to
 `1 / n_transformed_features`. The basis is sampled uniformly without replacement
 from those supplied training rows only, with the declared seed. No targets,

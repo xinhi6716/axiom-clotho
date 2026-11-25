@@ -105,7 +105,7 @@ dependency versions and other platforms remain untested unless separately record
 ## Standalone group-balanced Ridge and numerical limits
 
 Import `GroupBalancedRidgeRegressor` from `groupbench.baselines`. Its standalone
-alpha accepts any finite positive real other than bool; the integrated grid stays
+alpha accepts a finite positive real, not a Boolean or a NumPy timedelta; the integrated grid stays
 fixed. It uses `Ridge(solver="lsqr", fit_intercept=True, tol=1e-4, max_iter=None,
 copy_X=True, positive=False)` with one computational thread. `score` is inherited
 row R-squared, not the fitting loss or group MAE. Finite output is not a convergence

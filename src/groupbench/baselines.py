@@ -391,7 +391,7 @@ class GroupBalancedRidgeRegressor(RegressorMixin, BaseEstimator):
             raise ValueError("sample_weight is not supported; weights come only from current training-group sizes.")
         if groups is None:
             raise ValueError("groups is required for the current training rows.")
-        if isinstance(self.alpha, bool) or not isinstance(self.alpha, Real):
+        if isinstance(self.alpha, (bool, np.timedelta64)) or not isinstance(self.alpha, Real):
             raise ValueError("alpha must be a positive finite real number.")
         try:
             alpha = float(self.alpha)

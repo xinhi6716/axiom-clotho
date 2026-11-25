@@ -20,7 +20,8 @@ _SURROGATE_CODE_POINT = re.compile("[\ud800-\udfff]")
 
 
 def validate_seed(seed: int) -> int:
-    if isinstance(seed, bool) or not isinstance(seed, Integral) or not 0 <= seed < 2**32 - 100:
+    # NumPy durations register as Integral, but are not dimensionless seeds.
+    if isinstance(seed, (bool, np.timedelta64)) or not isinstance(seed, Integral) or not 0 <= seed < 2**32 - 100:
         raise ValueError("random_state must be an integer between 0 and 2**32 - 101.")
     return int(seed)
 

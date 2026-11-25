@@ -198,7 +198,7 @@ class NystroemRidgeRegressor(RegressorMixin, BaseEstimator):
         self.random_state = random_state
 
     def fit(self, X, y):
-        if isinstance(self.alpha, bool) or not isinstance(self.alpha, Real):
+        if isinstance(self.alpha, (bool, np.timedelta64)) or not isinstance(self.alpha, Real):
             raise ValueError("alpha must be a positive finite real number.")
         try:
             alpha = float(self.alpha)
@@ -206,7 +206,7 @@ class NystroemRidgeRegressor(RegressorMixin, BaseEstimator):
             raise ValueError("alpha must be a positive finite real number.") from exc
         if not np.isfinite(alpha) or alpha <= 0:
             raise ValueError("alpha must be a positive finite real number.")
-        if (isinstance(self.rank_cap, bool) or not isinstance(self.rank_cap, Integral)
+        if (isinstance(self.rank_cap, (bool, np.timedelta64)) or not isinstance(self.rank_cap, Integral)
                 or not 1 <= self.rank_cap <= MAX_RANK):
             raise ValueError(f"rank_cap must be an integer from 1 to {MAX_RANK}.")
         seed = validate_seed(self.random_state)
