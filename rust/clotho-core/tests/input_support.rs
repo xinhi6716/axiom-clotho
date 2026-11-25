@@ -363,3 +363,45 @@ fn reject_nul_categories_without_echoing_values() {
     );
     assert!(!SupportError::NulCategory.to_string().contains("private"));
 }
+
+#[test]
+fn reordered_mixed_columns_preserve_all_overlapping_row_flags() {
+    let train = [
+        numeric("value", &[None, Some(0.0), Some(5.0)]),
+        categorical("unsupported", &[None; 3]),
+        categorical("known", &[Some("base"), None, Some("base")]),
+        numeric("absent", &[Some(1.0); 3]),
+    ];
+    let query = [
+        categorical("absent", &[None; 4]),
+        categorical("known", &[Some("base"), Some("new"), None, Some("base")]),
+        categorical("unsupported", &[Some("first"), None, Some("third"), None]),
+        numeric("value", &[Some(-1.0), Some(5.0), Some(6.0), None]),
+    ];
+    let result = prediction_input_support(&train, &query).unwrap();
+    assert_eq!(result.rows_with_any_flag, 4);
+    assert_eq!(
+        result.row_flag_counts,
+        RowFlagCounts {
+            missing_value: 4,
+            numeric_outside_training_range: 2,
+            unseen_category: 3,
+            non_missing_value_in_all_missing_training_feature: 2,
+        }
+    );
+    assert_eq!(
+        result.features[0].counts,
+        FeatureCounts::Numeric {
+            below_training_min_count: Some(1),
+            above_training_max_count: Some(1),
+        }
+    );
+    assert_eq!(
+        result.features[1].counts,
+        FeatureCounts::Categorical {
+            unseen_category_count: 2
+        }
+    );
+    assert_eq!(result.features[2].training_missing_count, 1);
+    assert_eq!(result.features[3].prediction_missing_count, 4);
+}

@@ -24,15 +24,11 @@ impl FeatureValues {
         }
     }
 
-    fn is_missing(&self, row: usize) -> bool {
-        match self {
-            Self::Numeric(values) => values[row].is_none(),
-            Self::Categorical(values) => values[row].is_none(),
-        }
-    }
-
     fn all_missing(&self) -> bool {
-        (0..self.len()).all(|row| self.is_missing(row))
+        match self {
+            Self::Numeric(values) => values.iter().all(Option::is_none),
+            Self::Categorical(values) => values.iter().all(Option::is_none),
+        }
     }
 }
 
@@ -185,76 +181,93 @@ pub fn prediction_input_support(
     let mut features = Vec::with_capacity(training.len());
     for source in training {
         let query = query_by_name[source.name.as_str()];
-        let source_missing = (0..n_training_rows)
-            .filter(|&row| source.values.is_missing(row))
-            .count();
-        let all_missing = source_missing == n_training_rows;
-        let query_all_missing = query.all_missing();
         if std::mem::discriminant(&source.values) != std::mem::discriminant(query)
-            && !query_all_missing
+            && !query.all_missing()
         {
             return Err(SupportError::TypeMismatch);
         }
+
         let mut prediction_missing_count = 0;
         let mut unsupported_count = 0;
-        for (row, flag) in flags.iter_mut().enumerate() {
-            if query.is_missing(row) {
-                prediction_missing_count += 1;
-                *flag |= MISSING;
-            } else if all_missing {
-                unsupported_count += 1;
-                *flag |= UNSUPPORTED;
-            }
-        }
+        let source_missing;
         let counts = match &source.values {
             FeatureValues::Numeric(values) => {
-                if all_missing {
-                    FeatureCounts::Numeric {
-                        below_training_min_count: None,
-                        above_training_max_count: None,
-                    }
-                } else {
-                    let mut minimum = f64::INFINITY;
-                    let mut maximum = f64::NEG_INFINITY;
-                    for &value in values.iter().flatten() {
-                        minimum = minimum.min(value);
-                        maximum = maximum.max(value);
-                    }
-                    let mut below = 0;
-                    let mut above = 0;
-                    if let FeatureValues::Numeric(query_values) = query {
-                        for (row, value) in query_values.iter().enumerate() {
-                            if let Some(value) = value {
+                let mut observed = 0;
+                let mut minimum = f64::INFINITY;
+                let mut maximum = f64::NEG_INFINITY;
+                for &value in values.iter().flatten() {
+                    observed += 1;
+                    minimum = minimum.min(value);
+                    maximum = maximum.max(value);
+                }
+                source_missing = n_training_rows - observed;
+                let mut below = 0;
+                let mut above = 0;
+                if let FeatureValues::Numeric(query_values) = query {
+                    for (value, flag) in query_values.iter().zip(&mut flags) {
+                        match value {
+                            None => {
+                                prediction_missing_count += 1;
+                                *flag |= MISSING;
+                            }
+                            Some(_) if observed == 0 => {
+                                unsupported_count += 1;
+                                *flag |= UNSUPPORTED;
+                            }
+                            Some(value) => {
                                 // Direct comparison avoids overflowing range subtraction.
                                 if *value < minimum {
                                     below += 1;
-                                    flags[row] |= OUTSIDE;
-                                }
-                                if *value > maximum {
+                                    *flag |= OUTSIDE;
+                                } else if *value > maximum {
                                     above += 1;
-                                    flags[row] |= OUTSIDE;
+                                    *flag |= OUTSIDE;
                                 }
                             }
                         }
                     }
-                    FeatureCounts::Numeric {
-                        below_training_min_count: Some(below),
-                        above_training_max_count: Some(above),
-                    }
+                } else {
+                    // The accepted alternate variant is entirely missing.
+                    prediction_missing_count = n_prediction_rows;
+                    flags.iter_mut().for_each(|flag| *flag |= MISSING);
+                }
+                FeatureCounts::Numeric {
+                    below_training_min_count: (observed != 0).then_some(below),
+                    above_training_max_count: (observed != 0).then_some(above),
                 }
             }
             FeatureValues::Categorical(values) => {
-                let observed: HashSet<_> = values.iter().flatten().map(String::as_str).collect();
+                let mut observed = HashSet::new();
+                let mut non_missing = 0;
+                for value in values.iter().flatten() {
+                    non_missing += 1;
+                    observed.insert(value.as_str());
+                }
+                source_missing = n_training_rows - non_missing;
                 let mut unseen = 0;
                 if let FeatureValues::Categorical(query_values) = query {
-                    for (row, value) in query_values.iter().enumerate() {
-                        if let Some(value) = value {
-                            if !observed.contains(value.as_str()) {
-                                unseen += 1;
-                                flags[row] |= UNSEEN;
+                    for (value, flag) in query_values.iter().zip(&mut flags) {
+                        match value {
+                            None => {
+                                prediction_missing_count += 1;
+                                *flag |= MISSING;
                             }
+                            Some(_) if observed.is_empty() => {
+                                // An unseen category can also lack training support.
+                                unsupported_count += 1;
+                                unseen += 1;
+                                *flag |= UNSUPPORTED | UNSEEN;
+                            }
+                            Some(value) if !observed.contains(value.as_str()) => {
+                                unseen += 1;
+                                *flag |= UNSEEN;
+                            }
+                            Some(_) => {}
                         }
                     }
+                } else {
+                    prediction_missing_count = n_prediction_rows;
+                    flags.iter_mut().for_each(|flag| *flag |= MISSING);
                 }
                 FeatureCounts::Categorical {
                     unseen_category_count: unseen,
@@ -264,7 +277,7 @@ pub fn prediction_input_support(
         features.push(FeatureSupport {
             name: source.name.clone(),
             training_missing_count: source_missing,
-            training_support: if all_missing {
+            training_support: if source_missing == n_training_rows {
                 TrainingSupport::UnavailableAllMissing
             } else {
                 TrainingSupport::ObservedNonMissingValues
