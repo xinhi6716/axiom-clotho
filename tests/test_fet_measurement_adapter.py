@@ -218,6 +218,37 @@ class FetAdapterTests(unittest.TestCase):
         with self.assertRaisesRegex(c.WorkflowError, "cohort"):
             flow.plan(self.output)
 
+    def test_plan_checks_typed_training_source_provenance(self):
+        self.prepare()
+        path = self.output / "provenance.json"
+        original = c.parse_json(path.read_bytes())
+        env = dict(os.environ, PYTHONPATH=str(ROOT / "src"), PYTHONDONTWRITEBYTECODE="1")
+        command = [sys.executable, "-m", "mlworkflow", "plan", "--prepared", str(self.output)]
+
+        def plan():
+            return subprocess.run(command, cwd=self.root, env=env, text=True,
+                                  capture_output=True, timeout=15)
+
+        result = plan()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for label, edit in (
+            ("missing_source", lambda p: p["input_sha256"].pop("training_targets.csv")),
+            ("malformed_digest", lambda p: p["input_sha256"].update({"config.json": "not-a-digest"})),
+            ("unknown_role", lambda p: p["input_sha256"].update({"other.csv": "f" * 64})),
+            ("wrong_count_type", lambda p: p.update(training_rows=float(p["training_rows"]))),
+            ("false_fit_claim", lambda p: p.update(ml_fits_performed=7)),
+            ("boolean_fit_count", lambda p: p.update(ml_fits_performed=False)),
+        ):
+            with self.subTest(label=label):
+                changed = copy.deepcopy(original)
+                edit(changed)
+                path.write_bytes(c.json_bytes(changed))
+                rehash(self.output)
+                result = plan()
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertIn("FET join provenance", result.stderr)
+                self.assertFalse(result.stdout)
+
     def test_mixed_schema_or_adapter_receipt_cannot_switch_validation(self):
         self.prepare()
         path = self.output / "COMPLETE.json"

@@ -16,6 +16,7 @@ from . import FET_ADAPTER, FET_FEATURES, FET_FILES, FET_INVENTORIES, load_bundle
 
 PHYSICAL = ("lot", "wafer", "device")
 ACQUISITION = (*PHYSICAL, "condition", "replicate", "branch")
+JOIN_INPUTS = {"transfer.csv", "partitions.csv", "training_targets.csv", "config.json"}
 METADATA = (*ACQUISITION, "split_group", "temperature_K", "drain_source_voltage_V", "body_source_voltage_V",
             "signed_current_criterion_A", "window_min_V", "window_max_V", "max_bracket_span_V",
             "branch_sample_count", "log_selected_sample_count", "criterion_method", "criterion_bracket_span_V")
@@ -322,12 +323,19 @@ def prepared(path):
             if partition == "train":
                 c.number(model["target"])
     provenance = c.parse_json(payloads["provenance.json"])
+    source_hashes = provenance.get("input_sha256") if isinstance(provenance, dict) else None
+    # Only the transfer input is retained verbatim. The other source digests
+    # are typed custody declarations, not independently verified source bytes.
     if (not isinstance(provenance, dict) or provenance.get("schema_version") != "measurement-join-v2"
             or provenance.get("adapter") != FET_ADAPTER or provenance.get("caller_prediction_outcomes_opened") is not False
             or provenance.get("physical_key") != list(PHYSICAL) or provenance.get("acquisition_key") != list(ACQUISITION)
-            or provenance.get("training_rows") != len(training) or provenance.get("prediction_rows") != len(future)
-            or not isinstance(provenance.get("input_sha256"), dict)
-            or provenance["input_sha256"].get("transfer.csv") != c.sha(payloads["features/transfer_input.csv"])):
+            or type(provenance.get("training_rows")) is not int or provenance["training_rows"] != len(training)
+            or type(provenance.get("prediction_rows")) is not int or provenance["prediction_rows"] != len(future)
+            or type(provenance.get("ml_fits_performed")) is not int or provenance["ml_fits_performed"] != 0
+            or not isinstance(source_hashes, dict) or set(source_hashes) != JOIN_INPUTS
+            or any(not isinstance(h, str) or not re.fullmatch(r"[0-9a-f]{64}", h)
+                   for h in source_hashes.values())
+            or source_hashes["transfer.csv"] != c.sha(payloads["features/transfer_input.csv"])):
         raise c.WorkflowError("saved FET join provenance is inconsistent")
     return config, training, future, payloads, receipt_sha
 
