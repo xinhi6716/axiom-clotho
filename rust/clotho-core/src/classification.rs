@@ -219,7 +219,11 @@ fn derivatives(
     alpha: f64,
     parameters: &[f64],
 ) -> Result<ObjectiveDerivatives, ClassificationError> {
+    if parameters.iter().any(|value| !value.is_finite()) {
+        return Err(ClassificationError::NumericFailure);
+    }
     let width = parameters.len();
+    let mut objective = CompensatedSum::default();
     let mut gradient = vec![0.0; width];
     let mut curvature = vec![vec![0.0; width]; width];
     let count = x.len() as f64;
@@ -232,6 +236,7 @@ fn derivatives(
             sigmoid(score)
         };
         let exponential = (-score.abs()).exp();
+        objective.add(logistic_loss_term(score, label, exponential, count))?;
         let weight = exponential / (1.0 + exponential).powi(2);
         for j in 0..width {
             gradient[j] += residual * row[j] / count;
@@ -249,7 +254,7 @@ fn derivatives(
     }
     // Cholesky reads only the lower triangle.
     Ok(ObjectiveDerivatives {
-        value: loss(x, y, alpha, parameters)?,
+        value: penalized_objective(objective, parameters, alpha)?,
         gradient,
         curvature,
     })
@@ -267,10 +272,24 @@ fn loss(
     let mut objective = CompensatedSum::default();
     for (row, &label) in x.iter().zip(y) {
         let score = dot(row, parameters)?;
-        let signed = if label == 1.0 { -score } else { score };
-        // softplus(signed) avoids exp overflow and loss cancellation.
-        objective.add((signed.max(0.0) + (-signed.abs()).exp().ln_1p()) / x.len() as f64)?;
+        let exponential = (-score.abs()).exp();
+        objective.add(logistic_loss_term(score, label, exponential, x.len() as f64))?;
     }
+    penalized_objective(objective, parameters, alpha)
+}
+
+fn logistic_loss_term(score: f64, label: f64, exponential: f64, count: f64) -> f64 {
+    let signed = if label == 1.0 { -score } else { score };
+    // softplus(signed) avoids exp overflow and loss cancellation.
+    // abs(signed) == abs(score), so the derivative pass can share its exp.
+    (signed.max(0.0) + exponential.ln_1p()) / count
+}
+
+fn penalized_objective(
+    mut objective: CompensatedSum,
+    parameters: &[f64],
+    alpha: f64,
+) -> Result<f64, ClassificationError> {
     for &coefficient in &parameters[1..] {
         objective.add(finite(0.5 * finite(alpha * coefficient)? * coefficient)?)?;
     }
@@ -513,6 +532,25 @@ mod tests {
             optimize(&x, &[0.0, 1.0], 0.1, vec![0.0; 2], 1),
             Err(ClassificationError::ConvergenceFailure)
         );
+    }
+
+    #[test]
+    fn combined_derivatives_match_the_trial_objective_bit_for_bit() {
+        let design = [
+            vec![1.0, -1.0, 0.0],
+            vec![1.0, 0.0, -0.0],
+            vec![1.0, 0.125, -0.75],
+            vec![1.0, 1.0, 2.0],
+            vec![1.0, -0.25, 0.375],
+        ];
+        let y = [1.0, 0.0, 1.0, 0.0, 0.0];
+        for parameters in [[-0.0, 0.0, 0.0], [-0.1, 1.5, -0.4], [0.125, 1000.0, 0.1]] {
+            for alpha in [0.0, 0.03125, 11.0] {
+                let objective = loss(&design, &y, alpha, &parameters).unwrap();
+                let combined = derivatives(&design, &y, alpha, &parameters).unwrap();
+                assert_eq!(combined.value.to_bits(), objective.to_bits());
+            }
+        }
     }
 
     #[test]
