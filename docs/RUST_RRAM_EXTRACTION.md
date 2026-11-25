@@ -81,14 +81,17 @@ A new output directory contains:
 - `extraction.json`: schema/row-unit/settings, feature allowlist, zero ML fits,
   limitations, per-pair signed currents and resistances, selected/all source rows
   and interpolation span. Source row means logical data-record index plus header,
-  not physical line number when fields contain newlines.
+  not physical line number when fields contain newlines. The report includes the
+  lowercase SHA-256 of exact retained input bytes (`input_sha256`) and exact emitted
+  `features.csv` bytes (`features_sha256`).
 - `COMPLETE`: written last; absent on an interrupted/incomplete write.
 
 No existing path is overwritten, including symlinks. Unix directories/files request
 0700/0600 permissions. All validation precedes output creation; an I/O failure can
 leave a partial directory. Diagnostics omit input IDs/values; requested files do
 contain private measurements. No downloads, telemetry or Python runtime occur.
-Snapshots are not cryptographic provenance authentication or legacy hash manifests.
+Use a trusted report to check the hashes. They are not provenance authentication
+or legacy hash manifests.
 
 The feature table can feed `prepare-measurements`, with identity
 `batch,wafer,device` (default row unit) or `batch,wafer,device,condition`

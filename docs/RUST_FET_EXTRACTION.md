@@ -62,6 +62,8 @@ A fresh directory contains `features.csv`, the exact retained
 source record IDs, criterion bracket and descriptive log diagnostics. Source
 row IDs mean **logical CSV record index plus header**, not physical line number
 for multiline CSV records. Input order and acquisition order are preserved.
+The report includes the lowercase SHA-256 of exact retained input bytes
+(`input_sha256`) and exact emitted `features.csv` bytes (`features_sha256`).
 
 All validation and extraction precede directory creation. Files are created
 exclusively; existing destinations and symlinks are not replaced. A filesystem
@@ -80,8 +82,8 @@ It is **not** a replacement for legacy FET v2 prepared bundles:
 - Legacy unit parsing, report inventories, hashes, prepared partitions,
   training-only endpoint joins, model selection, future predictions and
   zero-fit saved scoring are not part of this command yet.
-- The retained input snapshot is not authenticated provenance. No checksum,
-  source attestation, historical blinding or scientific validity is claimed.
+- The hashes detect byte changes against a trusted report. They do not authenticate
+  the source or establish historical blinding or scientific validity.
 - RRAM extraction is not implemented by this change.
 
 The Rust API is in `clotho_core::fet`. Synthetic tests cover exact/interpolated

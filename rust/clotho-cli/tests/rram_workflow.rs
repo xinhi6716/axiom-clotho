@@ -195,3 +195,35 @@ fn bundle_is_private() {
         );
     }
 }
+
+#[test]
+fn extraction_report_binds_exact_input_and_feature_bytes() {
+    use sha2::{Digest, Sha256};
+    let capture = |data: &str| {
+        let w = Workspace::new();
+        w.write(data);
+        let output = w.run(&[]);
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let digest = |name| format!("{:x}", Sha256::digest(fs::read(w.0.join(name)).unwrap()));
+        let j: serde_json::Value =
+            serde_json::from_slice(&fs::read(w.0.join("out/extraction.json")).unwrap()).unwrap();
+        let input = digest("out/measurement_input.csv");
+        let features = digest("out/features.csv");
+        assert_eq!(j["input_sha256"], input);
+        assert_eq!(j["features_sha256"], features);
+        (input, features)
+    };
+    let original = capture(DATA);
+    // Equivalent formatting changes the exact input bytes, not the feature CSV.
+    let reformatted = capture(&DATA.replace(",300,", ",300.0,"));
+    assert_ne!(original.0, reformatted.0);
+    assert_eq!(original.1, reformatted.1);
+    // A same-shape trace change must not reproduce the old feature digest.
+    let changed = capture(&DATA.replacen("0.1\n", "0.2\n", 1));
+    assert_ne!(original.0, changed.0);
+    assert_ne!(original.1, changed.1);
+}

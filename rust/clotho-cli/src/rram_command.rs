@@ -3,6 +3,7 @@ use super::{create_file, required, Result};
 use clotho_core::rram::{
     extract_cohort, Acquisition, Branch, Conditions, Readpoint, Sample, Settings, State,
 };
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::io::Read;
 use std::path::Path;
@@ -203,8 +204,10 @@ pub fn run(opts: &HashMap<String, String>) -> Result<()> {
         );
     }
     let csv = writer.into_inner()?;
+    let input_sha256 = format!("{:x}", Sha256::digest(&raw));
+    let features_sha256 = format!("{:x}", Sha256::digest(&csv));
     let report = serde_json::to_vec_pretty(
-        &serde_json::json!({"schema_version":"clotho.rram_si_binary64.v1","status":"complete","measurement_rows":count,"feature_rows":features.len(),"ml_fits":0,"feature_row_unit":if by_condition {"device-condition"} else {"device"},"source_row_convention":"logical CSV data record index plus header; not physical lines","input_units":"explicit SI binary64; no conversion","settings":{"max_bracket_span_V":settings.max_bracket_span_v,"assumptions_accepted":true},"feature_allowlist":["hrs_resistance_median_ohm","lrs_resistance_median_ohm","resistance_ratio_median"],"limitations":["Not legacy exact-decimal numerical or bundle compatibility","Declared states and conditions are not independently verified","Linear interpolation assumes local linearity; static V/I is not differential resistance","Cycles and condition rows are repeated observations, not independent devices; group downstream by physical_device_group or broader split_group","Ratio is derived from HRS/LRS observations; do not predict it from those resistances","No target joins, model training, confidence intervals or physical independence validation","Input snapshot is retained without cryptographic provenance authentication"],"lineage":records}),
+        &serde_json::json!({"schema_version":"clotho.rram_si_binary64.v1","status":"complete","input_sha256":input_sha256,"features_sha256":features_sha256,"measurement_rows":count,"feature_rows":features.len(),"ml_fits":0,"feature_row_unit":if by_condition {"device-condition"} else {"device"},"source_row_convention":"logical CSV data record index plus header; not physical lines","input_units":"explicit SI binary64; no conversion","settings":{"max_bracket_span_V":settings.max_bracket_span_v,"assumptions_accepted":true},"feature_allowlist":["hrs_resistance_median_ohm","lrs_resistance_median_ohm","resistance_ratio_median"],"limitations":["Not legacy exact-decimal numerical or bundle compatibility","Declared states and conditions are not independently verified","Linear interpolation assumes local linearity; static V/I is not differential resistance","Cycles and condition rows are repeated observations, not independent devices; group downstream by physical_device_group or broader split_group","Ratio is derived from HRS/LRS observations; do not predict it from those resistances","No target joins, model training, confidence intervals or physical independence validation","Input and feature hashes identify exact bytes, not authenticated provenance"],"lineage":records}),
     )?;
     let mut builder = std::fs::DirBuilder::new();
     #[cfg(unix)]

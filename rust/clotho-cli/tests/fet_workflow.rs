@@ -190,3 +190,35 @@ fn underflow_window_option_rejected_but_explicit_zero_allowed() {
         assert_eq!(w.0.join("out").exists(), accepted);
     }
 }
+
+#[test]
+fn extraction_report_binds_exact_input_and_feature_bytes() {
+    use sha2::{Digest, Sha256};
+    let capture = |data: &str| {
+        let w = Workspace::new();
+        w.write("data.csv", data);
+        let output = extract(&w, "true");
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let digest = |name| format!("{:x}", Sha256::digest(fs::read(w.0.join(name)).unwrap()));
+        let j: serde_json::Value =
+            serde_json::from_slice(&fs::read(w.0.join("out/extraction.json")).unwrap()).unwrap();
+        let input = digest("out/transfer_input.csv");
+        let features = digest("out/features.csv");
+        assert_eq!(j["input_sha256"], input);
+        assert_eq!(j["features_sha256"], features);
+        (input, features)
+    };
+    let original = capture(DATA);
+    // Equivalent formatting changes the exact input bytes, not the feature CSV.
+    let reformatted = capture(&DATA.replace(",300,", ",300.0,"));
+    assert_ne!(original.0, reformatted.0);
+    assert_eq!(original.1, reformatted.1);
+    // A same-shape trace change must not reproduce the old feature digest.
+    let changed = capture(&DATA.replacen("1e-6", "2e-6", 1));
+    assert_ne!(original.0, changed.0);
+    assert_ne!(original.1, changed.1);
+}

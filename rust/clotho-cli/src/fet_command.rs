@@ -1,6 +1,7 @@
 //! Explicit SI CSV adapter; deliberately distinct from legacy decimal bundles.
 use super::{create_file, required, Result};
 use clotho_core::fet::{extract_cohort, Acquisition, Sample, Settings};
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::io::Read;
 use std::path::Path;
@@ -177,8 +178,10 @@ pub fn run(opts: &HashMap<String, String>) -> Result<()> {
         lineage.push(serde_json::json!({"identity":[a.lot,a.wafer,a.device,a.condition,a.replicate,a.branch],"all_source_rows":f.all_source_rows,"criterion_source_rows":f.criterion_source_rows,"log_selected_source_rows":f.log_selected_source_rows,"criterion_bracket_span_V":f.bracket_span_v,"log_intercept":f.log_intercept,"log_rmse_decades":f.log_rmse_decades}));
     }
     let csv = writer.into_inner()?;
+    let input_sha256 = format!("{:x}", Sha256::digest(&raw));
+    let features_sha256 = format!("{:x}", Sha256::digest(&csv));
     let report = serde_json::to_vec_pretty(
-        &serde_json::json!({"schema_version":"clotho.fet_si_binary64.v1","status":"complete","measurement_rows":count,"device_rows":features.len(),"ml_fits":0,"source_row_convention":"logical CSV data record index plus header; not physical lines","input_units":"explicit SI binary64; no conversion","settings":{"criterion_A":settings.criterion_a,"positive_current":positive_current,"max_bracket_span_V":settings.max_bracket_span_v,"window_min_V":settings.window_min_v,"window_max_V":settings.window_max_v},"limitations":["Not legacy exact-decimal numerical or bundle compatibility","Criterion voltage and descriptive log slope do not certify physical threshold or subthreshold regime","No target joins, model training, confidence intervals or physical independence validation","Input snapshot is retained without cryptographic provenance authentication"],"lineage":lineage}),
+        &serde_json::json!({"schema_version":"clotho.fet_si_binary64.v1","status":"complete","input_sha256":input_sha256,"features_sha256":features_sha256,"measurement_rows":count,"device_rows":features.len(),"ml_fits":0,"source_row_convention":"logical CSV data record index plus header; not physical lines","input_units":"explicit SI binary64; no conversion","settings":{"criterion_A":settings.criterion_a,"positive_current":positive_current,"max_bracket_span_V":settings.max_bracket_span_v,"window_min_V":settings.window_min_v,"window_max_V":settings.window_max_v},"limitations":["Not legacy exact-decimal numerical or bundle compatibility","Criterion voltage and descriptive log slope do not certify physical threshold or subthreshold regime","No target joins, model training, confidence intervals or physical independence validation","Input and feature hashes identify exact bytes, not authenticated provenance"],"lineage":lineage}),
     )?;
     let mut builder = std::fs::DirBuilder::new();
     #[cfg(unix)]
