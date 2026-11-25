@@ -2,6 +2,7 @@
 import argparse
 import csv
 from collections import Counter, defaultdict
+from decimal import Decimal
 import io
 import json
 import math
@@ -86,6 +87,11 @@ def audit(path):
         if role == "write":
             width = number(d["width_s"], True)
             valid = v is not None and width is not None and d["conductance_S"] == ""
+            if valid:
+                # Preserve distinct declared write settings even if they
+                # share a binary64 representation. Admission is unchanged.
+                v = Decimal(d["voltage_V"])
+                width = Decimal(d["width_s"])
         else:
             width = None
             valid = role in ("pre_read", "post_read") and v is not None and (

@@ -32,10 +32,13 @@ Printed chip and cell counts reflect claimed identifiers, not verified
 independence, comparable conditions or cross-chip performance.
 
 The aggregate report separates shared read strata (protocol and read voltage)
-from exact action strata (also the signed write voltage and width). Each counts
+from exact action strata (also the signed write voltage and width). The read
+component uses the declared binary64 matching rule. The write settings are
+compared as exact decimal values: equivalent spellings match, but distinct
+settings that round to the same binary64 number do not. Each counts
 eligible transitions in strata with at least two distinct declared chip labels.
-Two labels with no shared strata mean there is no exact match in the supplied
-table, not necessarily no continuous overlap. Exact numeric matching neither
+Two labels with no shared strata mean there is no match under these keys,
+not necessarily no continuous overlap. Matching neither
 harmonizes units nor bins nearby settings. This diagnostic does not change the
 exit status and does not replace physical provenance or split verification.
 Before fitting, reconcile protocol aliases, verify independent die IDs, and

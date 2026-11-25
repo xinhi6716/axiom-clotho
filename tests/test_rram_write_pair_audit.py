@@ -58,6 +58,30 @@ class WritePairAudit(unittest.TestCase):
         self.assertEqual(report["declared_read_condition_coverage"]["multi_chip_strata"], 1)
         self.assertEqual(report["declared_exact_action_coverage"]["multi_chip_strata"], 0)
 
+    def test_exact_declared_action_does_not_merge_distinct_decimal_settings(self):
+        for field, distinct, equal in (
+            (6, "-1.20000000000000001", "-1.20E0"),
+            (7, "2.00000000000000001e-7", "0.000000200"),
+        ):
+            with self.subTest(field=field):
+                a, b = triplet(), triplet("chipB")
+                self.assertEqual(float(a[1][field]), float(distinct))
+                b[1][field] = distinct
+                result = self.run_rows(a + b)
+                self.assertEqual(result.returncode, 0)
+                report = json.loads(result.stdout)
+                self.assertEqual(report["eligible_transitions"], 2)
+                self.assertEqual(report["declared_read_condition_coverage"]["multi_chip_strata"], 1)
+                self.assertEqual(report["declared_exact_action_coverage"]["multi_chip_strata"], 0)
+                self.assertEqual(report["declared_exact_action_coverage"]["declared_strata"], 2)
+
+                b[1][field] = equal
+                result = self.run_rows(a + b)
+                self.assertEqual(result.returncode, 0)
+                exact = json.loads(result.stdout)["declared_exact_action_coverage"]
+                self.assertEqual(exact["multi_chip_strata"], 1)
+                self.assertEqual(exact["eligible_transitions_in_multi_chip_strata"], 2)
+
     def test_exact_action_coverage_counts_chips_not_repeats(self):
         a, b, c = triplet(), triplet("chipB"), triplet(key="t2", start=3)
         report = json.loads(self.run_rows(a + b + c).stdout)
