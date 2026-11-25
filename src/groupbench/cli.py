@@ -249,7 +249,9 @@ def _read_csv_with_hash(path: Path, *, group=None, domain=None):
     # Group/domain labels are identifiers: preserve leading zeros and literal 'NA'.
     converters = {name: str for name in (group, domain) if name is not None} or None
     snapshot.seek(0)
-    frame = pd.read_csv(snapshot, converters=converters)
+    # Use binary64 round-trip conversion for inferred floating columns.
+    # The default parser can merge adjacent representable decimal inputs.
+    frame = pd.read_csv(snapshot, converters=converters, float_precision="round_trip")
     # pandas can interpret a second leading BOM as another encoding marker,
     # then silently rename newly colliding headers (for example g to g.1).
     # Never select target/group/features against a schema different from the

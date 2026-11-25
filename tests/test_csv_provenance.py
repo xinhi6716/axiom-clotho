@@ -1,6 +1,7 @@
 """Bind CLI source provenance to the bytes actually validated and parsed."""
 
 from contextlib import redirect_stderr, redirect_stdout
+import csv
 import hashlib
 import io
 import json
@@ -15,6 +16,17 @@ import pandas as pd
 from groupbench import make_materials_fixture
 from groupbench.cli import _read_csv, _read_csv_with_hash, main
 from groupbench.data import data_fingerprint, prepare_data, validate_features
+
+
+def _fixture_reader(raw, template):
+    """Independent reference for this known float/text fixture only."""
+    reader = csv.DictReader(io.StringIO(raw.decode("utf-8-sig"), newline=""))
+    rows = list(reader)
+    return pd.DataFrame({
+        name: [(float(row[name]) if template[name].dtype.kind == "f" else row[name])
+               if row[name] != "" else np.nan for row in rows]
+        for name in template
+    })
 
 
 class TrackedBytes(io.BytesIO):
@@ -154,7 +166,7 @@ class CSVProvenanceTests(unittest.TestCase):
         training = make_materials_fixture(6, 2, 7)
         original = b"\xef\xbb\xbf" + training.to_csv(index=False, lineterminator="\r\n").encode("utf-8") + b"\r\n"
         replacement = make_materials_fixture(6, 2, 19).to_csv(index=False).encode("utf-8")
-        parsed = pd.read_csv(io.BytesIO(original), converters={"batch": str})
+        parsed = _fixture_reader(original, training)
         expected_hash = data_fingerprint(*prepare_data(parsed, "response", "batch"))
         real_read_csv = pd.read_csv
         with tempfile.TemporaryDirectory() as temp:
@@ -181,8 +193,8 @@ class CSVProvenanceTests(unittest.TestCase):
         new_rows = make_materials_fixture(2, 2, 19).drop(columns=["response", "batch"])
         original_train = training.to_csv(index=False, lineterminator="\r\n").encode("utf-8")
         original_new = b"\xef\xbb\xbf" + new_rows.to_csv(index=False, lineterminator="\r\n").encode("utf-8") + b"\r\n"
-        parsed_train = pd.read_csv(io.BytesIO(original_train), converters={"batch": str})
-        parsed_new = validate_features(pd.read_csv(io.BytesIO(original_new)))
+        parsed_train = _fixture_reader(original_train, training)
+        parsed_new = validate_features(_fixture_reader(original_new, new_rows))
         expected_train_hash = data_fingerprint(*prepare_data(parsed_train, "response", "batch"))
         expected_new_hash = hashlib.sha256(pd.util.hash_pandas_object(parsed_new, index=False).values.tobytes()).hexdigest()
         real_read_csv = pd.read_csv

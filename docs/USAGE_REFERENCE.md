@@ -154,6 +154,14 @@ are not interpreted as observed values.
 
 CSV files must use UTF-8 (an optional UTF-8 BOM is supported), with unique, non-blank column names. Each non-blank record must have exactly as many fields as the header: malformed short/long records are rejected **before fitting**, rather than silently padded or shifted into the wrong columns. Represent missing values with explicit empty fields, such as `001,,2`, and quote values containing commas or newlines. Empty lines and lines containing only ASCII spaces/tabs outside quoted values are ignored. Structure errors report physical line numbers and field counts, not cell contents.
 
+For inferred floating columns, CSV ingestion uses pandas' binary64 round-trip
+conversion, not its lower-precision default. This preserves distinct decimal
+tokens when they round to distinct binary64 values; it does not store arbitrary
+decimal precision. Rerunning an input parsed with the old converter can change
+fine-scale values, normalized data fingerprints or predictions even when the
+source-byte SHA-256 matches. Existing saved-bundle verification and saved
+prediction/outcome scoring keep their own numeric parsers.
+
 The CLI uses commas between fields and a dot for decimal numbers, such as `1.5`; it does not detect semicolon delimiters or convert decimal commas. Adjust the source export settings before importing such data. A quoted feature value such as `"1,5"` remains categorical text, not the number `1.5`. Before fitting, inspect `feature_schema` → `dtype` in the existing `plan run` or `plan predict` output to check that intended numeric features were read as numeric.
 
 NUL characters (U+0000) are rejected anywhere in a CSV, including headers and quoted fields, before pandas can truncate them and change group identifiers, features or targets. Diagnostics identify only the physical source line, not its contents. Physical lines include newlines inside quoted fields; they are not CSV record numbers. This input check is shared by regression and binary `run`, `predict` and `plan` commands.
