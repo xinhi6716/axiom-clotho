@@ -407,6 +407,15 @@ class MeasurementRegressionTests(unittest.TestCase):
         direct = module.score([{**r, "y_true": float(r["y_true"]), "y_pred": float(r["y_pred"])} for r in scored], grouped=True)
         self.assertEqual(first["scorecard"], direct)
 
+    def test_saved_score_consumes_verified_keyed_prediction_values(self):
+        self.prepare()
+        flow.run(self.prepared, self.run_dir)
+        with patch.object(flow, "number", wraps=c.number) as parse_number:
+            result = flow.score(self.run_dir, self.inputs / "later_outcomes.csv", self.score_dir)
+        # Three numeric fields per scored device (engine prediction, keyed
+        # prediction, outcome). Config validation uses contracts.number separately.
+        self.assertEqual(parse_number.call_count, 3 * result["cohort_rows"])
+
     def test_saved_score_exact_cohort_and_inconsistent_mapping_fail_without_fitting(self):
         self.prepare()
         flow.run(self.prepared, self.run_dir)

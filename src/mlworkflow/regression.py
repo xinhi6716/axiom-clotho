@@ -334,8 +334,18 @@ def score(run_dir, outcomes_csv, output_dir):
         if metadata["future_cohort"] != expected or {r["group"] for r in rows} & set(groups):
             raise WorkflowError("saved prediction identities or group boundary are inconsistent")
         engine = parse_csv(payloads["prediction/predictions.csv"], ("row_position", "prediction"))
-        if len(engine) != len(rows) or any(r["row_position"] != str(i) or number(r["prediction"]) != number(rows[i]["prediction"]) for i, r in enumerate(engine)):
-            raise WorkflowError("keyed predictions differ from the unchanged calculator prediction bundle")
+        mismatch = "keyed predictions differ from the unchanged calculator prediction bundle"
+        if len(engine) != len(rows):
+            raise WorkflowError(mismatch)
+        verified_values = []
+        for i, (engine_row, row) in enumerate(zip(engine, rows)):
+            if engine_row["row_position"] != str(i):
+                raise WorkflowError(mismatch)
+            engine_value = number(engine_row["prediction"])
+            keyed_value = number(row["prediction"])
+            if engine_value != keyed_value:
+                raise WorkflowError(mismatch)
+            verified_values.append(keyed_value)
     except (KeyError, TypeError):
         raise WorkflowError("saved run metadata is malformed") from None
     outcome_raw = read_regular(outcomes_csv)
@@ -343,7 +353,7 @@ def score(run_dir, outcomes_csv, output_dir):
     if set(outcomes) != set(predictions):
         raise WorkflowError("outcomes must match the exact predicted device cohort; partial, extra or duplicate joins are forbidden")
     joined = [{"id": r["device"], "group": r["group"], "y_true": number(outcomes[r["device"]]["target"]),
-               "y_pred": number(r["prediction"])} for r in rows]
+               "y_pred": value} for r, value in zip(rows, verified_values)]
     calculator = _load_component("_workflow_saved_scorecard", "scorecard/tools/prediction-scorecard/prediction_scorecard.py")
     try:
         scorecard = calculator.score(joined, grouped=True)
