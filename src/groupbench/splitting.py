@@ -85,7 +85,12 @@ def _audit_positions(indices, n_rows: int, name: str):
 
 
 def audit_split(train: np.ndarray, test: np.ndarray, groups: np.ndarray) -> dict:
-    """Report counts for disjoint positional subsets without requiring full coverage."""
+    """Report disjoint positional subsets of a non-missing group roster; coverage may be partial."""
+    if np.ma.isMaskedArray(groups) and np.ma.getmaskarray(groups).any():
+        raise ValueError("Invalid split: provide one non-missing group identifier per row.")
+    # Keep the declared NumPy labels; coercing mixed identities can merge them.
+    if not isinstance(groups, np.ndarray) or groups.ndim != 1 or pd.isna(groups).any():
+        raise ValueError("Invalid split: provide one non-missing group identifier per row.")
     train, train_roster = _audit_positions(train, len(groups), "training")
     test, test_roster = _audit_positions(test, len(groups), "validation")
     train_groups = set(groups[train])

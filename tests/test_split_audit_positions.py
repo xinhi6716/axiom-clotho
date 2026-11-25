@@ -40,6 +40,17 @@ class SplitAuditPositionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "integer row positions"):
             audit_split([0, True], np.array([2]), self.groups)
 
+    def test_unknown_groups_cannot_be_certified_disjoint(self):
+        rosters = (
+            np.array([np.nan, np.nan]),
+            np.ma.array(["A", "B"], mask=[True, False]),
+            np.array(["A", "B", None], dtype=object),
+        )
+        for groups in rosters:
+            with self.subTest(groups=groups):
+                with self.assertRaisesRegex(ValueError, "non-missing group identifier"):
+                    audit_split([0], [1], groups)
+
     def test_valid_subset_still_reports_exact_counts_and_group_overlap(self):
         report = audit_split(np.array([1, 0]), np.array([2], dtype=np.uint64), self.groups)
         self.assertEqual(report, {
