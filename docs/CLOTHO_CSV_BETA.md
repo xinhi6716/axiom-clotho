@@ -96,6 +96,13 @@ must not map to multiple batches. IDs must be globally namespaced by you: this
 cannot discover aliases or tell you which physical level is scientifically right.
 Broader shared environments, time periods, instruments or dependencies can remain.
 
+In the prepared v1 RRAM bundle, cohort rows are ordered by literal device ID.
+Training and future tables each retain that order within their own partition.
+Planning and running reject reorderings, even if the device sets and saved
+byte checksums match. Input CSV ordering is not required to match this
+prepared order; the join uses exact device IDs. This is an internal
+consistency check, not authentication of the raw measurement or split.
+
 ### 3. Training-only endpoints
 
 `training_targets.csv` contains exactly `device,target`, and exactly the **train**

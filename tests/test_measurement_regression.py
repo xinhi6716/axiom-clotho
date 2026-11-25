@@ -144,6 +144,38 @@ class MeasurementRegressionTests(unittest.TestCase):
                     with self.subTest(token=token), self.assertRaisesRegex(c.WorkflowError, "numeric magnitude"):
                         c.number(token)
 
+    def test_replay_requires_canonical_device_order_not_only_exact_membership(self):
+        configuration = self.config()
+        self.prepare()
+        reference = tree(self.prepared)
+        self.assertEqual(flow.plan(self.prepared)["fits_performed"], 0)
+        columns = {
+            "cohort.csv": flow.COHORT_COLUMNS,
+            "training.csv": ("device", "group", "target", *configuration["features"]),
+            "future.csv": ("device", "group", *configuration["features"]),
+        }
+        for names in (("training.csv",), ("future.csv",), tuple(columns)):
+            with self.subTest(names=names):
+                for name, data in reference.items():
+                    (self.prepared / name).write_bytes(data)
+                for name in names:
+                    rows = c.parse_csv(reference[name], columns[name])
+                    (self.prepared / name).write_bytes(c.csv_bytes(columns[name], rows[::-1]))
+                path = self.prepared / "COMPLETE.json"
+                receipt = c.parse_json(reference["COMPLETE.json"])
+                receipt["files_sha256"] = {n: c.sha((self.prepared / n).read_bytes())
+                                           for n in receipt["files_sha256"]}
+                path.write_bytes(c.json_bytes(receipt))
+                c.load_bundle(self.prepared, "prepared")
+                saved = tree(self.prepared)
+                with patch.object(flow, "begin_bundle", side_effect=AssertionError("unexpected publication")):
+                    with self.assertRaisesRegex(c.WorkflowError, "canonical.*order"):
+                        flow.plan(self.prepared)
+                    with self.assertRaisesRegex(c.WorkflowError, "canonical.*order"):
+                        flow.run(self.prepared, self.run_dir)
+                self.assertEqual(tree(self.prepared), saved)
+                self.assertFalse(self.run_dir.exists())
+
     def test_future_targets_cannot_enter_training_file(self):
         train = self.rows("training_targets.csv", ("device", "target"))
         future = self.rows("later_outcomes.csv", ("device", "target"))

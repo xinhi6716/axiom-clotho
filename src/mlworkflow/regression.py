@@ -129,6 +129,10 @@ def _prepared(path):
     config = validate_config(parse_json(payloads["config.json"]))
     cohort = parse_csv(payloads["cohort.csv"], COHORT_COLUMNS)
     by_id = keyed(cohort)
+    # Preparation uses sorted device IDs, so a rehashed reorder cannot
+    # redefine the row positions consumed by grouped splitting or prediction.
+    if list(by_id) != sorted(by_id):
+        raise WorkflowError("saved prepared cohort differs from canonical device order")
     _check_groups(cohort, config)
     training = parse_csv(payloads["training.csv"], ("device", "group", "target", *config["features"]))
     future = parse_csv(payloads["future.csv"], ("device", "group", *config["features"]))
@@ -136,8 +140,12 @@ def _prepared(path):
     if set(originals) != set(by_id):
         raise WorkflowError("saved feature and cohort device sets differ")
     for rows, partition in ((training, "train"), (future, "predict")):
-        if set(keyed(rows)) != {r["device"] for r in cohort if r["partition"] == partition}:
+        model_devices = keyed(rows)
+        expected = [r["device"] for r in cohort if r["partition"] == partition]
+        if model_devices.keys() != set(expected):
             raise WorkflowError("saved model input IDs do not match their declared partition")
+        if list(model_devices) != expected:
+            raise WorkflowError("saved model input differs from canonical device order within its partition")
         for row in rows:
             meta, original = by_id[row["device"]], originals[row["device"]]
             if (row["group"] != meta["group"] or meta["batch"] != original["batch"] or meta["wafer"] != original["wafer"]):
