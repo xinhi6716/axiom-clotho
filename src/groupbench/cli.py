@@ -493,7 +493,10 @@ The groupbench command is an alias for the same CLI.""",
         else:
             result = benchmark(frame, **options, outer_splits=args.outer_splits)
             report = result.write(args.out, overwrite=args.overwrite)
-            print(result.leaderboard[["model", "group_mae", "mae", "rmse", "r2"]].to_string(index=False, float_format=_leaderboard_float))
+            from .report import _format_r2
+            print(result.leaderboard[["model", "group_mae", "mae", "rmse", "r2"]].to_string(
+                index=False, float_format=_leaderboard_float,
+                formatters={"r2": lambda value: _format_r2(value, _leaderboard_float)}))
             print(f"\nOffline report: {report}\nRun key: {result.manifest['run_key']}")
             print("Selection uses only inner folds. Review outputs for sensitive values before sharing.")
         return 0

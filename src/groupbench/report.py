@@ -27,6 +27,14 @@ def _number(value):
     return f"{value:,.4f}"
 
 
+def _format_r2(value, ordinary=_number):
+    """Do not display a saved R² distinct from one as exactly 1.0000."""
+    text = ordinary(value)
+    if text == "1.0000" and value != 1.0:
+        return repr(float(value))
+    return text
+
+
 def render_html(result) -> str:
     esc = lambda value: html.escape(str(value), quote=True)
     t = _text
@@ -52,7 +60,7 @@ def render_html(result) -> str:
 
     bars = "".join(bar_row(name, model) for name, model in ranking)
     table = "".join(
-        f'<tr><th scope="row">{esc(name)}</th><td>{_number(value["overall"]["group_mae"])}</td><td>{_number(value["overall"]["mae"])}</td><td>{_number(value["overall"]["rmse"])}</td><td>{_number(value["overall"]["r2"])}</td><td>{_number(value["overall"]["worst_group_mae"])}</td></tr>'
+        f'<tr><th scope="row">{esc(name)}</th><td>{_number(value["overall"]["group_mae"])}</td><td>{_number(value["overall"]["mae"])}</td><td>{_number(value["overall"]["rmse"])}</td><td>{_format_r2(value["overall"]["r2"])}</td><td>{_number(value["overall"]["worst_group_mae"])}</td></tr>'
         for name, value in ranking
     )
     groups = models["selected"]["per_group"]

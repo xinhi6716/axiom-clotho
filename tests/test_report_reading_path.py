@@ -388,6 +388,16 @@ class ReadingPathTests(unittest.TestCase):
         self.assertEqual(language_html(_number(None), 'en'), 'undefined')
         self.assertEqual(language_html(_number(None), 'zh'), '未定義')
 
+    def test_r2_nearest_below_one_does_not_look_like_one_in_either_language(self):
+        near = math.nextafter(1.0, 0.0)
+        self.result.summary["models"]["selected"]["overall"]["r2"] = near
+        self.result.summary["models"]["dummy"]["overall"]["r2"] = 1.0
+        text = render_html(self.result)
+        for lang in ("en", "zh"):
+            body = self._body(language_html(text, lang), "comparison-table")
+            self.assertIn(f"<td>{near!r}</td>", body)
+            self.assertEqual(body.count("<td>1.0000</td>"), 1)
+
     def test_small_metrics_and_negative_r2_share_bilingual_number_text(self):
         self._set_group_count(16)
         self.result.summary['models']['selected']['overall'].update(
