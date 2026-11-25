@@ -165,3 +165,77 @@ pub fn prepare_measurements(
         prediction,
     })
 }
+
+/// One device's separately declared feature names and values.
+#[derive(Clone, Debug, PartialEq)]
+pub struct NamedDeviceFeatures {
+    pub identity: Vec<String>,
+    pub values: Vec<(String, f64)>,
+}
+
+/// Align every row to the caller's frozen feature order before identity joining.
+/// A name match does not establish units, measurement meaning or provenance.
+pub fn prepare_named_measurements(
+    feature_order: &[String],
+    features: &[NamedDeviceFeatures],
+    partitions: &[DevicePartition],
+    endpoints: &[TrainingEndpoint],
+    group_prefix: usize,
+) -> Result<PreparedMeasurements, JoinError> {
+    if features.is_empty()
+        || features.len() > 20000
+        || partitions.len() > 20000
+        || endpoints.len() > 20000
+    {
+        return Err(JoinError::ResourceLimit);
+    }
+    let width = feature_order.len();
+    if width == 0 || width > 100 {
+        return Err(JoinError::InvalidFeatures);
+    }
+    let mut positions = BTreeMap::new();
+    for (i, name) in feature_order.iter().enumerate() {
+        if !valid_id(std::slice::from_ref(name), 1) || positions.insert(name.as_str(), i).is_some()
+        {
+            return Err(JoinError::InvalidFeatures);
+        }
+    }
+    let identity_width = features[0].identity.len();
+    if identity_width == 0
+        || identity_width > 6
+        || group_prefix == 0
+        || group_prefix > identity_width
+    {
+        return Err(JoinError::InvalidGrouping);
+    }
+    let mut aligned = Vec::with_capacity(features.len());
+    for row in features {
+        if !valid_id(&row.identity, identity_width) {
+            return Err(JoinError::InvalidIdentity);
+        }
+        if row.values.len() != width {
+            return Err(JoinError::InvalidFeatures);
+        }
+        let mut assigned = vec![None; width];
+        for (name, value) in &row.values {
+            if !valid_id(std::slice::from_ref(name), 1) {
+                return Err(JoinError::InvalidFeatures);
+            }
+            let i = *positions
+                .get(name.as_str())
+                .ok_or(JoinError::InvalidFeatures)?;
+            if !value.is_finite() || assigned[i].replace(*value).is_some() {
+                return Err(JoinError::InvalidFeatures);
+            }
+        }
+        let values = assigned
+            .into_iter()
+            .collect::<Option<Vec<_>>>()
+            .ok_or(JoinError::InvalidFeatures)?;
+        aligned.push(DeviceFeatures {
+            identity: row.identity.clone(),
+            values,
+        });
+    }
+    prepare_measurements(&aligned, partitions, endpoints, group_prefix)
+}

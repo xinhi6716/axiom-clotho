@@ -325,3 +325,66 @@ fn maximum_roster_keeps_composite_order_and_training_only_targets() {
         JoinError::EndpointMismatch
     );
 }
+
+#[test]
+fn named_join_aligns_permuted_features_and_fails_closed_on_equal_width_alias() {
+    let (_, p, t) = fixture();
+    let schema = ["voltage".into(), "current".into()];
+    let mut rows = vec![
+        NamedDeviceFeatures {
+            identity: key("A", "D"),
+            values: vec![("voltage".into(), 1.0), ("current".into(), 2.0)],
+        },
+        NamedDeviceFeatures {
+            identity: key("B", "D"),
+            values: vec![("current".into(), -0.0), ("voltage".into(), 4.0)],
+        },
+    ];
+    let result = prepare_named_measurements(&schema, &rows, &p, &t, 1).unwrap();
+    assert_eq!(result.training[0].values, vec![1.0, 2.0]);
+    assert_eq!(result.prediction[0].values, vec![4.0, 0.0]);
+    assert!(result.prediction[0].values[1].is_sign_negative());
+    assert_eq!(result.prediction[0].target, None);
+    for wrong in ["current", "private-unknown"] {
+        rows[1].values[1].0 = wrong.into();
+        let error = prepare_named_measurements(&schema, &rows, &p, &t, 1).unwrap_err();
+        assert_eq!(error, JoinError::InvalidFeatures);
+        assert!(!error.to_string().contains(wrong));
+    }
+}
+
+#[test]
+fn named_join_checks_declared_schema_measurements_and_endpoint_scope() {
+    let (_, p, mut t) = fixture();
+    let schema = ["voltage".into(), "current".into()];
+    let row = |lot| NamedDeviceFeatures {
+        identity: key(lot, "D"),
+        values: vec![("voltage".into(), 1.0), ("current".into(), 2.0)],
+    };
+    let rows = [row("A"), row("B")];
+    assert_eq!(
+        prepare_named_measurements(&["voltage".into(), "voltage".into()], &rows, &p, &t, 1)
+            .unwrap_err(),
+        JoinError::InvalidFeatures
+    );
+    let mut incomplete = rows.clone();
+    incomplete[1].values.pop();
+    assert_eq!(
+        prepare_named_measurements(&schema, &incomplete, &p, &t, 1).unwrap_err(),
+        JoinError::InvalidFeatures
+    );
+    let mut nonfinite = rows.clone();
+    nonfinite[1].values[0].1 = f64::NAN;
+    assert_eq!(
+        prepare_named_measurements(&schema, &nonfinite, &p, &t, 1).unwrap_err(),
+        JoinError::InvalidFeatures
+    );
+    t.push(TrainingEndpoint {
+        identity: key("B", "D"),
+        target: 7.0,
+    });
+    assert_eq!(
+        prepare_named_measurements(&schema, &rows, &p, &t, 1).unwrap_err(),
+        JoinError::EndpointMismatch
+    );
+}
