@@ -170,6 +170,8 @@ def _feature_rows(features, config):
             if (type(report["schema_version"]) is not int or report["schema_version"] != 1
                     or report["provenance"]["input_sha256"] != raw_sha
                     or report["parameters"]["current_polarity"] != params["current_polarity"]
+                    or type(report["counts"]["rejected_groups"]) is not int
+                    or type(report["counts"]["extracted_groups"]) is not int
                     or report["counts"]["rejected_groups"] != 0 or report["counts"]["extracted_groups"] != count
                     or len(report["results"]) != count
                     or any(r["status"] != "ok" for r in report["results"])):

@@ -317,6 +317,26 @@ class FetAdapterTests(unittest.TestCase):
                 self.assertIn("FET support metadata", failed.stderr)
                 self.assertFalse(failed.stdout)
 
+    def test_plan_rejects_noninteger_extraction_group_counts(self):
+        self.prepare()
+        report = self.output / "features/vth_report.json"
+        provenance = self.output / "features/provenance.json"
+        data = c.parse_json(report.read_bytes())
+        self.assertEqual(data["counts"]["rejected_groups"], 0)
+        data["counts"]["rejected_groups"] = False
+        report.write_bytes(c.json_bytes(data))
+        declared = c.parse_json(provenance.read_bytes())
+        declared["output_sha256"][report.name] = c.sha(report.read_bytes())
+        provenance.write_bytes(c.json_bytes(declared))
+        rehash(self.output)
+        result = subprocess.run(
+            [sys.executable, "-m", "mlworkflow", "plan", "--prepared", str(self.output)],
+            cwd=self.root, env=dict(os.environ, PYTHONPATH=str(ROOT / "src")),
+            text=True, capture_output=True, timeout=15)
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertFalse(result.stdout)
+        self.assertIn("complete retained input", result.stderr)
+
     def test_model_feature_range_not_silently_widened(self):
         self.prepare()
         payloads, _ = load_bundle(self.output, "prepared")
