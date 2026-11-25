@@ -20,7 +20,7 @@ from .data import validate_source_sha256
 from .package_source import observe_package_source
 from .categorical import LEGACY, DISTINCT, encoding_options, preprocessing_description
 from .data import data_fingerprint, duplicate_diagnostics, prepare_data, validate_seed
-from .metrics import grouped_metrics
+from .metrics import _add_group_aggregates, grouped_metrics, regression_metrics
 from .model import (GroupBenchRegressor, candidates_for, selection_plan, optional_capabilities,
                     _check_split_position_budget, _split_position_count)
 from .splitting import GroupKFold, audit_split
@@ -95,6 +95,20 @@ def _prepare_benchmark(frame, *, target, group, features, outer_splits,
     return X, y, groups, seed, schedule, domains
 
 
+def _score_outer_model(y, pred, groups, test_partitions):
+    overall, per_group = grouped_metrics(y, pred, groups)
+    by_group = {row["group"]: row for row in per_group}
+    # A GroupKFold split holds out whole groups and returns ascending test
+    # positions. The same group rows therefore have the same metric arithmetic
+    # in the pooled and fold reports. Keep group averages in local encounter order.
+    per_fold = [
+        {"fold": fold, **_add_group_aggregates(
+            regression_metrics(y[test], pred[test]), [by_group[g] for g in fold_groups])}
+        for fold, (test, fold_groups) in enumerate(test_partitions)
+    ]
+    return dict(overall=overall, per_group=per_group, per_fold=per_fold)
+
+
 def benchmark(frame: pd.DataFrame, *, target: str, group: str, features=None,
               outer_splits: int = 5, inner_splits: int = 3,
               random_state: int = 0, baselines=("dummy", "ridge", "extra_trees"),
@@ -112,7 +126,7 @@ def benchmark(frame: pd.DataFrame, *, target: str, group: str, features=None,
     X, y, groups, seed, schedule, domains = _prepare_benchmark(
         frame, target=target, group=group, features=features, outer_splits=outer_splits,
         inner_splits=inner_splits, random_state=random_state, baselines=baselines, objective=objective, categorical_encoding=categorical_encoding, inner_strategy=inner_strategy, domain=domain)
-    splits = [(train, test) for train, test, _ in schedule]
+    test_partitions = [(test, tuple(dict.fromkeys(groups[test]))) for _, test, _ in schedule]
     candidates = schedule[0][2].candidates
     outer_splits = len(schedule)
     inner_splits = len(schedule[0][2].splits)
@@ -145,10 +159,7 @@ def benchmark(frame: pd.DataFrame, *, target: str, group: str, features=None,
     prediction_frame = pd.DataFrame({"row_position": np.arange(len(X)), "group": groups,
                                      "outer_fold": fold_ids, "observed": y})
     for name in names:
-        scores, per_group = grouped_metrics(y, oof[name], groups)
-        per_fold = [{"fold": fold, **grouped_metrics(y[test], oof[name][test], groups[test])[0]}
-                    for fold, (_, test) in enumerate(splits)]
-        model_metrics[name] = {"overall": scores, "per_group": per_group, "per_fold": per_fold}
+        model_metrics[name] = _score_outer_model(y, oof[name], groups, test_partitions)
         prediction_frame[f"prediction_{name}"] = oof[name]
     config = {
         "target": target, "group": group, "features": list(X.columns),

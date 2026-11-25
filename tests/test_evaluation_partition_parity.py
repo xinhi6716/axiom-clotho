@@ -1,7 +1,8 @@
-"""Exact arithmetic parity against unchanged writer metrics, invented rows only."""
+"""Exact report and reader arithmetic parity on invented rows only."""
 import unittest
 import json
 import numpy as np
+from groupbench.evaluation import _score_outer_model
 from groupbench.metrics import grouped_metrics
 from groupbench.evaluation_schema import _partitioned_metrics
 
@@ -23,10 +24,14 @@ class PartitionParityTests(unittest.TestCase):
             indexes = np.flatnonzero(np.asarray(folds) == f)
             metrics, _ = grouped_metrics(y[indexes], pred[indexes], np.asarray(groups)[indexes])
             expected_folds.append(dict(fold=f, **metrics))
-        actual = _partitioned_metrics(y, pred, *partitions(groups, folds, nf))
+        group_rows, fold_rows, fold_groups = partitions(groups, folds, nf)
+        actual = _partitioned_metrics(y, pred, group_rows, fold_rows, fold_groups)
         expected = dict(overall=expected_overall, per_group=expected_groups, per_fold=expected_folds)
         self.assertEqual(actual, expected)
         self.assertEqual(json.dumps(actual), json.dumps(expected))
+        test_partitions = list(zip(fold_rows, fold_groups))
+        writer = _score_outer_model(y, pred, groups, test_partitions)
+        self.assertEqual(json.dumps(writer), json.dumps(expected))
 
     def test_exact_randomized_unbalanced_interleaved_parity(self):
         for seed in range(30):
@@ -50,3 +55,6 @@ class PartitionParityTests(unittest.TestCase):
                         (np.zeros(4), np.array([1e-200]*4))]:
             with self.assertRaises(ValueError): grouped_metrics(y,pred,groups)
             with self.assertRaises(ValueError): _partitioned_metrics(y,pred,*partitions(groups,folds,2))
+            test_partitions = [([0, 2], ["a"]), ([1, 3], ["b"])]
+            with self.assertRaises(ValueError):
+                _score_outer_model(y, pred, groups, test_partitions)

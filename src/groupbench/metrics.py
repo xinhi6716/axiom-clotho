@@ -127,15 +127,19 @@ def grouped_metrics(y_true, y_pred, groups) -> tuple[dict, list[dict]]:
     for group, positions in pd.Series(np.arange(len(g))).groupby(g, sort=False).indices.items():
         idx = np.asarray(positions, dtype=int)
         per_group.append({"group": str(group), **regression_metrics(y[idx], pred[idx])})
-    overall = regression_metrics(y, pred)
+    return _add_group_aggregates(regression_metrics(y, pred), per_group), per_group
+
+
+def _add_group_aggregates(row_metrics, per_group):
+    """Add equal-group summaries in the supplied group encounter order."""
     with _checked_arithmetic():
-        overall.update({
+        row_metrics.update({
             "n_groups": len(per_group),
             "group_mae": float(np.mean([row["mae"] for row in per_group])),
             "group_rmse": float(np.mean([row["rmse"] for row in per_group])),
             "worst_group_mae": float(max(row["mae"] for row in per_group)),
         })
-    return overall, per_group
+    return row_metrics
 
 
 def paired_absolute_error_difference(prediction_a, prediction_b, target):
