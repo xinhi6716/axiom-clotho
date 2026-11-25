@@ -130,6 +130,22 @@ def selection_plan(X, groups, *, baselines, inner_splits, random_state, objectiv
     return SelectionPlan(candidates, splits, tuple(baselines), seed, objective, categorical_encoding, inner_strategy, domains)
 
 
+class _FiniteStandardScaler(StandardScaler):
+    """Keep sklearn scaling, but stop before a downstream model can ignore overflow."""
+
+    def transform(self, X, copy=None):
+        # Finite inputs and fitted statistics do not guarantee finite scaled
+        # values. Check the actual transform, not a guessed input magnitude.
+        with np.errstate(over="ignore", invalid="ignore"):
+            scaled = super().transform(X, copy=copy)
+        if not np.isfinite(np.asarray(scaled)).all():
+            raise ValueError(
+                "Preprocessing numeric scaling produced non-finite values. "
+                "Rescale numeric inputs to practical units or check extreme extrapolation."
+            )
+        return scaled
+
+
 def make_pipeline(X: pd.DataFrame, candidate: Candidate, random_state: int, categorical_encoding=LEGACY) -> Pipeline:
     validate_categorical_encoding(categorical_encoding)
     numeric = list(X.select_dtypes(include="number").columns)
@@ -138,7 +154,7 @@ def make_pipeline(X: pd.DataFrame, candidate: Candidate, random_state: int, cate
     if numeric:
         transforms.append(("numeric", Pipeline([
             ("impute", SimpleImputer(strategy="median", keep_empty_features=True)),
-            ("scale", StandardScaler()),
+            ("scale", _FiniteStandardScaler()),
         ]), numeric))
     if categorical:
         transforms.append(("categorical", Pipeline([

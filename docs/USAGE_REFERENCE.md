@@ -499,7 +499,7 @@ validate target values or make the split stratified.
 
 1. **Outer folds hold out whole groups.** Every row receives exactly one held-out prediction per model entry. Folds balance row counts approximately, using group sizes but never target values.
 2. **Inner folds select models without seeing the outer test groups.** The `selected` entry evaluates the entire selection procedure. Each family also gets its own inner-selected configuration.
-3. **Preprocessing is fitted inside each training partition.** Numeric median imputation/scaling and categorical imputation/one-hot vocabulary never learn from the corresponding validation rows.
+3. **Preprocessing is fitted inside each training partition.** Numeric median imputation/scaling and categorical imputation/one-hot vocabulary never learn from the corresponding validation rows. Regression rejects non-finite scaled values even if the chosen model would ignore its feature inputs. A finite new value outside the training range is still allowed when scaling remains finite.
 4. **Scores explain their weighting.** Group MAE gives each group equal weight. Row MAE/RMSE pool all observations. Constant-target or one-row R² is `null`, not a misleading perfect score.
 5. **The split is inspectable.** Exact outer/inner group memberships, candidate scores, chosen settings, per-row predictions, versions, seeds, and data hashes are included.
 6. **Duplicates are surfaced, not silently removed.** Identical normalized feature/target rows spanning different groups create a diagnostic warning. It cannot detect near-duplicates or all forms of leakage.

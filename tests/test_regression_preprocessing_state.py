@@ -11,6 +11,7 @@ import warnings
 
 import numpy as np
 import pandas as pd
+from sklearn import config_context
 from sklearn.exceptions import NotFittedError
 from sklearn.pipeline import Pipeline
 from sklearn.utils.validation import check_is_fitted
@@ -175,6 +176,46 @@ class RegressionPreprocessingStateTests(unittest.TestCase):
                 benchmark(frame, outer_splits=2, **self.options)
             with self.assertRaisesRegex(ValueError, "numeric state"):
                 fit_predict(frame, self.X, **self.options)
+
+    def test_prediction_rejects_scaling_overflow_even_when_dummy_ignores_features(self):
+        frame = synthetic_frame(1e-10)
+        options = {**self.options, "baselines": ("dummy",)}
+        # Fitting and representable scaling remain valid even outside support.
+        good = pd.DataFrame({"x": [1e290, -1e290, np.nan]})
+        result = fit_predict(frame, good, **options)
+        np.testing.assert_array_equal(result.predictions["prediction"], np.ones(3))
+        self.assertEqual(result.manifest["input_support"]["row_flag_counts"]["numeric_outside_training_range"], 2)
+        bad = pd.DataFrame({"x": [1e308]})
+        with np.errstate(over="ignore", invalid="ignore"):
+            for predict in (result.estimator.predict, result.estimator.predict_baselines,
+                            lambda x: fit_predict(frame, x, **options)):
+                with self.subTest(predict=predict):
+                    with self.assertRaisesRegex(ValueError, r"numeric scaling.*non-finite.*Rescale"):
+                        predict(bad)
+                    self.assertEqual(np.geterr()["over"], "ignore")
+        np.testing.assert_array_equal(result.estimator.predict(good), np.ones(3))
+
+    def test_numeric_scaling_accepts_finite_sklearn_dataframe_output(self):
+        with config_context(transform_output="pandas"):
+            model = self.fresh(("dummy",)).fit(self.X, self.y, self.groups)
+            np.testing.assert_array_equal(model.predict(self.X), np.ones(len(self.X)))
+
+    def test_cli_does_not_publish_dummy_predictions_when_scaling_overflows(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source, query = root / "training.csv", root / "query.csv"
+            output = root / "predict"
+            synthetic_frame(1e-10).to_csv(source, index=False)
+            query.write_text("x\n1e308\n", encoding="utf-8")
+            args = ["predict", str(source), str(query), "--target", "target", "--group", "group",
+                    "--out", str(output), "--inner-splits", "2", "--baselines", "dummy"]
+            with np.errstate(over="ignore"), redirect_stdout(io.StringIO()) as stdout, redirect_stderr(io.StringIO()) as stderr:
+                code = main(args)
+            self.assertEqual(code, 2)
+            self.assertIn("numeric scaling", stderr.getvalue())
+            self.assertNotIn("Traceback", stderr.getvalue())
+            self.assertEqual(stdout.getvalue(), "")
+            self.assertFalse(output.exists())
 
     def test_cli_failure_does_not_create_or_replace_outputs(self):
         with tempfile.TemporaryDirectory() as directory:
