@@ -64,12 +64,14 @@ def prepare(input_dir, partitions_csv, training_targets_csv, config_json, output
     """Use exact device joins; no future outcome path is accepted or opened."""
     protect_output(output_dir, input_dir)
     from .adapters import is_v2_config
-    if is_v2_config(parse_json(read_regular(config_json))):
+    config_raw = read_regular(config_json)
+    declared_config = parse_json(config_raw)
+    if is_v2_config(declared_config):
         from .adapters.fet_transfer import prepare as prepare_fet
         return prepare_fet(input_dir, partitions_csv, training_targets_csv, config_json, output_dir)
     raw = {name: read_regular(Path(input_dir) / name) for name in RAW_FILES}
-    partition_raw, target_raw, config_raw = map(read_regular, (partitions_csv, training_targets_csv, config_json))
-    config = validate_config(parse_json(config_raw))
+    partition_raw, target_raw = map(read_regular, (partitions_csv, training_targets_csv))
+    config = validate_config(declared_config)
     partitions = keyed(parse_csv(partition_raw, ("device", "partition")))
     targets = keyed(parse_csv(target_raw, ("device", "target")))
     extractor = _load_component("_workflow_measurement_extractor", "semiconductor/examples/measurement-to-features/build_features.py")
