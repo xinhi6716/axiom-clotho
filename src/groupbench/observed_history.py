@@ -30,10 +30,11 @@ def _table(frame, columns, name):
 
 
 def _numbers(values, name):
-    # Reject strings, booleans and complex numbers instead of coercing labels.
+    # NumPy timedelta64 can register as Real/Integral but must not be
+    # reinterpreted as a clock, target or model score in implicit units.
     values = list(values)
-    if any(isinstance(v, (bool, np.bool_)) or not isinstance(v, Real) for v in values):
-        raise ValueError(f"{name} must contain real numeric values, not strings or booleans.")
+    if any(isinstance(v, (bool, np.bool_, np.timedelta64)) or not isinstance(v, Real) for v in values):
+        raise ValueError(f"{name} must contain real numeric values, not strings, booleans or timedeltas.")
     # Do not let conversion erase distinctions in NumPy extended-precision
     # inputs before the metric validator sees them.  Ordinary Python floats and
     # NumPy floating scalars no wider than float64 retain their prior behavior.
@@ -56,9 +57,9 @@ def _numbers(values, name):
 
 def _integer_ticks(values):
     ticks = list(values)
-    if any(isinstance(t, (bool, np.bool_)) or not isinstance(t, Integral)
+    if any(isinstance(t, (bool, np.bool_, np.timedelta64)) or not isinstance(t, Integral)
            or not -(1 << 63) <= int(t) < (1 << 63) for t in ticks):
-        raise ValueError('Integer timestamps must be signed-64-bit integer ticks, not floats or booleans.')
+        raise ValueError('Integer timestamps must be signed-64-bit integer ticks, not floats, booleans or timedeltas.')
     return np.asarray(ticks, dtype=np.int64)
 
 
@@ -67,7 +68,7 @@ def _keys(frame, name):
     if any(not isinstance(t, str) or not t or '\x00' in t for t in traces):
         raise ValueError(f"{name} trace_id must be nonempty strings without NUL.")
     indices = list(frame['target_index'])
-    if any(isinstance(i, (bool, np.bool_)) or not isinstance(i, Integral) or i < 2 for i in indices):
+    if any(isinstance(i, (bool, np.bool_, np.timedelta64)) or not isinstance(i, Integral) or i < 2 for i in indices):
         raise ValueError(f"{name} target_index must be integer positions >= 2.")
     keys = list(zip(traces, map(int, indices)))
     if len(set(keys)) != len(keys):
@@ -83,7 +84,8 @@ def evaluate_observed_history(observations: pd.DataFrame, *, origins: pd.DataFra
     observations: columns trace_id, timestamp, value. Input order within each
     trace defines zero-based positions and must have strictly increasing finite
     numeric timestamps. Use timestamp_mode='integer_ticks' for exact signed
-    64-bit integer timestamps. No sorting, interpolation or unit conversion occurs.
+    64-bit integer timestamps. Timedeltas must be converted explicitly by
+    the caller before admission. No sorting, interpolation or conversion occurs.
     origins: columns trace_id, target_index, in a caller-frozen evaluation order.
     saved_predictions: same keys in the same order, plus prediction. A missing,
     extra, duplicate or reordered origin fails rather than changing coverage.
