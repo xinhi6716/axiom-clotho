@@ -6,6 +6,7 @@ from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
 from copy import deepcopy
+from numbers import Integral
 
 import numpy as np
 import pandas as pd
@@ -28,6 +29,26 @@ from .kernel import NystroemRidgeRegressor
 from .baselines import GroupBalancedMedianRegressor, GroupBalancedRidgeRegressor, _reject_masked
 from .splitting import GroupKFold, audit_split
 from .domain_selection import GROUP, DOMAIN, validate_strategy, domain_vector, domain_splits, domain_audit
+
+
+# Retained train/test index arrays, not fits or a process-memory guarantee.
+_MAX_RETAINED_SPLIT_POSITIONS = 2_000_000
+
+
+def _split_position_count(n_rows, n_splits):
+    if isinstance(n_splits, bool) or not isinstance(n_splits, Integral) or n_splits < 2:
+        raise ValueError("n_splits must be an integer of at least two.")
+    # Use Python arithmetic even for NumPy integral API arguments.
+    return n_rows * int(n_splits)
+
+
+def _check_split_position_budget(positions):
+    if positions > _MAX_RETAINED_SPLIT_POSITIONS:
+        raise ValueError(
+            f"Regression schedule needs {positions:,} retained split positions; "
+            f"the limit is {_MAX_RETAINED_SPLIT_POSITIONS:,}. "
+            "Use fewer folds or declared domains."
+        )
 
 
 @dataclass(frozen=True)
@@ -101,8 +122,10 @@ def selection_plan(X, groups, *, baselines, inner_splits, random_state, objectiv
         if isinstance(domains, pd.Series) and not domains.index.equals(X.index):
             raise ValueError("Domain Series index must exactly align with X.")
         domains = domain_vector(domains, groups, len(X))
+        _check_split_position_budget(_split_position_count(len(X), len(set(domains))))
         splits = domain_splits(domains)
     else:
+        _check_split_position_budget(_split_position_count(len(X), inner_splits))
         splits = tuple(GroupKFold(inner_splits, seed).split(X, groups=groups))
     return SelectionPlan(candidates, splits, tuple(baselines), seed, objective, categorical_encoding, inner_strategy, domains)
 

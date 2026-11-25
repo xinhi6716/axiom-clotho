@@ -21,7 +21,8 @@ from .package_source import observe_package_source
 from .categorical import LEGACY, DISTINCT, encoding_options, preprocessing_description
 from .data import data_fingerprint, duplicate_diagnostics, prepare_data, validate_seed
 from .metrics import grouped_metrics
-from .model import GroupBenchRegressor, candidates_for, selection_plan, optional_capabilities
+from .model import (GroupBenchRegressor, candidates_for, selection_plan, optional_capabilities,
+                    _check_split_position_budget, _split_position_count)
 from .splitting import GroupKFold, audit_split
 
 
@@ -63,7 +64,25 @@ def _prepare_benchmark(frame, *, target, group, features, outer_splits,
     seed = validate_seed(random_state)
     X, y, groups, domains = prepare_domain_data(frame, target, group, features, domain, inner_strategy, inner_splits)
     candidates_for(baselines)
+    outer_positions = _split_position_count(len(X), outer_splits)
+    if inner_strategy == GROUP:
+        # Each row belongs to exactly one outer test partition, so it appears
+        # in F-1 outer training partitions. Each inner split retains both sides.
+        inner_positions = _split_position_count(outer_positions - len(X), inner_splits)
+        _check_split_position_budget(outer_positions + inner_positions)
+    else:
+        _check_split_position_budget(outer_positions)
     splits = tuple(GroupKFold(outer_splits, seed).split(X, groups=groups))
+    if inner_strategy == DOMAIN:
+        # Which domains survive depends on whole groups in the actual outer
+        # split. Check their total before allocating any inner index arrays.
+        positions = outer_positions
+        for train, _ in splits:
+            n_domains = len(set(domains[train]))
+            if n_domains < 2:
+                raise ValueError("Domain-held-out selection requires at least two training domains.")
+            positions += _split_position_count(len(train), n_domains)
+        _check_split_position_budget(positions)
     schedule = []
     # Validate every actual inner seed before any training, rather than checking
     # only an approximation of the requested protocol.

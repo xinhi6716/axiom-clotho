@@ -144,3 +144,16 @@ require a separately authorized, preregistered evaluation.
 This feature is available in reviewed current source only, not the frozen b7
 release downloads. Minimum dependency/Python versions and other operating systems
 are not claimed tested without separate receipts.
+
+### Retained split indices
+
+Python regression planning and fitting retain positional train/test arrays while
+preparing the selection schedule. They reject schedules above 2,000,000 logical
+positions before allocating the inner arrays (about 16 MB of index payload on
+a 64-bit build, not a process memory or fit budget). With N rows, F outer
+folds, and I grouped inner folds, the count is N × [F + (F − 1) × I].
+Domain-held-out selection instead uses the number of domains actually present
+in each outer training partition. Full-data selection alone (including
+prediction/refit) admits up to the same cap, counting N positions per split.
+For a rejected schedule, use fewer folds or rethink the declared domain
+protocol rather than merging domains to disguise dependence.
