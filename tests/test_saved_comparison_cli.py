@@ -81,6 +81,14 @@ class SavedComparisonCliTests(unittest.TestCase):
                 self.assertEqual((code, out), (2, ''))
                 self.assertNotIn('PRIVATE_VALUE', err)
 
+    def test_contract_rejects_lone_surrogate_escaped_in_utf8_json(self):
+        malformed = dict(self.fixture.contract, group_definition='private\ud800label')
+        self.contract.write_text(json.dumps(malformed, ensure_ascii=True), encoding='ascii')
+        with patch.object(scoring, 'compare_saved_predictions', side_effect=AssertionError('API must not run')):
+            code, out, err = self.invoke()
+        self.assertEqual((code, out), (2, ''))
+        self.assertNotIn('private', err)
+
     def test_contract_utf8_size_and_missing_input_rejections(self):
         for raw in (b'\xff', b' ' * (scoring.MAX_COMPARISON_CONTRACT_BYTES + 1),
                     '界'.encode() * (scoring.MAX_COMPARISON_CONTRACT_BYTES // 3 + 1)):

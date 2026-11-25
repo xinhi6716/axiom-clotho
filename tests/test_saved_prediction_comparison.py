@@ -68,6 +68,14 @@ class SavedPredictionComparisonTests(unittest.TestCase):
         self.assertEqual(result['model_b'], scoring.score_saved_predictions(self.b, self.outcomes))
         self.assertEqual(before, snapshot(self.root)); self.assertEqual(self.contract, contract)
 
+    def test_method_labels_have_distinct_unicode_scalar_identity(self):
+        bad = dict(self.contract, method_a='\ud83d\ude00', method_b='\U0001f600')
+        with self.assertRaisesRegex(scoring.SavedScoringError, 'Unicode scalar'):
+            self.score(contract=bad)
+        good = dict(self.contract, method_a='\U0001f600', method_b='\U0001f9ea')
+        report = json.loads(json.dumps(self.score(contract=good)))
+        self.assertEqual(report['contract'], good)
+
     def test_single_shared_reads_no_fits_or_training_sources(self):
         with patch.object(scoring, '_load_prediction_bundle', wraps=scoring._load_prediction_bundle) as bundles, \
              patch.object(scoring, '_read_outcomes', wraps=scoring._read_outcomes) as outcomes, \

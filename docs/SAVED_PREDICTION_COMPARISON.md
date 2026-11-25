@@ -26,6 +26,7 @@ report = compare_saved_predictions(
 The example declarations are placeholders to replace, not proof of those facts.
 This requires Clotho's existing dependencies and supported local bundle access.
 `SavedScoringError` rejects the entire comparison; no partial result is returned.
+Declarations must contain Unicode scalar text; lone surrogates are rejected.
 The function returns a JSON-ready dictionary without printing or writing it.
 
 ## Pairing contract: same bytes, not authenticated physical identity

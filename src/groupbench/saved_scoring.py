@@ -198,8 +198,9 @@ def _validate_comparison_contract(contract):
         raise SavedScoringError("Comparison requires the exact common semantic declaration fields.")
     for key, value in contract.items():
         limit = 256 if key in ("method_a", "method_b") else 2048
-        if type(value) is not str or not value.strip() or len(value) > limit or "\0" in value:
-            raise SavedScoringError("Comparison declarations must be bounded nonblank text without NUL.")
+        if (type(value) is not str or not value.strip() or len(value) > limit
+                or "\0" in value or any(0xD800 <= ord(ch) <= 0xDFFF for ch in value)):
+            raise SavedScoringError("Comparison declarations must be bounded nonblank Unicode scalar text without NUL.")
     if contract["method_a"] == contract["method_b"]:
         raise SavedScoringError("Comparison method labels must be distinct.")
 
