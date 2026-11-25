@@ -483,3 +483,24 @@ fn fitting_and_transforming_do_not_mutate_caller_tables() {
     assert_eq!(table, original);
     assert_eq!(fitted.clone().transform(&table), fitted.transform(&table));
 }
+
+#[test]
+fn median_selection_preserves_signed_zero_and_the_observed_parity() {
+    let training = [
+        numeric("odd", &[Some(0.0), None, Some(-0.0), Some(-0.0)]),
+        numeric("even", &[Some(-0.0), Some(0.0), Some(-0.0), Some(-0.0)]),
+        numeric("mixed_sign_even", &[Some(-0.0), Some(0.0), None, None]),
+        numeric("empty", &[None, None, None, None]),
+    ];
+    let fitted = Preprocessor::fit(&training).unwrap();
+    let expected = [-0.0_f64, -0.0, 0.0, 0.0].map(f64::to_bits);
+    let query = training
+        .iter()
+        .map(|column| numeric(&column.name, &[None]))
+        .collect::<Vec<_>>();
+    let transformed = fitted.transform(&query).unwrap();
+    assert_eq!(
+        transformed[0].iter().map(|x| x.to_bits()).collect::<Vec<_>>(),
+        expected
+    );
+}

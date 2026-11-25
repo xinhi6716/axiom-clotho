@@ -346,19 +346,48 @@ fn median(values: &mut [f64]) -> f64 {
     if values.is_empty() {
         return 0.0;
     }
-    values.sort_unstable_by(f64::total_cmp);
-    let upper = values.len() / 2;
-    if values.len() % 2 == 1 {
-        values[upper]
+    let len = values.len();
+    let middle = len / 2;
+    let odd = len % 2 == 1;
+
+    // Avoid partitioning already ordered input. Use total_cmp here too so
+    // mixed signs of zero cannot disguise a non-monotonic run.
+    let descending = values[0].total_cmp(&values[len - 1]).is_gt();
+    let ordered = if descending {
+        values
+            .windows(2)
+            .all(|pair| !pair[0].total_cmp(&pair[1]).is_lt())
     } else {
-        let (lower, upper) = (values[upper - 1], values[upper]);
-        let sum = lower + upper;
-        // Use the sum when finite to preserve subnormals. Only divide operands
-        // first when their same-sign sum overflows; neither can underflow then.
-        if sum.is_finite() {
-            sum * 0.5
+        values
+            .windows(2)
+            .all(|pair| !pair[0].total_cmp(&pair[1]).is_gt())
+    };
+    if ordered {
+        let rank = |index| values[if descending { len - 1 - index } else { index }];
+        return if odd {
+            rank(middle)
         } else {
-            lower * 0.5 + upper * 0.5
-        }
+            midpoint(rank(middle - 1), rank(middle))
+        };
+    }
+
+    let (lower_half, upper, _) = values.select_nth_unstable_by(middle, f64::total_cmp);
+    if odd {
+        *upper
+    } else {
+        // The lower half need not be sorted: its maximum is the lower middle.
+        let lower = lower_half.iter().copied().max_by(f64::total_cmp).unwrap();
+        midpoint(lower, *upper)
+    }
+}
+
+fn midpoint(lower: f64, upper: f64) -> f64 {
+    let sum = lower + upper;
+    // Use the sum when finite to preserve subnormals. Only divide operands
+    // first when their same-sign sum overflows; neither can underflow then.
+    if sum.is_finite() {
+        sum * 0.5
+    } else {
+        lower * 0.5 + upper * 0.5
     }
 }
