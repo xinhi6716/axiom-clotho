@@ -275,10 +275,12 @@ def run(prepared_dir, output_dir):
         raise WorkflowError("model comparison or prediction failed; no complete run was produced; inspect numeric units and the plan") from None
     if len(prediction.predictions) != len(future):
         raise WorkflowError("prediction row count changed")
+    engine_rows = prediction.predictions
+    if ("row_position" not in engine_rows or engine_rows["row_position"].dtype.kind not in "iu"
+            or engine_rows["row_position"].tolist() != list(range(len(future)))):
+        raise WorkflowError("calculator prediction row positions differ from the canonical future cohort order")
     predictions = [{"device": row["device"], "group": row["group"], "prediction": repr(float(value))}
-                   for row, value in zip(future, prediction.predictions["prediction"])]
-    if len(predictions) != len(future):
-        raise WorkflowError("prediction row count changed")
+                   for row, value in zip(future, engine_rows["prediction"])]
     for row in predictions:
         number(row["prediction"])
     metadata = {"schema_version": "measurement-regression-run-v1", "config": config,

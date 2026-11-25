@@ -99,6 +99,21 @@ class MeasurementRegressionTests(unittest.TestCase):
         self.assertEqual(prepared["input_sha256"]["config.json"], hashlib.sha256(initial).hexdigest())
         self.assertEqual(json.loads((self.prepared / "config.json").read_bytes()), json.loads(initial))
 
+    def test_run_rejects_reordered_calculator_rows_before_bundle_publication(self):
+        from groupbench import fit_predict
+
+        self.prepare()
+
+        def reverse_result(*args, **kwargs):
+            result = fit_predict(*args, **kwargs)
+            result.predictions.sort_values("row_position", ascending=False, inplace=True)
+            return result
+
+        with patch("groupbench.fit_predict", side_effect=reverse_result):
+            with self.assertRaisesRegex(c.WorkflowError, "prediction row positions"):
+                flow.run(self.prepared, self.run_dir)
+        self.assertFalse(self.run_dir.exists())
+
     def test_stdlib_import_prepare_and_score_do_not_import_ml(self):
         code = "import sys; from mlworkflow import regression,contracts; assert not any(n in sys.modules for n in ['groupbench','numpy','pandas','sklearn'])"
         result = subprocess.run([sys.executable, "-S", "-c", code], env=dict(os.environ, PYTHONPATH=str(RESOURCE_ROOT.parents[1])), cwd=self.root, capture_output=True, timeout=10)
