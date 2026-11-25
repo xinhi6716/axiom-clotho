@@ -181,3 +181,51 @@ fn scalar_reuse_preserves_perfect_model_and_subnormal_boundaries() {
         );
     }
 }
+
+#[test]
+fn independent_roster_storage_can_match_but_values_still_validate() {
+    let ids = ["lot|α:1", "lot|α:2"];
+    let model_storage = ids.map(str::to_owned);
+    let baseline_storage = ids.map(str::to_owned);
+    let model_ids = [model_storage[0].as_str(), model_storage[1].as_str()];
+    let baseline_ids = [baseline_storage[0].as_str(), baseline_storage[1].as_str()];
+    let observations = series(&ids, &[1.0, 2.0]);
+    let model = series(&model_ids, &[2.0, 1.0]);
+    let baseline = series(&baseline_ids, &[3.0, 4.0]);
+    assert_eq!(
+        compare_saved_regression(observations, model, baseline)
+            .unwrap()
+            .mse_skill,
+        Some(0.75)
+    );
+    let malformed = series(&model_ids, &[2.0, f64::NAN]);
+    assert_eq!(
+        compare_saved_regression(observations, malformed, baseline),
+        Err(SavedComparisonError::Numeric(EvaluationError::NonFinite))
+    );
+}
+
+#[test]
+fn mismatching_rosters_preserve_individual_diagnostics_before_comparison() {
+    let observed = series(&["a", "b"], &[1.0, 2.0]);
+    let reordered = series(&["b", "a"], &[1.0, 2.0]);
+    let duplicate = series(&["a", "a"], &[1.0, 2.0]);
+    let invalid_text = series(&["a", "\n"], &[1.0, 2.0]);
+    let mut wrong_contract = reordered;
+    wrong_contract.contract.unit = "different";
+
+    // Existing series-local validity precedes cross-series checks even if
+    // an earlier valid series already disagrees with the observed roster.
+    for (model, baseline, expected) in [
+        (reordered, duplicate, SavedComparisonError::DuplicateRow),
+        (duplicate, wrong_contract, SavedComparisonError::DuplicateRow),
+        (wrong_contract, invalid_text, SavedComparisonError::Declaration),
+        (wrong_contract, observed, SavedComparisonError::ContractMismatch),
+        (reordered, observed, SavedComparisonError::RowOrderMismatch),
+    ] {
+        assert_eq!(
+            compare_saved_regression(observed, model, baseline),
+            Err(expected)
+        );
+    }
+}

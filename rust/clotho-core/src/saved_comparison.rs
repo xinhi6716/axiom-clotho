@@ -75,7 +75,10 @@ fn valid_text(s: &str) -> bool {
     !s.trim().is_empty() && s.len() <= MAX_DECLARATION_BYTES && !s.chars().any(char::is_control)
 }
 
-fn validate(series: SavedRegressionSeries<'_>) -> Result<(), SavedComparisonError> {
+fn validate(
+    series: SavedRegressionSeries<'_>,
+    checked_roster: Option<&[&str]>,
+) -> Result<bool, SavedComparisonError> {
     let n = series.values.len();
     if n > MAX_SAVED_ROWS || series.row_ids.len() > MAX_SAVED_ROWS {
         return Err(SavedComparisonError::Capacity);
@@ -93,19 +96,25 @@ fn validate(series: SavedRegressionSeries<'_>) -> Result<(), SavedComparisonErro
     {
         return Err(SavedComparisonError::Declaration);
     }
-    let mut seen = BTreeSet::new();
-    for id in series.row_ids {
-        if !valid_text(id) {
-            return Err(SavedComparisonError::Declaration);
-        }
-        if !seen.insert(*id) {
-            return Err(SavedComparisonError::DuplicateRow);
+    // Literal equality transfers the row-text and uniqueness checks from
+    // the already validated observed roster. A mismatching roster is still
+    // fully checked so its existing diagnostics take precedence.
+    let same_roster = checked_roster == Some(series.row_ids);
+    if !same_roster {
+        let mut seen = BTreeSet::new();
+        for id in series.row_ids {
+            if !valid_text(id) {
+                return Err(SavedComparisonError::Declaration);
+            }
+            if !seen.insert(*id) {
+                return Err(SavedComparisonError::DuplicateRow);
+            }
         }
     }
     if series.values.iter().any(|v| !v.is_finite()) {
         return Err(EvaluationError::NonFinite.into());
     }
-    Ok(())
+    Ok(same_roster)
 }
 
 /// Compare existing predictions, rejecting the entire input on any mismatch.
@@ -120,13 +129,13 @@ pub fn compare_saved_regression<'a>(
     model: SavedRegressionSeries<'a>,
     baseline: SavedRegressionSeries<'a>,
 ) -> Result<SavedRegressionComparison<'a>, SavedComparisonError> {
-    for series in [observed, model, baseline] {
-        validate(series)?;
-    }
+    validate(observed, None)?;
+    let model_roster_matches = validate(model, Some(observed.row_ids))?;
+    let baseline_roster_matches = validate(baseline, Some(observed.row_ids))?;
     if observed.contract != model.contract || observed.contract != baseline.contract {
         return Err(SavedComparisonError::ContractMismatch);
     }
-    if observed.row_ids != model.row_ids || observed.row_ids != baseline.row_ids {
+    if !model_roster_matches || !baseline_roster_matches {
         return Err(SavedComparisonError::RowOrderMismatch);
     }
     let model_rmse = regression_rmse(observed.values, model.values)?;
