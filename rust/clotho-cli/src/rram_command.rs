@@ -1,4 +1,5 @@
 //! Flattened explicit-SI CSV adapter, not a legacy exact-decimal bundle reader.
+use super::device_csv::has_complete_csv_quoting;
 use super::{create_file, required, Result};
 use clotho_core::rram::{
     extract_cohort, Acquisition, Branch, Conditions, Readpoint, Sample, Settings, State,
@@ -34,30 +35,6 @@ fn parse_si(text: &str) -> Result<f64> {
         return Err("RRAM numeric value is outside the supported range".into());
     }
     Ok(value)
-}
-// The CSV reader is intentionally permissive about quote syntax. Require
-// complete wire framing before interpreting or hashing a measurement capture.
-fn has_complete_csv_quoting(raw: &[u8]) -> bool {
-    #[derive(Clone, Copy)]
-    enum Field {
-        Start,
-        Bare,
-        Quoted,
-        AfterQuote,
-    }
-    use Field::*;
-    let mut field = Start;
-    for &byte in raw.strip_prefix(b"\xef\xbb\xbf").unwrap_or(raw) {
-        field = match (field, byte) {
-            (Quoted, b'"') => AfterQuote,
-            (Quoted, _) => Quoted,
-            (Start | AfterQuote, b'"') => Quoted,
-            (_, b',' | b'\r' | b'\n') => Start,
-            (AfterQuote, _) | (Bare, b'"') => return false,
-            _ => Bare,
-        };
-    }
-    !matches!(field, Quoted)
 }
 fn lineage(p: &Readpoint) -> serde_json::Value {
     let a = &p.acquisition;

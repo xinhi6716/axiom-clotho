@@ -270,3 +270,30 @@ fn report_retains_validated_conditions_for_interleaved_branches() {
     assert!(!fields.lines().next().unwrap().contains("temperature_K"));
     assert!(w.0.join("out/COMPLETE").is_file());
 }
+
+#[test]
+fn fet_rejects_truncated_quote_but_accepts_complete_capture_without_eol() {
+    let stem = DATA.trim_end().strip_suffix("1e-6").unwrap();
+    let malformed = Workspace::new();
+    malformed.write("data.csv", &format!("{stem}\"1e-6"));
+    let result = extract(&malformed, "true");
+    assert!(!result.status.success());
+    assert!(String::from_utf8_lossy(&result.stderr).contains("Invalid FET CSV quoting"));
+    assert!(!malformed.0.join("out").exists());
+    for last in ["1e-6", "\"1e-6\""] {
+        let valid = Workspace::new();
+        let input = format!("{stem}{last}");
+        valid.write("data.csv", &input);
+        let result = extract(&valid, "true");
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        assert!(valid.0.join("out/COMPLETE").is_file());
+        assert_eq!(
+            fs::read(valid.0.join("out/transfer_input.csv")).unwrap(),
+            input.as_bytes()
+        );
+    }
+}

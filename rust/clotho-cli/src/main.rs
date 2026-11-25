@@ -1,5 +1,6 @@
 //! Native numeric and explicitly mixed modelling. No Python runtime is used.
 #![forbid(unsafe_code)]
+mod device_csv;
 mod fet_command;
 mod prepare_command;
 mod predict_saved;

@@ -1,4 +1,5 @@
 //! Explicit SI CSV adapter; deliberately distinct from legacy decimal bundles.
+use super::device_csv::has_complete_csv_quoting;
 use super::{create_file, required, Result};
 use clotho_core::fet::{extract_cohort, Acquisition, Sample, Settings};
 use sha2::{Digest, Sha256};
@@ -80,6 +81,9 @@ pub fn run(opts: &HashMap<String, String>) -> Result<()> {
     file.take(8 * 1024 * 1024 + 1).read_to_end(&mut raw)?;
     if raw.len() > 8 * 1024 * 1024 {
         return Err("FET input exceeds 8 MiB".into());
+    }
+    if !has_complete_csv_quoting(&raw) {
+        return Err("Invalid FET CSV quoting".into());
     }
     let mut reader = csv::Reader::from_reader(raw.as_slice());
     let headers = reader

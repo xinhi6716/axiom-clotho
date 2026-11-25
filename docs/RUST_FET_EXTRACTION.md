@@ -21,7 +21,8 @@ The synthetic example has one device, four observations and no target. Its
 criterion is exactly 1 V and its log slope is 1 decade/V. It is not a training
 dataset or a real semiconductor experiment.
 
-CSV columns must be exactly these (order may differ):
+Quoted CSV fields must close; embedded quotes in quoted fields must be doubled.
+A final newline is optional. CSV columns must be exactly these (order may differ):
 
 `lot,wafer,device,condition,replicate,branch,temperature_K,drain_source_voltage_V,body_source_voltage_V,gate_source_voltage_V,drain_current_A`
 
