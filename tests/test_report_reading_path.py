@@ -97,6 +97,20 @@ class ReadingPathTests(unittest.TestCase):
         self.assertLess(body.index('>dummy</th><td>1.0000</td><td>1.5000</td>'),
                         body.index('>selected</th><td>1.5000</td><td>0.7500</td>'))
 
+    def test_subpercent_bar_widths_preserve_the_metric_ratio_without_a_floor(self):
+        for name, error in (("selected", 0.00004), ("dummy", 0.004), ("ridge", 1.0)):
+            overall, per_group = grouped_metrics([0, 0], [error, error], ["a", "b"])
+            self.result.summary["models"][name] = dict(overall=overall, per_group=per_group)
+        rendered = render_html(self.result)
+        chart = rendered.split('<div class="bar-row">', 1)[1].split(
+            '<caption id="comparison-table">', 1)[0]
+        widths = [attrs["style"] for tag, attrs in Document(chart).tags
+                  if tag == "div" and "bar" in attrs.get("class", "").split()]
+        self.assertEqual(widths, ["width:0.0040%", "width:0.4000%", "width:100.00%"])
+        self.assertIn("<b>4.0000e-05</b>", chart)
+        self.assertIn("may be too short to see", language_html(rendered, "en"))
+        self.assertIn("細小長條可能短到看不見", language_html(rendered, "zh"))
+
     def test_exact_zero_keeps_comparison_label_but_not_a_filled_bar(self):
         for dummy_error in (0.0, 2.0):
             with self.subTest(dummy_error=dummy_error):

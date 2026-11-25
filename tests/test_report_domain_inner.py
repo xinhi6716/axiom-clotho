@@ -28,8 +28,8 @@ def domain_fixture():
 
 
 class DomainInnerReportTests(unittest.TestCase):
-    def test_default_bytes_unchanged(self):
-        expected = '11f4e8e3639001022d2c61215cdd517d77671defa5642a28cd049b5987770189'
+    def test_implicit_and_explicit_default_bytes_match_golden(self):
+        expected = 'c9faa3b51a7c71bdc5896ee642bed68fb04ed8dc062665c74105228dc4d4ff4b'
         self.assertEqual(hashlib.sha256(render_html(fixture()).encode()).hexdigest(), expected)
         result = fixture()
         result.manifest['config']['inner_strategy'] = 'group_kfold'
