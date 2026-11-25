@@ -222,7 +222,7 @@ pub fn extract_branch(a: &Acquisition, s: &[Sample], p: Settings) -> Result<Feat
             vec![w[0].source_row, w[1].source_row],
         )
     };
-    let selected: Vec<_> = s
+    let mut selected: Vec<_> = s
         .iter()
         .filter(|q| q.gate_voltage_v >= p.window_min_v && q.gate_voltage_v <= p.window_max_v)
         .collect();
@@ -231,6 +231,12 @@ pub fn extract_branch(a: &Acquisition, s: &[Sample], p: Settings) -> Result<Feat
     }
     if selected.iter().any(|q| q.drain_current_a * sign <= 0.0) {
         return Err(FetError::InvalidCurrent);
+    }
+    let log_selected_source_rows = selected.iter().map(|q| q.source_row).collect();
+    // Use one traversal for arithmetic only; provenance stays in the
+    // original acquisition order.
+    if selected[0].gate_voltage_v > selected[selected.len() - 1].gate_voltage_v {
+        selected.reverse();
     }
     let logs: Vec<_> = selected
         .iter()
@@ -247,20 +253,27 @@ pub fn extract_branch(a: &Acquisition, s: &[Sample], p: Settings) -> Result<Feat
         }
     }
     let n = selected.len() as f64;
-    let x0 = selected[0].gate_voltage_v;
-    let scale = selected
-        .iter()
-        .map(|q| (q.gate_voltage_v - x0).abs())
-        .fold(0.0, f64::max);
-    let xs: Vec<_> = selected
-        .iter()
-        .map(|q| (q.gate_voltage_v - x0) / scale)
-        .collect();
-    // A strictly monotone gate sweep must remain distinct in the
-    // normalized regression coordinates. Adjacent values suffice because
-    // offsetting and division by positive scale preserve monotone order.
-    if xs.windows(2).any(|w| w[0] == w[1]) {
-        return Err(FetError::NumericalRange);
+    let lo = selected[0].gate_voltage_v;
+    let hi = selected[selected.len() - 1].gate_voltage_v;
+    let scale = hi - lo;
+    let normalize = |origin| {
+        selected
+            .iter()
+            .map(|q| (q.gate_voltage_v - origin) / scale)
+            .collect::<Vec<_>>()
+    };
+    let has_collision = |xs: &[f64]| xs.windows(2).any(|w| w[0] == w[1]);
+    let mut x0 = lo;
+    let mut xs = normalize(x0);
+    // A cluster close to the opposite endpoint can collapse when
+    // subtracting the first origin. Try the other endpoint before
+    // refusing to regress on indistinguishable normalized coordinates.
+    if has_collision(&xs) {
+        x0 = hi;
+        xs = normalize(x0);
+        if has_collision(&xs) {
+            return Err(FetError::NumericalRange);
+        }
     }
     let xm = xs.iter().sum::<f64>() / n;
     let ym = logs.iter().sum::<f64>() / n;
@@ -295,7 +308,7 @@ pub fn extract_branch(a: &Acquisition, s: &[Sample], p: Settings) -> Result<Feat
         log_slope_decades_per_v: slope,
         log_intercept: intercept,
         log_rmse_decades: rmse,
-        log_selected_source_rows: selected.iter().map(|q| q.source_row).collect(),
+        log_selected_source_rows,
         all_source_rows: s.iter().map(|q| q.source_row).collect(),
     })
 }

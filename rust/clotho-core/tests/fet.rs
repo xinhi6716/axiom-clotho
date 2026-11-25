@@ -363,3 +363,36 @@ fn rejects_distinct_gate_coordinates_collapsed_by_window_normalization() {
         s.reverse();
     }
 }
+
+#[test]
+fn regression_acceptance_does_not_depend_on_acquisition_direction() {
+    let mut p = settings();
+    p.window_min_v = -1.0;
+    p.window_max_v = 1.0;
+    for gates in [[0.0, 1e-20, 1.0], [-1.0, -1e-20, 0.0]] {
+        let mut s = samples();
+        s.truncate(3);
+        for (q, gate) in s.iter_mut().zip(gates) {
+            q.gate_voltage_v = gate;
+        }
+        // An exact measured criterion isolates the regression.
+        p.criterion_a = s[1].drain_current_a;
+        let forward = extract_branch(&acquisition(), &s, p).unwrap();
+        s.reverse();
+        let reverse = extract_branch(&acquisition(), &s, p).unwrap();
+        assert_eq!(forward.criterion_gate_voltage_v, gates[1]);
+        assert_eq!(reverse.criterion_gate_voltage_v, gates[1]);
+        assert_eq!(
+            forward.log_slope_decades_per_v.to_bits(),
+            reverse.log_slope_decades_per_v.to_bits()
+        );
+        assert!((forward.log_slope_decades_per_v - 1.5).abs() < 1e-14);
+        assert_eq!(forward.log_intercept.to_bits(), reverse.log_intercept.to_bits());
+        assert_eq!(
+            forward.log_rmse_decades.to_bits(),
+            reverse.log_rmse_decades.to_bits()
+        );
+        assert_eq!(forward.log_selected_source_rows, [2, 3, 4]);
+        assert_eq!(reverse.log_selected_source_rows, [4, 3, 2]);
+    }
+}
