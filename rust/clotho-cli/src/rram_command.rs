@@ -35,6 +35,30 @@ fn parse_si(text: &str) -> Result<f64> {
     }
     Ok(value)
 }
+// The CSV reader is intentionally permissive about quote syntax. Require
+// complete wire framing before interpreting or hashing a measurement capture.
+fn has_complete_csv_quoting(raw: &[u8]) -> bool {
+    #[derive(Clone, Copy)]
+    enum Field {
+        Start,
+        Bare,
+        Quoted,
+        AfterQuote,
+    }
+    use Field::*;
+    let mut field = Start;
+    for &byte in raw.strip_prefix(b"\xef\xbb\xbf").unwrap_or(raw) {
+        field = match (field, byte) {
+            (Quoted, b'"') => AfterQuote,
+            (Quoted, _) => Quoted,
+            (Start | AfterQuote, b'"') => Quoted,
+            (_, b',' | b'\r' | b'\n') => Start,
+            (AfterQuote, _) | (Bare, b'"') => return false,
+            _ => Bare,
+        };
+    }
+    !matches!(field, Quoted)
+}
 fn lineage(p: &Readpoint) -> serde_json::Value {
     let a = &p.acquisition;
     serde_json::json!({"branch":a.branch,"replicate":a.replicate,"all_source_rows":p.all_source_rows,"selected_source_rows":p.selected_source_rows,"current_A":p.current_a,"resistance_ohm":p.resistance_ohm,"bracket_span_V":p.bracket_span_v})
@@ -87,6 +111,9 @@ pub fn run(opts: &HashMap<String, String>) -> Result<()> {
     file.take(8 * 1024 * 1024 + 1).read_to_end(&mut raw)?;
     if raw.len() > 8 * 1024 * 1024 {
         return Err("RRAM input exceeds 8 MiB".into());
+    }
+    if !has_complete_csv_quoting(&raw) {
+        return Err("Invalid RRAM CSV quoting".into());
     }
     let mut reader = csv::Reader::from_reader(raw.as_slice());
     let headers = reader

@@ -227,3 +227,32 @@ fn extraction_report_binds_exact_input_and_feature_bytes() {
     assert_ne!(original.0, changed.0);
     assert_ne!(original.1, changed.1);
 }
+
+#[test]
+fn malformed_quote_framing_does_not_complete_a_capture() {
+    let stem = DATA.trim_end().strip_suffix("0.1").unwrap();
+    for malformed in [
+        format!("{stem}\"0.1"),
+        DATA.replace(",C,P,", ",C,P\"raw,"),
+        DATA.replace(",C,P,", ",C,\"P\"raw,"),
+    ] {
+        let w = Workspace::new();
+        w.write(&malformed);
+        let result = w.run(&[]);
+        assert!(!result.status.success());
+        assert!(String::from_utf8_lossy(&result.stderr).contains("Invalid RRAM CSV quoting"));
+        assert!(!w.0.join("out").exists());
+    }
+    for last in ["0.1", "\"0.1\""] {
+        let w = Workspace::new();
+        let valid = format!("{stem}{last}").replace(",C,P,", ",C,\"P,\"\"quoted\"\"\",");
+        w.write(&valid);
+        let result = w.run(&[]);
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        assert!(w.0.join("out/COMPLETE").is_file());
+    }
+}

@@ -10,7 +10,8 @@ clotho extract-rram --csv measurements.csv --max-bracket-v 0.11 \
   --accept-assumptions true --out new_rram_features
 ```
 
-The single UTF-8 CSV has exactly these unique headers, in any order:
+The single UTF-8 CSV has exactly these unique headers, in any order.
+Quoted fields must close and embedded quotes must be doubled; a final newline is optional:
 
 ```csv
 batch,wafer,device,cycle,replicate,branch,state,condition,protocol,read_voltage_V,temperature_K,read_delay_s,voltage_V,current_A
