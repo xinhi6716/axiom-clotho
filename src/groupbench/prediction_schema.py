@@ -66,6 +66,10 @@ def _number(token):
     value = float(token)
     if not math.isfinite(value):
         _fail("JSON numeric values must be finite.")
+    # A nonzero score rounding to zero changes a strict numeric comparison
+    # into a tie. Inspect the significand, not the exponent or the zero sign.
+    if value == 0.0 and any(ch in "123456789" for ch in token.lower().split("e", 1)[0]):
+        _fail("JSON nonzero numeric underflow to zero is unsupported.")
     return value
 
 

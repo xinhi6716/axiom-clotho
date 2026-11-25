@@ -47,8 +47,9 @@ for the byte-only verifier; it limits this explicitly selected consumer.
   union is **not** assumed to equal the sum of its component counts.
 
 Unknown extra manifest/feature metadata is allowed but **not schema validated**.
-All JSON still rejects duplicate keys, nonfinite values, or numeric tokens longer
-than 100 characters. This is a documented metadata subset, not a complete
+All JSON rejects duplicate keys, nonfinite values, numeric tokens longer than
+100 characters, and nonzero numeric literals that round to zero in float64.
+Exact signed zeros and representable subnormals remain valid. This is a documented metadata subset, not a complete
 manifest validator. Selection records, model parameters, environment, timestamps,
 source hashes, training-group identifiers and unchecked metadata are not verified.
 The optional current-source `package_source` record is also allowed but not

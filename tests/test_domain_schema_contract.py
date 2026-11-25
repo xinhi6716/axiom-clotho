@@ -1,11 +1,16 @@
 """Saved declaration checks only; hand-authored fixtures, no study draws."""
 from copy import deepcopy
+import json
+from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import patch
 
 from groupbench import benchmark, fit_predict
 from groupbench.evaluation_schema import _check
-from groupbench.prediction_schema import _metadata, _DOMAIN_FIELDS, _DOMAIN_AUDIT_FIELDS
+from groupbench.prediction_schema import _metadata, _DOMAIN_FIELDS, _DOMAIN_AUDIT_FIELDS, validate_prediction_bundle_schema
+from groupbench.verification import verify_bundle
+from test_prediction_schema import write_bundle
 from test_domain_inner import fixture, ARGS
 
 
@@ -101,6 +106,31 @@ class DomainSchemaContractTests(unittest.TestCase):
         with patch('groupbench.model.candidates_for', side_effect=AssertionError('runtime grid read')):
             self.assertEqual(_metadata(self.pred)[0], '1.4')
             self.assertEqual(self.check_eval(self.evaluation.manifest)[0], '1.3')
+
+    def test_saved_selection_tie_does_not_hide_nonzero_decimal_underflow(self):
+        m = deepcopy(self.pred)
+        for record in m["inner_selection"]:
+            record["selection_score"] = 0.0
+        m.update(selected_candidate="dummy_mean", selected_family="dummy")
+        m["inner_selection"][0]["selection_score"] = 12345.125
+        m["inner_selection"][0]["inner_fold_scores"][0] = 12346.125
+        payload = json.dumps(m).encode()
+        csv = b"row_position,prediction\n0,0.0\n1,0.0\n2,0.0\n3,0.0\n4,0.0\n5,0.0\n"
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for token in (b"0e-400", b"-0.000e-400"):
+                raw = payload.replace(b"12345.125", token).replace(b"12346.125", b"5e-324")
+                write_bundle(root, csv=csv, raw=raw)
+                self.assertEqual(validate_prediction_bundle_schema(root).schema_version, "1.4")
+            for token in (b"1e-400", b"-1e-400", b"2e-324"):
+                raw = payload.replace(b"12345.125", token).replace(b"12346.125", b"5e-324")
+                with self.subTest(token=token):
+                    write_bundle(root, csv=csv, raw=raw)
+                    self.assertEqual(verify_bundle(root).bundle_type, "prediction")
+                    before = {path.name: path.read_bytes() for path in root.iterdir()}
+                    with self.assertRaisesRegex(ValueError, "underflow"):
+                        validate_prediction_bundle_schema(root)
+                    self.assertEqual({path.name: path.read_bytes() for path in root.iterdir()}, before)
 
     def test_tie_order_declared_scores(self):
         m = deepcopy(self.pred)
