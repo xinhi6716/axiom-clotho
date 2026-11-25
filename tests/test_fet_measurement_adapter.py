@@ -230,6 +230,41 @@ class FetAdapterTests(unittest.TestCase):
                 flow.plan(self.output)
         path.write_bytes(raw)
 
+    def test_plan_rejects_inconsistent_support_metadata_after_rehash(self):
+        self.prepare()
+        feature_path = self.output / "features/features.csv"
+        provenance_path = self.output / "features/provenance.json"
+        original = feature_path.read_bytes()
+        env = dict(os.environ, PYTHONPATH=str(ROOT / "src"), PYTHONDONTWRITEBYTECODE="1")
+        command = [sys.executable, "-m", "mlworkflow", "plan", "--prepared", str(self.output)]
+
+        def plan():
+            return subprocess.run(command, cwd=self.root, env=env, text=True,
+                                  capture_output=True, timeout=15)
+
+        baseline = plan()
+        self.assertEqual(baseline.returncode, 0, baseline.stderr)
+        for name, wrong in (
+            ("branch_sample_count", "1"),
+            ("log_selected_sample_count", "1"),
+            ("criterion_method", "invented_method"),
+            ("criterion_bracket_span_V", "77"),
+        ):
+            with self.subTest(name=name):
+                rows = c.parse_csv(original, fet.FEATURE_COLUMNS)
+                self.assertNotEqual(rows[0][name], wrong)
+                rows[0][name] = wrong
+                featured = c.csv_bytes(fet.FEATURE_COLUMNS, rows)
+                feature_path.write_bytes(featured)
+                provenance = c.parse_json(provenance_path.read_bytes())
+                provenance["output_sha256"]["features.csv"] = c.sha(featured)
+                provenance_path.write_bytes(c.json_bytes(provenance))
+                rehash(self.output)
+                failed = plan()
+                self.assertEqual(failed.returncode, 2, failed.stderr)
+                self.assertIn("FET support metadata", failed.stderr)
+                self.assertFalse(failed.stdout)
+
     def test_model_feature_range_not_silently_widened(self):
         self.prepare()
         payloads, _ = load_bundle(self.output, "prepared")

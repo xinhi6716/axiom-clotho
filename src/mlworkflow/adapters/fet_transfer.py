@@ -180,9 +180,23 @@ def _feature_rows(features, config):
             raise c.WorkflowError("FET report acquisition identities differ from feature rows")
         for row in rows:
             key = _key(row, ACQUISITION)
-            if (float(row[FET_FEATURES[0]]) != threshold[key]["extraction"]["gate_source_voltage_at_criterion_V"]
-                    or float(row[FET_FEATURES[1]]) != slopes[key]["fit"]["slope_decades_per_V"]):
+            threshold_row, slope_row = threshold[key], slopes[key]
+            extraction = threshold_row["extraction"]
+            if (float(row[FET_FEATURES[0]]) != extraction["gate_source_voltage_at_criterion_V"]
+                    or float(row[FET_FEATURES[1]]) != slope_row["fit"]["slope_decades_per_V"]):
                 raise c.WorkflowError("FET feature values differ from retained extractor reports")
+            samples = threshold_row["sample_count"]
+            selected = slope_row["selected_sample_count"]
+            span = extraction["bracket_span_V"]
+            if (type(samples) is not int or type(slope_row["sample_count"]) is not int
+                    or type(selected) is not int or not 3 <= selected <= samples
+                    or samples != slope_row["sample_count"]
+                    or type(span) not in (int, float) or not math.isfinite(span) or span < 0
+                    or row["branch_sample_count"] != str(samples)
+                    or row["log_selected_sample_count"] != str(selected)
+                    or row["criterion_method"] != extraction["method"]
+                    or float(row["criterion_bracket_span_V"]) != span):
+                raise c.WorkflowError("FET support metadata differs from retained extractor reports")
         return indexed
     except (KeyError, TypeError, ValueError, OverflowError) as error:
         if isinstance(error, c.WorkflowError):
