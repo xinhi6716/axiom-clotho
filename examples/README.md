@@ -48,6 +48,7 @@ not real measurements. Current-source commands and matching fixtures are require
 - [Compare validation budgets](../docs/SAVED_BUDGET_COMPARISON.md): two methods × two budgets on matched observations. [Invented input](saved-budget-comparison/invented.json).
 - [Evaluate prediction intervals](../docs/SAVED_INTERVAL_EVALUATION.md): coverage, width and interval score for a complete declared cohort. It does not generate or calibrate intervals. [Invented input](saved-interval-evaluation/invented_voltage.json).
 - [Count support for a new machine](new-machine-support/README.md): run a synthetic cutoff check where 675 scores still provide only three machine groups.
+- [Compare pointwise and simultaneous coverage](fixed-grid-coverage/README.md): on a four-read toy grid, reporting a time after seeing outcomes can change coverage.
 - [See why feature support does not establish coverage](support-is-not-coverage/README.md): identical inputs can yield different outcomes and coverage.
 - [Score a fixed device–phase schedule](scheduled-phase-scoring/README.md): see why weighting the same paired forecasts differently can reverse the ranking.
 - [Check paired MAE sensitivity to one parent](paired-parent-influence/README.md): see how repeats differ from declared parent support and why omitting one parent can reverse the contrast.
