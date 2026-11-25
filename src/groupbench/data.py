@@ -12,7 +12,7 @@ import re
 
 import numpy as np
 import pandas as pd
-from pandas.api.types import is_bool_dtype, is_numeric_dtype
+from pandas.api.types import is_bool_dtype, is_list_like, is_numeric_dtype
 
 MAX_ROWS = 20_000
 MAX_FEATURES = 100
@@ -90,6 +90,10 @@ def validate_features(X: pd.DataFrame) -> pd.DataFrame:
                     raise ValueError(f"Convert datetime or timedelta feature {col!r} to explicit numeric/categorical features first.")
                 if isinstance(value, (complex, np.complexfloating)):
                     raise ValueError(f"Complex values are not supported: {col!r}.")
+                # A container is not one category. Stringifying it aliases
+                # literal text, and pd.isna on arrays returns an array.
+                if isinstance(value, np.ndarray) or is_list_like(value):
+                    raise ValueError("Categorical feature cells cannot contain nested values; explicitly encode them as scalar columns or text.")
             # This is stateless normalization, not a learned vocabulary.
             X[col] = X[col].map(lambda v: np.nan if pd.isna(v) else str(v)).astype(object)
             # Check observed normalized values, not unused category metadata.

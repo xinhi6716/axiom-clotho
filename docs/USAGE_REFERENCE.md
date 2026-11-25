@@ -430,6 +430,10 @@ Pass `features` as an ordered collection of complete column names, not a comma-s
 For frame-based regression and binary planning/execution APIs, selected feature
 names must be nonempty strings without NUL (U+0000). Empty/NUL names are rejected
 before model work because saved prediction-bundle validation cannot accept them.
+
+Categorical cells cannot contain nested arrays, lists, mappings or other
+containers. Explicitly encode these as scalar columns or text before calling
+the Python API; a literal text label is not a container.
 Rename these source columns explicitly; no names are repaired or dropped.
 Other string names retain their exact identity, including spaces, newlines and
 Unicode. This check concerns selected predictors, not unused metadata or
