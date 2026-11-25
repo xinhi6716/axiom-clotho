@@ -176,6 +176,43 @@ class MeasurementRegressionTests(unittest.TestCase):
                 self.assertEqual(tree(self.prepared), saved)
                 self.assertFalse(self.run_dir.exists())
 
+    def test_replay_rejects_contradictory_preparation_provenance_before_work(self):
+        self.prepare()
+        receipt_path = self.prepared / "COMPLETE.json"
+        provenance_path = self.prepared / "provenance.json"
+        original = provenance_path.read_bytes()
+        receipt = c.parse_json(receipt_path.read_bytes())
+        self.assertEqual(flow.plan(self.prepared)["fits_performed"], 0)
+        for field, value in (
+            ("caller_prediction_outcomes_opened", True),
+            ("caller_prediction_outcomes_opened", 0),
+            ("training_rows", 1),
+            ("training_rows", float(c.parse_json(original)["training_rows"])),
+            ("prediction_rows", 1),
+            ("feature_row_unit", "measurement-cycle"),
+            ("endpoint_join", "unbound source rows"),
+            ("input_sha256", {"config.json": "1" * 64}),
+            ("schema_version", "measurement-join-v2"),
+        ):
+            with self.subTest(field=field, value=value):
+                altered = c.parse_json(original)
+                altered[field] = value
+                raw = c.json_bytes(altered)
+                provenance_path.write_bytes(raw)
+                receipt["files_sha256"]["provenance.json"] = c.sha(raw)
+                receipt_path.write_bytes(c.json_bytes(receipt))
+                c.load_bundle(self.prepared, "prepared")
+                before = tree(self.prepared)
+                with patch("groupbench.plan_benchmark", side_effect=AssertionError("planning must not start")), patch(
+                    "groupbench.benchmark", side_effect=AssertionError("fitting must not start")
+                ):
+                    with self.assertRaisesRegex(c.WorkflowError, "preparation provenance"):
+                        flow.plan(self.prepared)
+                    with self.assertRaisesRegex(c.WorkflowError, "preparation provenance"):
+                        flow.run(self.prepared, self.run_dir)
+                self.assertFalse(self.run_dir.exists())
+                self.assertEqual(tree(self.prepared), before)
+
     def test_future_targets_cannot_enter_training_file(self):
         train = self.rows("training_targets.csv", ("device", "target"))
         future = self.rows("later_outcomes.csv", ("device", "target"))

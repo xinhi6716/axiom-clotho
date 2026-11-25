@@ -179,6 +179,10 @@ by pretending repeated cycles are new independent devices.
 
 - `prepared/features/`: unchanged measurement feature/schema/lineage reports.
 - `prepared/provenance.json`: hashes of captured input bytes and exact-join scope.
+  For the v1 RRAM bundle, planning and running require its declared row counts
+  to match the retained tables and its join/target-free declarations to match
+  the writer's contract. The source hash keys and SHA-256 syntax are checked;
+  this does not reread or authenticate the original inputs.
 - `model-run/comparison/report.html`: nested grouped comparison of requested
   families and the inner-selected procedure, with per-group error diagnostics.
 - `model-run/prediction_rows.csv`: stable device/group keys beside each prediction.

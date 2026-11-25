@@ -21,6 +21,8 @@ from .contracts import (FEATURES, FEATURE_FILES, INVENTORIES, WorkflowError, beg
 RAW_FILES = ("manifest.csv", "conditions.csv", "iv_sweeps.csv")
 FEATURE_COLUMNS = ("batch", "wafer", "device", "condition", "split_group", "read_voltage_V", "cycle_count", "ratio_below_one_cycle_count", *FEATURES)
 COHORT_COLUMNS = ("device", "partition", "group", "batch", "wafer")
+_PREPARATION_SOURCES = frozenset((*RAW_FILES, "partitions.csv", "training_targets.csv", "config.json"))
+_ENDPOINT_JOIN = "exact device IDs; training partition only; no labels derived or filled"
 LIMITATIONS = [
     "Caller-declared endpoint meaning, units, feature timing and physical identities are not scientifically verified.",
     "Group disjointness checks exact supplied identities only; aliases and unrecorded dependence may remain.",
@@ -109,7 +111,7 @@ def prepare(input_dir, partitions_csv, training_targets_csv, config_json, output
         **{name: sha(data) for name, data in raw.items()}, "partitions.csv": sha(partition_raw),
         "training_targets.csv": sha(target_raw), "config.json": sha(config_raw)},
         "training_rows": len(training), "prediction_rows": len(future), "feature_row_unit": "device",
-        "endpoint_join": "exact device IDs; training partition only; no labels derived or filled",
+        "endpoint_join": _ENDPOINT_JOIN,
         "caller_prediction_outcomes_opened": False, "limitations": LIMITATIONS}
     payloads = {"features/" + name: text.encode() for name, text in features.items()}
     payloads.update({"training.csv": csv_bytes(("device", "group", "target", *config["features"]), training),
@@ -118,6 +120,25 @@ def prepare(input_dir, partitions_csv, training_targets_csv, config_json, output
                      "provenance.json": json_bytes(provenance)})
     write_bundle(output_dir, "prepared", payloads)
     return provenance
+
+
+def _check_preparation_provenance(provenance, n_train, n_future):
+    # Saved hashes declare the original input bytes; these raw files are
+    # not all retained and cannot be reconstructed by the prepared reader.
+    if not isinstance(provenance, dict):
+        raise WorkflowError("saved preparation provenance is malformed")
+    sources = provenance.get("input_sha256")
+    counts = (provenance.get("training_rows"), provenance.get("prediction_rows"))
+    if (provenance.get("schema_version") != "measurement-join-v1"
+            or provenance.get("caller_prediction_outcomes_opened") is not False
+            or provenance.get("feature_row_unit") != "device"
+            or provenance.get("endpoint_join") != _ENDPOINT_JOIN
+            or any(type(value) is not int for value in counts)
+            or counts != (n_train, n_future)
+            or not isinstance(sources, dict) or sources.keys() != _PREPARATION_SOURCES
+            or any(type(value) is not str or not re.fullmatch(r"[0-9a-f]{64}", value)
+                   for value in sources.values())):
+        raise WorkflowError("saved preparation provenance is inconsistent with the v1 device join")
 
 
 def _prepared(path):
@@ -156,6 +177,7 @@ def _prepared(path):
                 number(row[name])
             if partition == "train":
                 number(row["target"])
+    _check_preparation_provenance(parse_json(payloads["provenance.json"]), len(training), len(future))
     return config, training, future, payloads, receipt_sha
 
 
