@@ -85,6 +85,9 @@ impl KnnRegressor {
     }
     pub fn predict(&self, x: &[Vec<f64>]) -> Result<Vec<f64>, KnnError> {
         validate(x, self.scales.len())?;
+        // Every query needs fresh distances, but their capacity depends only
+        // on training size. Allocate lazily after the first scaling check.
+        let mut distance_workspace = None;
         x.iter()
             .map(|row| {
                 let q: Vec<f64> = row.iter().zip(&self.scales).map(|(v, s)| v / s).collect();
@@ -94,7 +97,9 @@ impl KnnRegressor {
                 {
                     return Err(KnnError::NumericOverflow);
                 }
-                let mut distances = Vec::with_capacity(self.training.len());
+                let distances = distance_workspace
+                    .get_or_insert_with(|| Vec::with_capacity(self.training.len()));
+                distances.clear();
                 for (i, train) in self.training.iter().enumerate() {
                     let mut d = 0.0_f64;
                     for ((a, b), scale) in row.iter().zip(train).zip(&self.scales) {
@@ -116,7 +121,7 @@ impl KnnRegressor {
                     }
                     distances.push((d, i));
                 }
-                let neighbors = nearest_subset(&mut distances, self.k);
+                let neighbors = nearest_subset(distances, self.k);
                 exact_mean::checked_mean(neighbors.iter().map(|(_, i)| self.targets[*i]), self.k)
             })
             .collect()

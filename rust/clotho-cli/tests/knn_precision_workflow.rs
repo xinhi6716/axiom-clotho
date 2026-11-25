@@ -152,3 +152,45 @@ fn knn_fit_preserves_the_scaling_underflow_boundary_and_reloads() {
         .collect();
     assert_eq!(values, [7.0, 9.0]);
 }
+
+#[test]
+fn knn_batch_distances_reset_and_late_range_error_writes_no_partial_csv() {
+    let w = Workspace::new();
+    w.write("train.csv", "x,y\n1e-300,7\n2e-300,9\n");
+    w.write("valid.csv", "x\n2e-300\n1e-300\n2e-300\n");
+    w.write("late.csv", "x\n2e-300\n1e-300\n1e308\n");
+    let fitted = w.run(&[
+        "fit", "--csv", "train.csv", "--features", "x", "--target", "y", "--model",
+        "knn", "--k", "1", "--out", "model.json",
+    ]);
+    assert!(
+        fitted.status.success(),
+        "{}",
+        String::from_utf8_lossy(&fitted.stderr)
+    );
+
+    let predict = |input, output| {
+        w.run(&[
+            "predict", "--artifact", "model.json", "--csv", input, "--out", output,
+        ])
+    };
+    let valid = predict("valid.csv", "valid-out.csv");
+    assert!(
+        valid.status.success(),
+        "{}",
+        String::from_utf8_lossy(&valid.stderr)
+    );
+    let csv = fs::read_to_string(w.0.join("valid-out.csv")).unwrap();
+    let values: Vec<_> = csv
+        .lines()
+        .skip(1)
+        .map(|line| line.split(',').nth(1).unwrap().parse::<f64>().unwrap())
+        .collect();
+    assert_eq!(values, [9.0, 7.0, 9.0]);
+
+    let late = predict("late.csv", "late-out.csv");
+    assert_eq!(late.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&late.stderr)
+        .contains("Values exceed the numeric range supported by fitted scaling"));
+    assert!(!w.0.join("late-out.csv").exists());
+}
