@@ -64,6 +64,27 @@ class FetAdapterTests(unittest.TestCase):
         self.assertNotIn("target", future[0])
         self.assertFalse(result["caller_prediction_outcomes_opened"])
 
+    def test_dispatched_prepare_retains_the_original_v2_config_bytes(self):
+        path = self.inputs / "config.json"
+        initial = path.read_bytes()
+        changed = c.json_bytes({**c.parse_json(initial), "endpoint_name": "changed-endpoint"})
+        fet.validate_config(c.parse_json(changed))
+        reads = []
+        read_regular = c.read_regular
+
+        def read_once_or_changed(candidate):
+            if Path(candidate) == path:
+                reads.append(candidate)
+                return initial if len(reads) == 1 else changed
+            return read_regular(candidate)
+
+        with patch.object(flow, "read_regular", side_effect=read_once_or_changed), \
+             patch.object(c, "read_regular", side_effect=read_once_or_changed):
+            prepared = self.prepare()
+        self.assertEqual(len(reads), 1)
+        self.assertEqual(prepared["input_sha256"]["config.json"], c.sha(initial))
+        self.assertEqual(fet.prepared(self.output)[0], c.parse_json(initial))
+
     def test_exact_upstream_artifact_parity_and_only_two_feature_allowlist(self):
         config = self.config()
         self.prepare()

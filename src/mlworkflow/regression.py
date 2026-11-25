@@ -67,8 +67,9 @@ def prepare(input_dir, partitions_csv, training_targets_csv, config_json, output
     config_raw = read_regular(config_json)
     declared_config = parse_json(config_raw)
     if is_v2_config(declared_config):
-        from .adapters.fet_transfer import prepare as prepare_fet
-        return prepare_fet(input_dir, partitions_csv, training_targets_csv, config_json, output_dir)
+        from .adapters.fet_transfer import _prepare_from_config_snapshot
+        return _prepare_from_config_snapshot(
+            input_dir, partitions_csv, training_targets_csv, config_raw, output_dir)
     raw = {name: read_regular(Path(input_dir) / name) for name in RAW_FILES}
     partition_raw, target_raw = map(read_regular, (partitions_csv, training_targets_csv))
     config = validate_config(declared_config)

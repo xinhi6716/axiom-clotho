@@ -246,7 +246,11 @@ def _validate_map(rows, config):
 
 def prepare(input_dir, partitions_csv, training_targets_csv, config_json, output_dir):
     c.protect_output(output_dir, input_dir)
-    config_raw = c.read_regular(config_json)
+    return _prepare_from_config_snapshot(
+        input_dir, partitions_csv, training_targets_csv, c.read_regular(config_json), output_dir)
+
+
+def _prepare_from_config_snapshot(input_dir, partitions_csv, training_targets_csv, config_raw, output_dir):
     config = validate_config(c.parse_json(config_raw))
     raw = c.read_regular(Path(input_dir) / "transfer.csv")
     partition_raw, target_raw = map(c.read_regular, (partitions_csv, training_targets_csv))
