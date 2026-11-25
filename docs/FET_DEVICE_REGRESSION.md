@@ -216,11 +216,16 @@ rows and the saved prepared-file hashes.
 
 Standalone score checks the retained map's hash against the saved preparation
 metadata, composite tuple/prefix/partition consistency, canonical map ordering,
-exact prediction identity and engine row-position/value alignment. It **does not
-reopen or rederive omitted raw measurements or feature CSVs**. Inconsistent
-remaps, duplicate/orphan identities and incomplete outcomes reject, even when
-file checksums alone appear valid. These checks do not authenticate a coordinated
-rewrite of all evidence or prove historical physical identity.
+exact prediction identity and engine row-position/value alignment. It checks the
+retained engine prediction receipt against its manifest and CSV, and compares the
+engine manifest's declared query SHA-256 against the recorded prepared
+`future.csv` digest. The engine's prediction mode, row count and model-column
+declaration must agree with the adapter run. It **does not reopen or rederive
+omitted raw measurements or feature CSVs**, verify other engine manifest
+fields, or replay inference. Inconsistent remaps, duplicate/orphan identities
+and incomplete outcomes reject, even when outer file checksums alone appear
+valid. These checks do not authenticate a coordinated rewrite of all evidence or
+prove historical physical identity.
 
 Scores are descriptive for this exact cohort; later outcomes are not a new tuning
 or model-selection input. Keep adverse results and all cohort rows rather than

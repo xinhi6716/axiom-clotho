@@ -285,6 +285,52 @@ class FetAdapterTests(unittest.TestCase):
         result = subprocess.run([sys.executable, "-S", "-c", code], cwd=self.root, env=dict(os.environ, PYTHONPATH=str(ROOT / "src")), capture_output=True, timeout=10)
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_score_binds_engine_prediction_receipt_and_query_to_retained_run(self):
+        self.prepare()
+        run = self.root / "run"
+        flow.run(self.output, run)
+        engine = run / "prediction"
+        manifest = engine / "manifest.json"
+        checksums = engine / "checksums.json"
+        manifest_raw, checksums_raw = manifest.read_bytes(), checksums.read_bytes()
+        original = c.parse_json(manifest_raw)
+        metadata_path = run / "run.json"
+        metadata = c.parse_json(metadata_path.read_bytes())
+        self.assertEqual(original["prediction_source_file_sha256"],
+                         metadata["prepared_files_sha256"]["future.csv"])
+        outcomes = self.inputs / "heldout_outcomes.csv"
+        for name, edit_manifest, include_engine_checksum in (
+            ("stale_engine_receipt", lambda m: m.update(comment="different bytes"), False),
+            ("wrong_query", lambda m: m.update(prediction_source_file_sha256="f" * 64), True),
+            ("missing_query", lambda m: m.pop("prediction_source_file_sha256"), True),
+            ("wrong_count", lambda m: m.update(n_predictions=2), True),
+            ("float_count", lambda m: m.update(n_predictions=3.0), True),
+            ("wrong_mode", lambda m: m.update(mode="benchmark"), True),
+            ("wrong_features", lambda m: m["config"].update(features=["other"]), True),
+        ):
+            with self.subTest(name=name):
+                changed = copy.deepcopy(original)
+                edit_manifest(changed)
+                manifest.write_bytes(c.json_bytes(changed))
+                receipt = c.parse_json(checksums_raw)
+                if include_engine_checksum:
+                    receipt["files"]["manifest.json"] = c.sha(manifest.read_bytes())
+                checksums.write_bytes(c.json_bytes(receipt))
+                rehash(run)
+                before = {p.relative_to(run): p.read_bytes() for p in run.rglob("*") if p.is_file()}
+                output = self.root / name
+                with patch.object(c, "read_regular", wraps=c.read_regular) as read, self.assertRaisesRegex(
+                        c.WorkflowError, "saved FET engine prediction"):
+                    flow.score(run, outcomes, output)
+                self.assertNotIn(outcomes, [Path(call.args[0]) for call in read.call_args_list])
+                self.assertFalse(output.exists())
+                self.assertEqual(before, {p.relative_to(run): p.read_bytes() for p in run.rglob("*") if p.is_file()})
+        manifest.write_bytes(manifest_raw)
+        checksums.write_bytes(checksums_raw)
+        rehash(run)
+        score = flow.score(run, outcomes, self.root / "valid-score")
+        self.assertEqual((score["cohort_rows"], score["fits_performed"]), (3, 0))
+
     def test_no_site_prepare_and_saved_score_no_future_outcome_read(self):
         heldout = self.inputs / "heldout_outcomes.csv"
         outcomes = heldout.read_bytes()

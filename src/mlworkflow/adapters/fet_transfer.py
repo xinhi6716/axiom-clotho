@@ -358,6 +358,28 @@ def run(prepared_dir, output_dir):
     return metadata
 
 
+def _validate_prediction_lineage(payloads, future_sha, features, row_count):
+    """Cross-check a narrow engine manifest subset using the verified outer snapshot."""
+    names = ("manifest.json", "predictions.csv")
+    receipt = c.parse_json(payloads["prediction/checksums.json"])
+    records = {name: c.sha(payloads["prediction/" + name]) for name in names}
+    if receipt != {"algorithm": "sha256", "files": records}:
+        raise c.WorkflowError("saved FET engine prediction checksums do not match the retained files")
+
+    manifest = c.parse_json(payloads["prediction/manifest.json"])
+    if not isinstance(manifest, dict):
+        raise c.WorkflowError("saved FET engine prediction manifest is inconsistent")
+    engine_config = manifest.get("config")
+    count = manifest.get("n_predictions")
+    if (manifest.get("mode") != "fit_predict"
+            or manifest.get("prediction_source_file_sha256") != future_sha
+            or type(count) is not int or count != row_count
+            or not isinstance(engine_config, dict)
+            or engine_config.get("features") != features
+            or engine_config.get("target") != "target" or engine_config.get("group") != "group"):
+        raise c.WorkflowError("saved FET engine prediction manifest differs from the query or model-row contract")
+
+
 def score(run_dir, outcomes_csv, output_dir):
     c.protect_output(output_dir, run_dir)
     payloads, receipt_sha = load_bundle(run_dir, "run")
@@ -387,6 +409,7 @@ def score(run_dir, outcomes_csv, output_dir):
         if ([{n: r[n] for n in PREDICTION_COLUMNS if n != "prediction"} for r in rows] != identities
                 or metadata["future_cohort"] != identities):
             raise c.WorkflowError("saved prediction identities differ from the physical identity map")
+        _validate_prediction_lineage(payloads, hashes["future.csv"], config["features"], len(rows))
         engine = c.parse_csv(payloads["prediction/predictions.csv"], ("row_position", "prediction"))
         if len(engine) != len(rows) or any(r["row_position"] != str(i) or c.number(r["prediction"]) != c.number(rows[i]["prediction"]) for i, r in enumerate(engine)):
             raise c.WorkflowError("keyed predictions differ from the unchanged calculator prediction bundle")
@@ -411,7 +434,7 @@ def score(run_dir, outcomes_csv, output_dir):
     payloads = {"scores.json": c.json_bytes(result), "scored_rows.csv": c.csv_bytes(("row_id", *PHYSICAL, "group", "y_true", "y_pred"), scored),
                 "report.html": flow._report("FET saved prediction evaluation", config,
                     [f"Scored all {len(joined)} exact predicted composite physical devices; zero ML fits.",
-                     "Scoring checks retained map/prediction consistency, not omitted raw measurements or feature extraction."],
+                     "Scoring checks the retained identity map, engine receipt and declared query binding, not omitted raw measurements or feature extraction."],
                     [("scores.json", "Descriptive saved metrics"), ("scored_rows.csv", "Exact joined device outcomes"), ("COMPLETE.json", "Byte checksums")], limitations=LIMITATIONS)}
     write_bundle(output_dir, "score", payloads)
     return result
