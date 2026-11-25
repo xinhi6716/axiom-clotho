@@ -43,7 +43,9 @@ Checks cover:
   writer's `grouped_metrics`. Group ordering follows first occurrence;
   folds follow writer order. Counts, identities, field sets and null R² are exact.
   Float scores use `math.isclose(rel_tol=1e-10, abs_tol=1e-12)` to accommodate CSV
-  float round trips. This tolerance is not a scientific error bound, unit inference
+  float round trips. MAE, RMSE and their group summaries must additionally be
+  nonnegative and agree on exact zero; signed zero counts as zero. This tolerance
+  is not a scientific error bound, unit inference
   or guarantee of sensitivity to smaller edits. Constant observed targets require
   null R², not sklearn's substituted score. Overflow/underflow failures propagate.
 

@@ -44,13 +44,16 @@ def _count(value, maximum, minimum=0):
     return value
 
 
-def _compare(actual, expected):
+_NONNEGATIVE_ERROR_METRICS = frozenset({"mae", "rmse", "group_mae", "group_rmse", "worst_group_mae"})
+
+
+def _compare(actual, expected, *, field=None):
     """Exact identities/counts/nulls; tolerant finite float64 metric comparison."""
     if isinstance(expected, dict):
         if not isinstance(actual, dict) or set(actual) != set(expected):
             _fail("metric fields or identities differ.")
         for key in expected:
-            _compare(actual[key], expected[key])
+            _compare(actual[key], expected[key], field=key)
     elif isinstance(expected, list):
         if not isinstance(actual, list) or len(actual) != len(expected):
             _fail("metric population differs.")
@@ -59,6 +62,9 @@ def _compare(actual, expected):
     elif isinstance(expected, float):
         if type(actual) not in (int, float) or not math.isfinite(actual) or not math.isclose(actual, expected, rel_tol=REL_TOL, abs_tol=ABS_TOL):
             _fail("saved metric differs from retained predictions.")
+        if field in _NONNEGATIVE_ERROR_METRICS and (
+                actual < 0.0 or (actual == 0.0) != (expected == 0.0)):
+            _fail("saved error magnitude sign or zero disagrees with retained predictions.")
     elif type(actual) is not type(expected) or actual != expected:
         _fail("count, identity, or null metric differs.")
 

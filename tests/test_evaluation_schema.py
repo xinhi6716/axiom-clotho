@@ -118,6 +118,37 @@ class EvaluationSchemaTests(unittest.TestCase):
             validate_evaluation_bundle(self.root)
         self.assertEqual(names, ['checksums.json', 'manifest.json', 'summary.json', 'predictions.csv', 'report.html'])
 
+    def test_tiny_positive_error_cannot_be_reported_as_zero_or_negative(self):
+        frame = pd.DataFrame({'g': ['a', 'b', 'c', 'd'] * 2,
+                              'x': range(8), 'y': [i * 1e-14 for i in range(8)]})
+        result = benchmark(frame, target='y', group='g', baselines=('dummy',),
+                           outer_splits=2, inner_splits=2, objective='mae')
+        for location, field in (("overall", "group_mae"), ("per_fold", "group_rmse"),
+                                ("per_group", "rmse")):
+            for replacement in (0, -1e-14):
+                with self.subTest(location=location, field=field, value=replacement):
+                    result.write(self.root, overwrite=True)
+                    def corrupt(summary):
+                        row = summary["models"]["selected"][location]
+                        if isinstance(row, list):
+                            row = row[0]
+                        self.assertGreater(row[field], 0)
+                        self.assertLess(row[field], 1e-12)
+                        row[field] = replacement
+                    self.mutate_json("summary.json", corrupt)
+                    self.assertEqual(verify_bundle(self.root).bundle_type, "evaluation")
+                    with self.assertRaisesRegex(ValueError, "error magnitude sign or zero"):
+                        validate_evaluation_bundle(self.root)
+
+    def test_exact_zero_sign_is_irrelevant_but_small_nonzero_is_not_a_zero(self):
+        self.constant.write(self.root, overwrite=True)
+        metrics = lambda data: data["models"]["selected"]["overall"]
+        self.mutate_json("summary.json", lambda data: metrics(data).update(mae=-0.0))
+        validate_evaluation_bundle(self.root)
+        self.mutate_json("summary.json", lambda data: metrics(data).update(mae=1e-14))
+        with self.assertRaisesRegex(ValueError, "error magnitude sign or zero"):
+            validate_evaluation_bundle(self.root)
+
     def test_tolerance_and_cli(self):
         self.mutate_json('summary.json', lambda d: d['models']['selected']['overall'].update(mae=d['models']['selected']['overall']['mae']+1e-13))
         validate_evaluation_bundle(self.root)
