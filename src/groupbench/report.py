@@ -193,20 +193,21 @@ def write_payloads(payloads: dict[str, str], output_dir, *, overwrite: bool = Fa
     if not payloads:
         raise ValueError("At least one output payload is required.")
     for name, content in payloads.items():
-        if not isinstance(name, str) or name in ("", ".", "..", "checksums.json") or "/" in name or "\\" in name or Path(name).is_absolute():
+        if not isinstance(name, str) or name in ("", ".", "..", "checksums.json") or "/" in name or "\\" in name or "\x00" in name or Path(name).is_absolute():
             raise ValueError("Payload names must be plain basenames and cannot be checksums.json.")
         if not isinstance(content, str):
             raise TypeError("Output payloads must be UTF-8 text strings.")
+    # Reject unencodable content before creating even a destination directory.
+    payloads = dict(payloads)
+    hashes = {name: hashlib.sha256(content.encode("utf-8")).hexdigest() for name, content in payloads.items()}
+    payloads["checksums.json"] = json.dumps({"algorithm": "sha256", "files": hashes}, indent=2) + "\n"
+    names = tuple(payloads)
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
-    names = tuple(payloads) + ("checksums.json",)
     if overwrite:
         check_overwrite_artifact_paths(out, names)
     elif any((out / name).exists() or (out / name).is_symlink() for name in names):
         raise FileExistsError(f"Output files already exist in {out}; choose a new directory or pass overwrite=True.")
-    payloads = dict(payloads)
-    hashes = {name: hashlib.sha256(content.encode("utf-8")).hexdigest() for name, content in payloads.items()}
-    payloads["checksums.json"] = json.dumps({"algorithm": "sha256", "files": hashes}, indent=2) + "\n"
     with tempfile.TemporaryDirectory(prefix=".groupbench-", dir=out) as staging:
         for name, content in payloads.items():
             # Write the exact UTF-8 bytes used by the checksum calculation.

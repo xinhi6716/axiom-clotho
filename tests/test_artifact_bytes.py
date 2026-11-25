@@ -101,6 +101,15 @@ class ArtifactByteTests(unittest.TestCase):
                                overwrite=True)
         self.assertEqual({p.name:p.read_bytes() for p in self.out.iterdir()}, before)
 
+    def test_invalid_payloads_do_not_create_a_destination(self):
+        for payload, error in (({'manifest.json': '\ud800'}, UnicodeEncodeError),
+                               ({'invalid\x00.json': '{}'}, ValueError)):
+            with self.subTest(error=error):
+                requested = self.out / 'missing' / 'bundle'
+                with self.assertRaises(error):
+                    write_payloads(payload, requested)
+                self.assertFalse(requested.parent.exists())
+
     def test_invalid_unicode_never_commits(self):
         with self.assertRaises(UnicodeEncodeError):
             write_payloads({'manifest.json':'{}', 'predictions.csv':'\ud800'}, self.out)
