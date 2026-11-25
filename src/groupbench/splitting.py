@@ -245,3 +245,116 @@ def plan_crossed_holdout(rows, held_device, held_recipe):
     if not all(quadrants):
         raise ValueError("Each crossed quadrant must be nonempty; check held identities and support.")
     return CrossedHoldout(*(tuple(ids) for ids in quadrants))
+
+
+@dataclass(frozen=True, slots=True)
+class RunDeviceAlias:
+    """A locally named device in one source run (acquisition episode)."""
+
+    source: str
+    run: str
+    raw_device: str | int
+
+
+@dataclass(frozen=True, slots=True)
+class SourceReadKey:
+    """A read identity in its original acquisition, not a physical identity."""
+
+    alias: RunDeviceAlias
+    observation: str | int
+
+
+@dataclass(frozen=True, slots=True)
+class RunDeviceBinding:
+    alias: RunDeviceAlias
+    physical: PhysicalDevice
+
+
+@dataclass(frozen=True, slots=True)
+class ResolvedDeviceRead:
+    key: SourceReadKey
+    physical: PhysicalDevice
+
+
+@dataclass(frozen=True, slots=True)
+class DeviceRolePreflight:
+    train: tuple[ResolvedDeviceRead, ...]
+    calibration: tuple[ResolvedDeviceRead, ...]
+    evaluation: tuple[ResolvedDeviceRead, ...]
+
+
+_UNRESOLVED_DEVICE_IDS = frozenset({"unknown", "unreported", "not_reported"})
+
+
+def _run_identifier(value):
+    return _crossed_key(value) or (type(value) is int and -(2**63) <= value < 2**63)
+
+
+def _resolved_identifier(value):
+    return _run_identifier(value) and (
+        type(value) is int or value.casefold() not in _UNRESOLVED_DEVICE_IDS
+    )
+
+
+def _run_alias(alias):
+    if (type(alias) is not RunDeviceAlias or not _crossed_key(alias.source)
+            or not _crossed_key(alias.run) or not _resolved_identifier(alias.raw_device)):
+        raise ValueError("Run device alias requires an exact source, run and resolved local device ID.")
+
+
+def preflight_device_roles(*, train, calibration, evaluation, bindings) -> DeviceRolePreflight:
+    """Resolve and keep every original read while requiring disjoint roles.
+
+    Every observed source/run/local-device alias requires one explicit binding
+    to a canonical physical device; distinct aliases can resolve to the same
+    device within a role. Identical full source read keys are not allowed. Run
+    labels distinguish episodes and need not be globally unique. This is a
+    metadata check only: no measuring, fitting, ranking, or identity inference.
+    """
+    roles = (("train", train), ("calibration", calibration), ("evaluation", evaluation))
+    if any(type(records) not in (list, tuple) or not records for _, records in roles):
+        raise ValueError("Each device role requires a nonempty explicit list or tuple of reads.")
+    size = sum(len(records) for _, records in roles)
+    if size > MAX_ROWS:
+        raise ValueError(f"Device-role read roster exceeds the {MAX_ROWS}-row limit.")
+    if type(bindings) not in (list, tuple) or not 1 <= len(bindings) <= size:
+        raise ValueError("Run device bindings require a nonempty bounded list or tuple.")
+
+    by_alias = {}
+    for binding in tuple(bindings):
+        if type(binding) is not RunDeviceBinding:
+            raise ValueError("Run device bindings require RunDeviceBinding records.")
+        _run_alias(binding.alias)
+        device = binding.physical
+        if (type(device) is not PhysicalDevice or not _crossed_key(device.namespace)
+                or not _resolved_identifier(device.device)):
+            raise ValueError("A binding requires an explicit resolved canonical physical device.")
+        if binding.alias in by_alias:
+            raise ValueError("Run device bindings repeat a source/run/device alias.")
+        by_alias[binding.alias] = device
+
+    seen_reads, seen_aliases, device_role = set(), set(), {}
+    outputs = []
+    for role, records in roles:
+        output = []
+        for key in tuple(records):
+            if type(key) is not SourceReadKey:
+                raise ValueError("Device-role reads require SourceReadKey records.")
+            _run_alias(key.alias)
+            if not _run_identifier(key.observation):
+                raise ValueError("A source read requires an exact local observation ID.")
+            device = by_alias.get(key.alias)
+            if device is None:
+                raise ValueError("A declared source/run/device alias has no physical binding.")
+            previous = device_role.setdefault(device, role)
+            if previous != role:
+                raise ValueError(f"A declared physical device overlaps the {previous} and {role} roles.")
+            if key in seen_reads:
+                raise ValueError("A compound source read key is repeated.")
+            seen_reads.add(key)
+            seen_aliases.add(key.alias)
+            output.append(ResolvedDeviceRead(key, device))
+        outputs.append(tuple(output))
+    if seen_aliases != by_alias.keys():
+        raise ValueError("Run device bindings contain aliases absent from the read roster.")
+    return DeviceRolePreflight(*outputs)
