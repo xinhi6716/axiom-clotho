@@ -583,3 +583,41 @@ fn subnormal_rmse_ratio_does_not_publish_a_false_skill_tie() {
         .contains("Evaluation exceeds the supported floating-point range"));
     assert!(!w.0.join("report.json").exists());
 }
+
+#[test]
+fn maximum_singleton_group_roster_keeps_sorted_group_reports() {
+    const N: usize = 20_000;
+    let w = Workspace::new();
+    let ids: Vec<_> = (0..N).rev().map(|i| format!("row-{i:05}")).collect();
+    let groups: Vec<_> = (0..N).rev().map(|i| format!("group-{i:05}")).collect();
+    for (name, value) in [
+        ("observed.json", 0.0),
+        ("model.json", 1.0),
+        ("baseline.json", 2.0),
+    ] {
+        let mut document = series(serde_json::json!(vec![value; N]));
+        document["row_ids"] = serde_json::json!(ids);
+        w.write(name, &document.to_string());
+    }
+    w.write(
+        "groups.json",
+        &mapping(serde_json::json!(ids), serde_json::json!(groups)).to_string(),
+    );
+    let result = w.run(&group_args());
+    assert!(result.status.success(), "{:?}", result);
+    let report: serde_json::Value =
+        serde_json::from_slice(&fs::read(w.0.join("report.json")).unwrap()).unwrap();
+    let summary = &report["grouped_summary"];
+    assert_eq!(summary["n_groups"], N);
+    assert_eq!(summary["improved_groups"], N);
+    assert_eq!(summary["pooled_row_mean_squared_error_delta"], 3.0);
+    assert_eq!(summary["macro_equal_group_mean_squared_error_delta"], 3.0);
+    let rows = summary["groups"].as_array().unwrap();
+    assert_eq!(rows.len(), N);
+    for (row, group) in rows.iter().zip(groups.iter().rev()) {
+        assert_eq!(row["group_id"], group.as_str());
+        assert_eq!(row["n_rows"], 1);
+        assert_eq!(row["baseline_mse"], 4.0);
+        assert_eq!(row["model_mse"], 1.0);
+    }
+}

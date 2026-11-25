@@ -14,13 +14,14 @@ struct Mapping {
 
 // Scaled accumulation avoids overflowing the sum. Reject representational
 // underflow rather than reporting a false exact zero for a nonzero mean.
-fn mean(values: &[f64]) -> Result<f64> {
-    let scale = values.iter().map(|v| v.abs()).fold(0.0, f64::max);
+fn mean(values: impl ExactSizeIterator<Item = f64> + Clone) -> Result<f64> {
+    let len = values.len();
+    let scale = values.clone().map(f64::abs).fold(0.0, f64::max);
     if scale == 0.0 {
         return Ok(0.0);
     }
     let (mut sum, mut correction) = (0.0_f64, 0.0_f64);
-    for &value in values {
+    for value in values {
         let term = value / scale;
         if value != 0.0 && term == 0.0 {
             return Err("Grouped squared-error range is too wide".into());
@@ -34,7 +35,7 @@ fn mean(values: &[f64]) -> Result<f64> {
         sum = next;
     }
     let total = sum + correction;
-    let normalized = total / values.len() as f64;
+    let normalized = total / len as f64;
     if total != 0.0 && normalized == 0.0 {
         return Err("Grouped squared-error mean is outside the supported range".into());
     }
@@ -99,16 +100,28 @@ pub fn summarize(
         model_squares.push(m);
         deltas.push(b - m);
     }
-    let mut rows = Vec::new();
-    let mut means = Vec::new();
+    let mut rows = Vec::with_capacity(groups.len());
+    let mut means = Vec::with_capacity(groups.len());
     let (mut improved, mut tied, mut worsened, mut perfect) = (0, 0, 0, 0);
     for (group, indices) in &groups {
-        let values: Vec<_> = indices.iter().map(|&i| deltas[i]).collect();
-        let delta = mean(&values)?;
-        let baseline_values: Vec<_> = indices.iter().map(|&i| baseline_squares[i]).collect();
-        let model_values: Vec<_> = indices.iter().map(|&i| model_squares[i]).collect();
-        let baseline_mse = mean(&baseline_values)?;
-        let model_mse = mean(&model_values)?;
+        // Each mean traverses the same ordered rows for scale and summation.
+        // Borrow the values by index instead of copying three group-sized buffers.
+        let (delta, baseline_mse, model_mse) = if let &[i] = indices.as_slice() {
+            // A singleton mean is its value, except the existing mean returns
+            // positive zero for an all-zero input.
+            let canonical = |value| if value == 0.0 { 0.0 } else { value };
+            (
+                canonical(deltas[i]),
+                baseline_squares[i],
+                model_squares[i],
+            )
+        } else {
+            (
+                mean(indices.iter().map(|&i| deltas[i]))?,
+                mean(indices.iter().map(|&i| baseline_squares[i]))?,
+                mean(indices.iter().map(|&i| model_squares[i]))?,
+            )
+        };
         let baseline_perfect = indices.iter().all(|&i| baseline_squares[i] == 0.0);
         if delta > 0.0 {
             improved += 1;
@@ -131,8 +144,8 @@ pub fn summarize(
         "schema_version": "clotho.declared_group_comparison.v1",
         "delta_definition": "mean(baseline squared error - model squared error); positive favors model",
         "n_groups": groups.len(), "n_rows": row_ids.len(),
-        "pooled_row_mean_squared_error_delta": mean(&deltas)?,
-        "macro_equal_group_mean_squared_error_delta": mean(&means)?,
+        "pooled_row_mean_squared_error_delta": mean(deltas.iter().copied())?,
+        "macro_equal_group_mean_squared_error_delta": mean(means.iter().copied())?,
         "improved_groups": improved, "tied_groups": tied, "worsened_groups": worsened,
         "baseline_perfect_groups": perfect,
         "independence_verified": false, "provenance_verified": false,
