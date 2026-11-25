@@ -119,15 +119,34 @@ impl KnnRegressor {
                     }
                     distances.push((d, i));
                 }
-                distances.sort_unstable_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
-                exact_mean::checked_mean(
-                    distances[..self.k].iter().map(|(_, i)| self.targets[*i]),
-                    self.k,
-                )
+                let neighbors = nearest_subset(&mut distances, self.k);
+                exact_mean::checked_mean(neighbors.iter().map(|(_, i)| self.targets[*i]), self.k)
             })
             .collect()
     }
 }
+// Only membership matters: the exact mean and its normalization check
+// are independent of target order. Distances arrive in original row order.
+fn nearest_subset(distances: &mut [(f64, usize)], k: usize) -> &[(f64, usize)] {
+    if k == distances.len() {
+        return distances;
+    }
+    // Fit guarantees 1 <= k; the shorter request leaves at least two rows.
+    if distances[0].0.total_cmp(&distances[1].0).is_le() {
+        // Equal distances already follow the training index tie-break.
+        if distances.windows(2).all(|w| w[0].0.total_cmp(&w[1].0).is_le()) {
+            return &distances[..k];
+        }
+    } else if distances.windows(2).all(|w| w[0].0.total_cmp(&w[1].0).is_gt()) {
+        // Strict decrease only: a reversed tied run would change membership.
+        return &distances[distances.len() - k..];
+    }
+    distances.select_nth_unstable_by(k - 1, |a, b| {
+        a.0.total_cmp(&b.0).then(a.1.cmp(&b.1))
+    });
+    &distances[..k]
+}
+
 fn validate(x: &[Vec<f64>], width: usize) -> Result<(), KnnError> {
     if x.is_empty() {
         return Err(KnnError::Empty);

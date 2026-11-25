@@ -140,3 +140,60 @@ fn zero_and_negative_targets_are_valid() {
         );
     }
 }
+
+#[test]
+fn cutoff_inside_tied_distances_replays_row_order_and_exact_target_mean() {
+    // The first two of four distance-one rows should join the exact match.
+    // Put the exact match late so the input order is not distance order.
+    let x = [[2.0], [1.0], [-1.0], [1.0], [-1.0], [0.0]].map(Vec::from);
+    let y = [10.0, 1e16, -1e16, 64.0, 128.0, 1.0];
+    let model = KnnRegressor::fit(&x, &y, 3).unwrap();
+    let result = model.predict(&[vec![0.0]]).unwrap();
+    assert_eq!(result[0].to_bits(), (1.0_f64 / 3.0).to_bits());
+
+    // Make the cutoff fall within a run large enough for nontrivial partitioning.
+    let mut x = vec![vec![2.0]; 128];
+    let mut y = vec![1024.0; 128];
+    for (i, point, target) in [
+        (20, -1.0, 1e16),
+        (38, 1.0, -1e16),
+        (57, -1.0, 64.0),
+        (77, 1.0, 128.0),
+        (99, 0.0, 1.0),
+    ] {
+        x[i][0] = point;
+        y[i] = target;
+    }
+    let model = KnnRegressor::fit(&x, &y, 3).unwrap();
+    let result = model.predict(&[vec![0.0]]).unwrap();
+    assert_eq!(result[0].to_bits(), (1.0_f64 / 3.0).to_bits());
+}
+
+#[test]
+fn validates_distances_to_discarded_rows_even_for_one_neighbor() {
+    // The matching row is first, but a later row loses a distinct
+    // coordinate difference when normalized and still must be validated.
+    let small = f64::from_bits(1);
+    let model = KnnRegressor::fit(
+        &[vec![small * 3.0, 0.0], vec![small * 2.0, 1.0], vec![2.0, 1.0]],
+        &[3.0, 5.0, 7.0],
+        1,
+    )
+    .unwrap();
+    assert_eq!(
+        model.predict(&[vec![small * 3.0, 0.0]]),
+        Err(KnnError::NumericOverflow),
+    );
+}
+
+#[test]
+fn reverse_distance_order_only_skips_partition_when_strict() {
+    let x = [[5.0], [4.0], [3.0], [2.0], [1.0], [0.0]].map(Vec::from);
+    let y = [1.0, 2.0, 3.0, 4.0, 6.0, 10.0];
+    let model = KnnRegressor::fit(&x, &y, 2).unwrap();
+    assert_eq!(model.predict(&[vec![0.0]]).unwrap(), vec![8.0]);
+
+    let x = [[5.0], [4.0], [3.0], [1.0], [-1.0], [0.0]].map(Vec::from);
+    let model = KnnRegressor::fit(&x, &y, 2).unwrap();
+    assert_eq!(model.predict(&[vec![0.0]]).unwrap(), vec![7.0]);
+}
