@@ -79,7 +79,7 @@ def plan_benchmark(frame: pd.DataFrame, *, target: str, group: str, features=Non
 source_sha256: str | None = None, categorical_encoding: str = LEGACY, inner_strategy: str = GROUP, domain: str | None = None) -> dict:
     """Validate a nested evaluation and return its exact no-fit work schedule."""
     validate_source_sha256(source_sha256)
-    X, _, groups, seed, schedule = _prepare_benchmark(
+    X, _, groups, seed, schedule, _ = _prepare_benchmark(
         frame, target=target, group=group, features=features, outer_splits=outer_splits,
         inner_splits=inner_splits, random_state=random_state, baselines=baselines, objective=objective, categorical_encoding=categorical_encoding, inner_strategy=inner_strategy, domain=domain)
     result = _base_report(X, groups, schedule[0][2], mode="run", target=target,

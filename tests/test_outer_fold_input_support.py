@@ -14,7 +14,7 @@ class OuterSupportTests(unittest.TestCase):
 
     def test_exact_benchmark_schedule_and_no_fit(self):
         X,g=self.fixture();frame=X.assign(group=g,y=np.arange(18))
-        _,_,_,_,schedule=_prepare_benchmark(frame,target='y',group='group',features=['x','kind'],outer_splits=3,inner_splits=2,random_state=9,baselines=('ridge',),objective='group_mae')
+        _,_,_,_,schedule,_=_prepare_benchmark(frame,target='y',group='group',features=['x','kind'],outer_splits=3,inner_splits=2,random_state=9,baselines=('ridge',),objective='group_mae')
         with patch('groupbench.model.make_pipeline',side_effect=AssertionError('no model construction')):
             out=outer_fold_input_support(X,g,outer_splits=3,random_state=9)
         for fold,(train,test,_) in zip(out['folds'],schedule):

@@ -29,6 +29,32 @@ class DomainInnerTests(unittest.TestCase):
         self.assertIsNone(r.manifest['config']['inner_splits'])
         self.assertIn('Outer evaluation still holds out groups', ' '.join(r.manifest['limitations']))
 
+    def test_benchmark_domain_provenance_uses_the_executed_metadata_snapshot(self):
+        frame = fixture()
+        baseline = benchmark(frame.copy(deep=True), outer_splits=3, **ARGS)
+        mutated = ["D", "E", "D", "F", "E", "F"]
+        fit_calls = 0
+
+        def change_source_after_preflight(*args, **kwargs):
+            nonlocal fit_calls
+            if fit_calls == 0:
+                # An in-place edit to caller-owned metadata once the whole
+                # schedule has been prepared must not relabel executed folds.
+                frame["d"] = mutated
+            fit_calls += 1
+            return _fit_pipeline(*args, **kwargs)
+
+        with patch("groupbench.model._fit_pipeline", side_effect=change_source_after_preflight):
+            result = benchmark(frame, outer_splits=3, **ARGS)
+
+        self.assertEqual(fit_calls, 38)
+        self.assertEqual(frame["d"].tolist(), mutated)
+        pd.testing.assert_frame_equal(result.predictions, baseline.predictions)
+        self.assertEqual(result.manifest["outer_folds"], baseline.manifest["outer_folds"])
+        self.assertEqual(result.manifest["config"], baseline.manifest["config"])
+        self.assertEqual(result.manifest["run_key"], baseline.manifest["run_key"])
+        self.assertEqual(_check(result.manifest, result.summary, result.predictions.to_csv(index=False).encode())[0], "1.3")
+
     def test_prediction_counts_and_schema(self):
         f=fixture(); p=plan_prediction(f,f[['x']],**ARGS)
         with patch('groupbench.model._fit_pipeline', wraps=_fit_pipeline) as call:

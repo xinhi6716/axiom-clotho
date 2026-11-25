@@ -73,7 +73,7 @@ def _prepare_benchmark(frame, *, target, group, features, outer_splits,
                                    objective=objective, categorical_encoding=categorical_encoding, inner_strategy=inner_strategy,
                                    domains=None if domains is None else domains[train])
         schedule.append((train, test, selection))
-    return X, y, groups, seed, schedule
+    return X, y, groups, seed, schedule, domains
 
 
 def benchmark(frame: pd.DataFrame, *, target: str, group: str, features=None,
@@ -90,7 +90,7 @@ def benchmark(frame: pd.DataFrame, *, target: str, group: str, features=None,
     """
     validate_source_sha256(source_sha256)
     started = time.perf_counter()
-    X, y, groups, seed, schedule = _prepare_benchmark(
+    X, y, groups, seed, schedule, domains = _prepare_benchmark(
         frame, target=target, group=group, features=features, outer_splits=outer_splits,
         inner_splits=inner_splits, random_state=random_state, baselines=baselines, objective=objective, categorical_encoding=categorical_encoding, inner_strategy=inner_strategy, domain=domain)
     splits = [(train, test) for train, test, _ in schedule]
@@ -141,7 +141,9 @@ def benchmark(frame: pd.DataFrame, *, target: str, group: str, features=None,
     if inner_strategy == DOMAIN:
         config.update(inner_strategy=inner_strategy, domain=domain, inner_splits=None,
                       inner_splits_per_outer=[len(plan.splits) for _, _, plan in schedule],
-                      **domain_metadata(frame[domain].to_numpy(), groups))
+                      # Bind the validated vector used to build the schedule,
+                      # not a second read of the caller's frame after fitting.
+                      **domain_metadata(domains, groups))
     config.update(encoding_options(categorical_encoding))
     if optional_capabilities(baselines) or inner_strategy == DOMAIN:
         config["categorical_encoding"] = categorical_encoding
