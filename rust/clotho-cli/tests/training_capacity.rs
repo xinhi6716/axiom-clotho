@@ -160,3 +160,24 @@ fn opt_in_lexical_validation_and_model_scope_are_explicit() {
     fit[12] = "true";
     assert!(w.run(&fit).status.success());
 }
+
+#[test]
+fn default_mixed_fit_cannot_publish_an_archive_too_large_to_reload() {
+    let w = Workspace::new();
+    // U+001F is valid categorical text in this adapter and uses six bytes
+    // per occurrence after JSON escaping. This small row roster therefore
+    // exceeds the artifact cap despite entering as a <64 MiB input.
+    let mut csv = String::from("kind,y\n");
+    csv.push_str(&"\u{001f}".repeat(12 * 1024 * 1024));
+    csv.push_str(",1\nsmall,3\n");
+    w.write("train.csv", &csv);
+    drop(csv);
+    let result = w.run(&[
+        "fit", "--csv", "train.csv", "--target", "y", "--features", "kind",
+        "--model", "mean", "--preprocess", "mixed", "--categorical", "kind",
+        "--out", "model.json",
+    ]);
+    assert_eq!(result.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&result.stderr).contains("64 MiB reload limit"));
+    assert!(!w.0.join("model.json").exists());
+}

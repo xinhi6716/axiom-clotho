@@ -23,7 +23,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::error::Error;
 use std::fs::{File, OpenOptions};
-use std::io::{Read, Write};
+use std::io::{self, Read, Write};
 use std::path::Path;
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
@@ -226,6 +226,72 @@ fn read_bounded(path: &str) -> Result<Vec<u8>> {
     }
     Ok(bytes)
 }
+// Write fit JSON into a bounded private buffer. The final path is created
+// only after serialization succeeds, and every archive fits the reload cap.
+struct ArtifactBuffer {
+    bytes: Vec<u8>,
+    limit: usize,
+}
+
+impl Write for ArtifactBuffer {
+    fn write(&mut self, chunk: &[u8]) -> io::Result<usize> {
+        let end = self
+            .bytes
+            .len()
+            .checked_add(chunk.len())
+            .filter(|&end| end <= self.limit)
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "Model artifact exceeds the 64 MiB reload limit",
+                )
+            })?;
+        if end > self.bytes.capacity() {
+            let capacity = end
+                .checked_next_power_of_two()
+                .unwrap_or(self.limit)
+                .min(self.limit);
+            self.bytes
+                .try_reserve_exact(capacity - self.bytes.len())
+                .map_err(|_| io::Error::new(io::ErrorKind::Other, "Unable to buffer model artifact"))?;
+        }
+        self.bytes.extend_from_slice(chunk);
+        Ok(chunk.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+fn artifact_bytes(artifact: &Artifact) -> Result<Vec<u8>> {
+    let mut buffer = ArtifactBuffer {
+        bytes: Vec::new(),
+        limit: MAX_BYTES as usize,
+    };
+    serde_json::to_writer_pretty(&mut buffer, artifact)?;
+    Ok(buffer.bytes)
+}
+
+#[cfg(test)]
+mod artifact_buffer_tests {
+    use super::*;
+
+    #[test]
+    fn complete_cap_is_accepted_and_the_next_chunk_is_not_appended() {
+        let mut buffer = ArtifactBuffer {
+            bytes: Vec::new(),
+            limit: 7,
+        };
+        buffer.write_all(b"abc").unwrap();
+        assert!(buffer.write_all(b"defgh").is_err());
+        assert_eq!(buffer.bytes, b"abc");
+        buffer.write_all(b"defg").unwrap();
+        assert!(buffer.write_all(b"h").is_err());
+        assert_eq!(buffer.bytes, b"abcdefg");
+    }
+}
+
 fn table(path: &str) -> Result<Table> {
     table_bytes(&read_bounded(path)?)
 }
@@ -691,10 +757,7 @@ fn run() -> Result<()> {
             return mean_inference::export(&artifact, output);
         }
         artifact.fit()?;
-        let bytes = serde_json::to_vec_pretty(&artifact)?;
-        if artifact.training_y.len() > 20_000 && bytes.len() as u64 > MAX_BYTES {
-            return Err("Extended training artifact exceeds the 64 MiB reload limit".into());
-        }
+        let bytes = artifact_bytes(&artifact)?;
         create_file(output, &bytes)?;
         println!(
             "Wrote model specification and private training data ({} rows)",
