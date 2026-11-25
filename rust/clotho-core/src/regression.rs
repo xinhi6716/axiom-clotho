@@ -363,9 +363,16 @@ fn checked_mul(a: f64, b: f64) -> Result<f64, RegressionError> {
 }
 
 fn compensated_sum(values: impl Iterator<Item = f64>) -> Result<f64, RegressionError> {
+    compensated_checked_sum(values.map(Ok))
+}
+
+fn compensated_checked_sum(
+    values: impl Iterator<Item = Result<f64, RegressionError>>,
+) -> Result<f64, RegressionError> {
     let mut sum = 0.0_f64;
     let mut correction = 0.0_f64;
     for value in values {
+        let value = value?;
         let next = finite(sum + value)?;
         correction += if sum.abs() >= value.abs() {
             (sum - next) + value
@@ -378,12 +385,7 @@ fn compensated_sum(values: impl Iterator<Item = f64>) -> Result<f64, RegressionE
 }
 
 fn dot(a: &[f64], b: &[f64]) -> Result<f64, RegressionError> {
-    let products = a
-        .iter()
-        .zip(b)
-        .map(|(a, b)| checked_mul(*a, *b))
-        .collect::<Result<Vec<_>, _>>()?;
-    compensated_sum(products.into_iter())
+    compensated_checked_sum(a.iter().zip(b).map(|(&a, &b)| checked_mul(a, b)))
 }
 
 fn norm(values: &[f64]) -> f64 {
@@ -445,10 +447,9 @@ fn solve_qr(mut columns: Vec<Vec<f64>>, mut target: Vec<f64>) -> Result<Vec<f64>
     check_condition(&columns)?;
     let mut solution = vec![0.0; count];
     for i in (0..count).rev() {
-        let products = (i + 1..count)
-            .map(|j| checked_mul(columns[j][i], solution[j]))
-            .collect::<Result<Vec<_>, _>>()?;
-        let contribution = compensated_sum(products.into_iter())?;
+        let contribution = compensated_checked_sum(
+            (i + 1..count).map(|j| checked_mul(columns[j][i], solution[j])),
+        )?;
         solution[i] = checked_div(target[i] - contribution, columns[i][i])?;
     }
     let mut unpermuted = vec![0.0; count];
@@ -491,6 +492,21 @@ fn check_condition(columns: &[Vec<f64>]) -> Result<(), RegressionError> {
 #[cfg(test)]
 mod pivot_tests {
     use super::*;
+
+    #[test]
+    fn qr_dot_keeps_cancellation_and_rejects_product_or_sum_failures() {
+        let max = f64::MAX;
+        let tiny = f64::from_bits(1);
+        assert_eq!(dot(&[max, 1.0, -max], &[1.0; 3]), Ok(1.0));
+        assert_eq!(dot(&[tiny], &[1.0]).unwrap().to_bits(), 1);
+        assert_eq!(dot(&[], &[]).unwrap().to_bits(), 0);
+        assert_eq!(dot(&[tiny], &[0.5]), Err(RegressionError::NumericFailure));
+        assert_eq!(dot(&[max], &[2.0]), Err(RegressionError::NumericFailure));
+        assert_eq!(
+            dot(&[max, max, -max], &[1.0; 3]),
+            Err(RegressionError::NumericFailure)
+        );
+    }
 
     #[test]
     fn trailing_pivot_retains_last_equal_norm_and_ignores_the_prefix() {
