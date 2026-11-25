@@ -202,13 +202,22 @@ pub fn extract_branch(a: &Acquisition, s: &[Sample], p: Settings) -> Result<Feat
         if span > p.max_bracket_span_v {
             return Err(FetError::BracketTooWide);
         }
-        let t =
-            (p.criterion_a - w[0].drain_current_a) / (w[1].drain_current_a - w[0].drain_current_a);
+        // Form the small weight from the nearer current. Starting at the
+        // far endpoint can round a strictly interior fraction to one.
+        let d0 = (p.criterion_a - w[0].drain_current_a).abs();
+        let d1 = (p.criterion_a - w[1].drain_current_a).abs();
+        let (near, far, offset) =
+            if d0 < d1 || (d0 == d1 && w[0].gate_voltage_v < w[1].gate_voltage_v) {
+                (&w[0], &w[1], d0)
+            } else {
+                (&w[1], &w[0], d1)
+            };
+        let t = offset / (far.drain_current_a - near.drain_current_a).abs();
         if !(0.0 < t && t < 1.0) {
             return Err(FetError::NumericalRange);
         }
         (
-            w[0].gate_voltage_v * (1.0 - t) + w[1].gate_voltage_v * t,
+            near.gate_voltage_v * (1.0 - t) + far.gate_voltage_v * t,
             span,
             vec![w[0].source_row, w[1].source_row],
         )

@@ -315,3 +315,30 @@ fn reversed_negative_sweep_rejects_distinct_currents_after_a_legal_plateau() {
         FetError::NumericalRange
     );
 }
+
+#[test]
+fn near_left_current_criterion_is_stable_under_sweep_reversal() {
+    let mut s = samples();
+    s.truncate(3);
+    for (q, current) in s.iter_mut().zip([1e-30, 1e-8, 1e-7]) {
+        q.drain_current_a = current;
+    }
+    let mut p = settings();
+    p.criterion_a = 2e-30;
+    for sign in [1.0, -1.0] {
+        p.positive_current = sign > 0.0;
+        p.criterion_a = sign * 2e-30;
+        let forward: Vec<_> = s.iter().map(|q| Sample {
+            drain_current_a: sign * q.drain_current_a,
+            ..*q
+        }).collect();
+        let mut reverse = forward.clone();
+        reverse.reverse();
+        let a = extract_branch(&acquisition(), &forward, p).unwrap();
+        let b = extract_branch(&acquisition(), &reverse, p).unwrap();
+        assert!((a.criterion_gate_voltage_v / 1e-22 - 1.0).abs() < 1e-14);
+        assert_eq!(a.criterion_gate_voltage_v.to_bits(), b.criterion_gate_voltage_v.to_bits());
+        assert_eq!(a.criterion_source_rows, vec![2, 3]);
+        assert_eq!(b.criterion_source_rows, vec![3, 2]);
+    }
+}
