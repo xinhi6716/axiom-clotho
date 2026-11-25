@@ -40,6 +40,78 @@ pub enum GroupIntervalDiagnostic {
     },
 }
 
+pub(crate) struct IntervalRoster<'a> {
+    expected: BTreeSet<RowKey<'a>>,
+    pub(crate) observed: BTreeMap<RowKey<'a>, f64>,
+}
+
+pub(crate) enum ValidatedBounds<'a> {
+    Insufficient { groups: usize, rank: usize },
+    Finite(BTreeMap<RowKey<'a>, (f64, f64)>),
+}
+
+impl<'a> IntervalRoster<'a> {
+    pub(crate) fn new(
+        roster: &[RowKey<'a>],
+        observations: &[IntervalObservation<'a>],
+    ) -> Result<Self, IntervalDiagnosticError> {
+        use IntervalDiagnosticError as Error;
+        if roster.len() > MAX_CALIBRATION_ROWS || observations.len() > MAX_CALIBRATION_ROWS {
+            return Err(Error::Capacity);
+        }
+        if roster.is_empty() {
+            return Err(Error::EmptyRoster);
+        }
+        if !roster.iter().copied().chain(observations.iter().map(|r| r.key)).all(valid_key) {
+            return Err(Error::InvalidKey);
+        }
+        let expected: BTreeSet<_> = roster.iter().copied().collect();
+        let observed: BTreeMap<_, _> = observations.iter().map(|r| (r.key, r.value)).collect();
+        if expected.len() != roster.len() || observed.len() != observations.len()
+            || !expected.iter().copied().eq(observed.keys().copied()) {
+            return Err(Error::RosterMismatch);
+        }
+        if !observed.values().all(|x| x.is_finite()) {
+            return Err(Error::NonfiniteObservation);
+        }
+        Ok(Self { expected, observed })
+    }
+
+    // Carry the same bound checks into either single-arm scoring or paired
+    // scoring without rebuilding shared roster/observation maps.
+    pub(crate) fn bounds(
+        &self,
+        prediction: &GroupMaxIntervals<'a>,
+    ) -> Result<ValidatedBounds<'a>, IntervalDiagnosticError> {
+        use IntervalDiagnosticError as Error;
+        let intervals = match prediction {
+            GroupMaxIntervals::Finite { intervals, .. } => intervals,
+            GroupMaxIntervals::InsufficientFinite { groups, rank } => {
+                return Ok(ValidatedBounds::Insufficient { groups: *groups, rank: *rank });
+            }
+        };
+        if intervals.len() > MAX_CALIBRATION_ROWS {
+            return Err(Error::Capacity);
+        }
+        if !intervals.iter().all(|r| valid_key(r.key)) {
+            return Err(Error::InvalidKey);
+        }
+        let predicted: BTreeMap<_, _> = intervals
+            .iter()
+            .map(|r| (r.key, (r.lower, r.upper)))
+            .collect();
+        if predicted.len() != intervals.len()
+            || !self.expected.iter().copied().eq(predicted.keys().copied())
+        {
+            return Err(Error::RosterMismatch);
+        }
+        if !predicted.values().all(|(l, u)| l.is_finite() && u.is_finite() && l <= u) {
+            return Err(Error::InvalidBounds);
+        }
+        Ok(ValidatedBounds::Finite(predicted))
+    }
+}
+
 /// Match predictions and observations independently to the exact declared roster.
 /// Keys are literal pairs, row and group order are irrelevant, and endpoints
 /// are inclusive. An insufficient cutoff reports the supplied roster denominators, not zero
@@ -49,53 +121,21 @@ pub fn evaluate_group_intervals(
     prediction: &GroupMaxIntervals<'_>,
     observations: &[IntervalObservation<'_>],
 ) -> Result<GroupIntervalDiagnostic, IntervalDiagnosticError> {
-    use IntervalDiagnosticError as Error;
-
-    if roster.len() > MAX_CALIBRATION_ROWS || observations.len() > MAX_CALIBRATION_ROWS {
-        return Err(Error::Capacity);
-    }
-    if roster.is_empty() {
-        return Err(Error::EmptyRoster);
-    }
-    if !roster.iter().copied().chain(observations.iter().map(|r| r.key)).all(valid_key) {
-        return Err(Error::InvalidKey);
-    }
-    let expected: BTreeSet<_> = roster.iter().copied().collect();
-    let observed: BTreeMap<_, _> = observations.iter().map(|r| (r.key, r.value)).collect();
-    if expected.len() != roster.len() || observed.len() != observations.len()
-        || !expected.iter().copied().eq(observed.keys().copied()) {
-        return Err(Error::RosterMismatch);
-    }
-    if !observed.values().all(|x| x.is_finite()) {
-        return Err(Error::NonfiniteObservation);
-    }
+    let matched = IntervalRoster::new(roster, observations)?;
     let groups: BTreeSet<_> = roster.iter().map(|row| row.group).collect();
     let count = groups.len();
-    let intervals = match prediction {
-        GroupMaxIntervals::InsufficientFinite { groups, rank } => {
+    let predicted = match matched.bounds(prediction)? {
+        ValidatedBounds::Finite(predicted) => predicted,
+        ValidatedBounds::Insufficient { groups, rank } => {
             return Ok(GroupIntervalDiagnostic::InsufficientFinite {
-                calibration_groups: *groups, rank: *rank, rows: roster.len(), groups: count,
+                calibration_groups: groups, rank, rows: roster.len(), groups: count,
             });
         }
-        GroupMaxIntervals::Finite { intervals, .. } => intervals,
     };
-    if intervals.len() > MAX_CALIBRATION_ROWS {
-        return Err(Error::Capacity);
-    }
-    if !intervals.iter().all(|r| valid_key(r.key)) {
-        return Err(Error::InvalidKey);
-    }
-    let predicted: BTreeMap<_, _> = intervals.iter().map(|r| (r.key, (r.lower, r.upper))).collect();
-    if predicted.len() != intervals.len() || !expected.iter().copied().eq(predicted.keys().copied()) {
-        return Err(Error::RosterMismatch);
-    }
-    if !predicted.values().all(|(l, u)| l.is_finite() && u.is_finite() && l <= u) {
-        return Err(Error::InvalidBounds);
-    }
     let mut missed_groups = BTreeSet::new();
     let (mut below, mut above) = (0, 0);
     for (key, (lower, upper)) in predicted {
-        let value = observed[&key];
+        let value = matched.observed[&key];
         if value < lower {
             below += 1;
             missed_groups.insert(key.group);

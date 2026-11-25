@@ -1,7 +1,7 @@
 //! Paired descriptive coverage transitions on one complete interval roster.
 //! Not a statistical test, a calibration procedure, or a claim of independence.
 use crate::group_interval_diagnostics::{
-    evaluate_group_intervals, IntervalDiagnosticError, IntervalObservation,
+    IntervalDiagnosticError, IntervalObservation, IntervalRoster, ValidatedBounds,
 };
 use crate::group_max_calibration::RowKey;
 use crate::group_max_intervals::GroupMaxIntervals;
@@ -48,25 +48,25 @@ pub fn compare_interval_coverage(
     right: &GroupMaxIntervals<'_>,
     observations: &[IntervalObservation<'_>],
 ) -> Result<PairedIntervalCoverage, IntervalComparisonError> {
-    use GroupMaxIntervals::Finite;
-    evaluate_group_intervals(roster, left, observations).map_err(IntervalComparisonError::Left)?;
-    evaluate_group_intervals(roster, right, observations).map_err(IntervalComparisonError::Right)?;
-    let (left, right) = match (left, right) {
-        (Finite { intervals: l, .. }, Finite { intervals: r, .. }) => (l, r),
-        (l, r) => {
+    // Both arms use the same observation validation. Preserve left-first
+    // error precedence, including validating the right arm when the left
+    // arm has an insufficient (but otherwise valid) cutoff.
+    let matched = IntervalRoster::new(roster, observations).map_err(IntervalComparisonError::Left)?;
+    let left = matched.bounds(left).map_err(IntervalComparisonError::Left)?;
+    let right = matched.bounds(right).map_err(IntervalComparisonError::Right)?;
+    let (left_bounds, right_bounds) = match (left, right) {
+        (ValidatedBounds::Finite(left), ValidatedBounds::Finite(right)) => (left, right),
+        (left, right) => {
             return Err(IntervalComparisonError::InsufficientFinite {
-                left: !matches!(l, Finite { .. }),
-                right: !matches!(r, Finite { .. }),
+                left: matches!(left, ValidatedBounds::Insufficient { .. }),
+                right: matches!(right, ValidatedBounds::Insufficient { .. }),
             });
         }
     };
-    let observed: BTreeMap<_, _> = observations.iter().map(|r| (r.key, r.value)).collect();
-    let left_bounds: BTreeMap<_, _> = left.iter().map(|r| (r.key, (r.lower, r.upper))).collect();
-    let right_bounds: BTreeMap<_, _> = right.iter().map(|r| (r.key, (r.lower, r.upper))).collect();
     let mut group: BTreeMap<&str, (bool, bool)> = BTreeMap::new();
     let mut rows = CoverageTransitions::default();
     for &key in roster {
-        let v = observed[&key];
+        let v = matched.observed[&key];
         let (lo, hi) = left_bounds[&key];
         let l = lo <= v && v <= hi;
         let (lo, hi) = right_bounds[&key];
@@ -131,4 +131,29 @@ mod tests {
         assert_eq!(compare_interval_coverage(&[a], &l, &insufficient, &observed),
             Err(IntervalComparisonError::InsufficientFinite { left:false,right:true }));
     }
+
+    #[test]
+    fn validates_both_arms_before_reporting_insufficient_cutoff() {
+        let a = key("a", "1");
+        let roster = [a];
+        let mut right = arm(&[(a, true)]);
+        let GroupMaxIntervals::Finite { intervals, .. } = &mut right else { unreachable!() };
+        intervals[0].upper = f64::NAN;
+        let insufficient = GroupMaxIntervals::InsufficientFinite { groups: 1, rank: 2 };
+        let observations = [IntervalObservation { key: a, value: 0.0 }];
+        assert_eq!(
+            compare_interval_coverage(&roster, &insufficient, &right, &observations),
+            Err(IntervalComparisonError::Right(IntervalDiagnosticError::InvalidBounds))
+        );
+        let invalid_observations = [IntervalObservation { key: a, value: f64::NAN }];
+        assert_eq!(
+            compare_interval_coverage(&roster, &insufficient, &right, &invalid_observations),
+            Err(IntervalComparisonError::Left(IntervalDiagnosticError::NonfiniteObservation))
+        );
+        assert_eq!(
+            compare_interval_coverage(&roster, &insufficient, &insufficient, &observations),
+            Err(IntervalComparisonError::InsufficientFinite { left: true, right: true })
+        );
+    }
+
 }
