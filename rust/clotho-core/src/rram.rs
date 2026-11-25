@@ -286,7 +286,10 @@ pub fn extract_cohort(branches: &[Branch], p: Settings) -> Result<Vec<Features>,
         {
             return Err(RramError::InvalidConditions);
         }
-        let ratio = hrs.resistance_ohm / lrs.resistance_ohm;
+        // Both states share the same signed read voltage, which cancels.
+        // Form the ratio before rounding individual resistances: nearby
+        // currents can map to the same binary64 resistance.
+        let ratio = lrs.current_a / hrs.current_a;
         if !ratio.is_finite() || ratio <= 0.0 {
             return Err(RramError::NumericalRange);
         }

@@ -362,3 +362,24 @@ fn extreme_finite_paired_resistance_ratio_remains_finite() {
     let f = extract_cohort(&b, settings()).unwrap();
     assert!(f[0].resistance_ratio_median.is_finite());
 }
+
+#[test]
+fn paired_ratio_preserves_inversion_when_rounded_resistances_tie() {
+    let low_current = 0.21_f64;
+    let high_current = f64::from_bits(low_current.to_bits() + 1);
+    for sign in [1.0, -1.0] {
+        let mut rows = vec![
+            branch(State::Hrs, "1", sign * high_current, 2),
+            branch(State::Lrs, "1", sign * low_current, 3),
+        ];
+        for b in &mut rows {
+            b.conditions.read_voltage_v = sign;
+            b.samples[0].voltage_v = sign;
+        }
+        let result = extract_cohort(&rows, settings()).unwrap();
+        let p = &result[0].pairs[0];
+        assert_eq!(p.hrs.resistance_ohm, p.lrs.resistance_ohm);
+        assert_eq!(p.resistance_ratio.to_bits(), 1.0_f64.to_bits() - 1);
+        assert_eq!(result[0].ratio_below_one_cycle_count, 1);
+    }
+}
