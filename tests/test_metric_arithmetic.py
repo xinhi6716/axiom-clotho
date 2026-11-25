@@ -114,7 +114,7 @@ class MetricArithmeticTests(unittest.TestCase):
         # Isolate the aggregation boundary even if upstream metric arithmetic
         # later changes to support a wider range of individually finite scores.
         row = {"n_rows": 1, "mae": 1e308, "rmse": 1e308, "r2": None, "bias": 0.0}
-        with patch("groupbench.metrics.regression_metrics", side_effect=lambda *args: row.copy()):
+        with patch("groupbench.metrics._regression_metrics_from_validated", side_effect=lambda *args: row.copy()):
             with self.assertRaisesRegex(ValueError, "Metric arithmetic"):
                 grouped_metrics([0, 0], [0, 0], ["a", "b"])
 

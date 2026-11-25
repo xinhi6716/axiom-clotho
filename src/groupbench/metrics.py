@@ -93,7 +93,11 @@ def _metric_inputs(y_true, y_pred):
 
 def regression_metrics(y_true, y_pred) -> dict:
     """Return finite scores, or raise when float64 intermediate arithmetic fails."""
-    y, pred = _metric_inputs(y_true, y_pred)
+    return _regression_metrics_from_validated(*_metric_inputs(y_true, y_pred))
+
+
+def _regression_metrics_from_validated(y, pred):
+    """Score nonempty matching float64 vectors already checked by the caller."""
     with _checked_arithmetic():
         residual = pred - y
         # Detect genuinely undefined R² without a potentially overflowing mean
@@ -107,11 +111,13 @@ def regression_metrics(y_true, y_pred) -> dict:
         else:
             anchored = y - y[0]
             total = float(np.sum((anchored - anchored.mean()) ** 2))
+        mae = float(np.mean(np.abs(residual)))
+        squared_residual = residual**2
         return {
             "n_rows": len(y),
-            "mae": float(np.mean(np.abs(residual))),
-            "rmse": float(np.sqrt(np.mean(residual**2))),
-            "r2": float(1 - np.sum(residual**2) / total) if not constant else None,
+            "mae": mae,
+            "rmse": float(np.sqrt(np.mean(squared_residual))),
+            "r2": float(1 - np.sum(squared_residual) / total) if not constant else None,
             "bias": float(np.mean(residual)),
         }
 
@@ -126,8 +132,9 @@ def grouped_metrics(y_true, y_pred, groups) -> tuple[dict, list[dict]]:
     # Preserve encounter order and row order within each normalized group.
     for group, positions in pd.Series(np.arange(len(g))).groupby(g, sort=False).indices.items():
         idx = np.asarray(positions, dtype=int)
-        per_group.append({"group": str(group), **regression_metrics(y[idx], pred[idx])})
-    return _add_group_aggregates(regression_metrics(y, pred), per_group), per_group
+        score = _regression_metrics_from_validated(y[idx], pred[idx])
+        per_group.append({"group": str(group), **score})
+    return _add_group_aggregates(_regression_metrics_from_validated(y, pred), per_group), per_group
 
 
 def _add_group_aggregates(row_metrics, per_group):

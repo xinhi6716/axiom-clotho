@@ -9,6 +9,14 @@ validation, per-group-then-overall scoring order and equal-group weighting remai
 unchanged. This is not a new model, split strategy, metric or Rust backend.
 Binary scoring is unchanged.
 
+Grouped scoring validates the two complete source vectors once. It then scores
+each positional slice of those validated binary64 arrays (and the pooled
+arrays) without another input-conversion or finiteness scan. Every slice still
+runs the same checked arithmetic, in the same order. RMSE and defined R²
+reuse the computed elementwise squared residuals, but each keeps its original
+NumPy reduction; there is no new accumulation rule, approximation, or score
+semantics. Standalone regression scoring still validates its own source inputs.
+
 ## Reproduce a bounded end-to-end comparison
 
 With the current source and existing dependencies:

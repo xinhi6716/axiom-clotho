@@ -8,7 +8,8 @@ import pandas as pd
 
 from groupbench.data import validate_groups
 from groupbench.metrics import (
-    _checked_arithmetic, _metric_inputs, grouped_metrics, regression_metrics,
+    _checked_arithmetic, _metric_inputs, _metric_vector,
+    _regression_metrics_from_validated, grouped_metrics, regression_metrics,
 )
 
 
@@ -84,11 +85,21 @@ class GroupedMetricPositionTests(unittest.TestCase):
         calls = []
         def record(y, pred):
             calls.append((y.tolist(), pred.tolist()))
-            return regression_metrics(y, pred)
-        with patch('groupbench.metrics.regression_metrics', side_effect=record):
+            return _regression_metrics_from_validated(y, pred)
+        with patch('groupbench.metrics._regression_metrics_from_validated', side_effect=record):
             grouped_metrics([1, 2, 3], [3, 2, 1], ['b', 'a', 'b'])
         self.assertEqual(calls, [([1., 3.], [3., 1.]), ([2.], [2.]),
                                  ([1., 2., 3.], [3., 2., 1.])])
+
+    def test_source_metric_vectors_are_validated_only_once_each(self):
+        # Raw inputs still hit the full source checks; all group slices are
+        # selected from those already validated arrays.
+        with patch('groupbench.metrics._metric_vector', wraps=_metric_vector) as validate:
+            total, groups = grouped_metrics([1., 2., 3., 4.], [1., 0., 4., 3.],
+                                            ['b', 'a', 'b', 'c'])
+            self.assertEqual(total['n_rows'], 4)
+            self.assertEqual([row['n_rows'] for row in groups], [2, 1, 1])
+            self.assertEqual(validate.call_count, 2)
 
     def test_memberships_do_not_materialize_labeled_group_indexes(self):
         groupby_type = type(pd.Series([0, 1]).groupby(['b', 'a'], sort=False))

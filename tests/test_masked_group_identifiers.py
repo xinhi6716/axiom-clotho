@@ -55,7 +55,7 @@ class MaskedGroupIdentifierTests(unittest.TestCase):
 
     def test_grouped_scores_reject_masks_before_assigning_rows_to_groups(self):
         groups = np.ma.array(["invented-A", "invented-B"], mask=[False, True])
-        scorers = ((grouped_metrics, "groupbench.metrics.regression_metrics"),
+        scorers = ((grouped_metrics, "groupbench.metrics._regression_metrics_from_validated"),
                    (grouped_binary_metrics, "groupbench.binary.metrics.binary_metrics"))
         for scorer, target in scorers:
             with self.subTest(scorer=scorer.__name__):
