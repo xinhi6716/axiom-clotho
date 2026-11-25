@@ -86,3 +86,16 @@ completeness, values, independently observed clocks, physical identity, or
 lineage truth. The availability check cannot detect a missing revision absent
 from the declaration or omitted ancestry that was never declared. Labels,
 training behavior, and broader leakage are not audited.
+
+## Separate pre-run and post-process inputs
+
+A planned setting and a same-track measurement need different provenance even
+when both are in millimetres. For example, Ancalmo and Narra's
+[data article, Table 1 and §4.3](https://pmc.ncbi.nlm.nih.gov/articles/PMC12351335/)
+lists laser spot diameter as a process parameter but extracts track width
+from offline optical profilometry. For a pre-run predictor, audit the nominal
+setting at the original decision origin. Audit any separate post-process
+estimator at its own declared origin and give its baseline the same
+information budget. A later origin can make a feature temporally eligible;
+it does not establish that the feature and target are scientifically
+independent (e.g. both may come from the same measurement).

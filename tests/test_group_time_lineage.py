@@ -56,6 +56,37 @@ class GroupTimeLineageTests(TestCase):
         with self.assertRaises(FrozenInstanceError):
             audit.n_rows = 0
 
+    def test_nominal_and_postprocess_feature_budgets_require_different_origins(self):
+        # Retain one event archive and one row roster for both declarations.
+        plan = plan_group_forward_windows(
+            [1, "1"], group_spans=[GroupSpan(1, 1, 4, 5), GroupSpan("1", 8, 14, 15)],
+            windows=[TimeWindow(8, 16)], clock_id="acquisition", time_unit="step",
+        )
+        nominal = tuple(self.event(group, "nominal-spot", 0, -2, -1)
+                        for group in (1, "1"))
+        raw = (self.event(1, "width-read", 0, 2, 2),
+               self.event("1", "width-read", 0, 11, 11))
+        width = (self.event(1, "processed-width", 0, 2, 3, parents=(raw[0].ref,)),
+                 self.event("1", "processed-width", 0, 11, 12, parents=(raw[1].ref,)))
+        revisions = nominal + raw + width
+        nominal_only = tuple(RowLineage(row.key, (FeatureLineage("spot", spot.ref),))
+                             for row, spot in zip(self.rows, nominal))
+        augmented = tuple(replace(binding, roots=(*binding.roots, FeatureLineage("width", w.ref)))
+                          for binding, w in zip(nominal_only, width))
+        before = (replace(self.rows[0], origin=1), replace(self.rows[1], origin=9))
+        after = (replace(self.rows[0], origin=4), replace(self.rows[1], origin=13))
+
+        def audit(rows, names, bindings):
+            return audit_group_time_lineage(
+                plan, clock_id="acquisition", time_unit="step", features=names,
+                rows=rows, revisions=revisions, lineage=bindings,
+            ).n_row_revisions_checked
+
+        self.assertEqual(audit(before, ("spot",), nominal_only), 2)
+        with self.assertRaisesRegex(GroupTimeLineageError, "not the latest revision"):
+            audit(before, ("spot", "width"), augmented)
+        self.assertEqual(audit(after, ("spot", "width"), augmented), 6)
+
     def test_retroactive_poison_or_deletion_strictly_after_origin_does_not_change_selection(self):
         late = self.event("1", "read", 1, 4, 13)
         deleted = self.event("1", "read", 2, 4, 14, status="deleted")
