@@ -56,7 +56,7 @@ probabilities is not probability calibration.
 
 ## Labels and missing classes
 
-Targets must be one-dimensional finite real numeric values exactly 0 or 1. Validate original values before narrowing or casting: reject booleans (including `[0, True]`), complex values, in-memory string/object encodings, missing values, fractional probabilities, -1/1 and multiclass labels. `[0, 1.0]` is valid. No row is dropped, thresholded, or automatically remapped. Already-cast numeric arrays are interpreted as supplied; earlier caller conversions cannot be recovered.
+Targets must be one-dimensional finite real numeric values exactly 0 or 1. Validate original values before narrowing or casting: reject booleans (including `[0, True]`), timedelta values that compare equal to raw ticks, complex values, in-memory string/object encodings, missing values, fractional probabilities, -1/1 and multiclass labels. `[0, 1.0]` is valid. No row is dropped, thresholded, or automatically remapped. Already-cast numeric arrays are interpreted as supplied; earlier caller conversions cannot be recovered.
 
 CSV has no intrinsic types: ordinary pandas inference may parse 0, 1, 0.0, 1e0 or quoted numeric tokens as numeric. Such exact numeric 0/1 values are accepted; Boolean/text columns are not. This is not a new lexical CSV grammar. Existing UTF-8/header/field-count/row/feature/group validations still apply.
 

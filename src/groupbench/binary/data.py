@@ -66,6 +66,10 @@ def validate_binary_target(y, n_rows, *, require_both=True):
         raise ValueError("Binary targets must be a one-dimensional numeric 0/1 vector.") from exc
     if original.ndim != 1 or len(original) != n_rows or not n_rows:
         raise ValueError("Binary targets must contain one explicit numeric 0/1 value per row.")
+    # NumPy timedelta scalars implement numbers.Real and can compare equal
+    # to their raw tick count. Never treat the tick unit as a label encoding.
+    if any(isinstance(v, np.timedelta64) for v in original):
+        raise ValueError("Binary targets must be explicit numeric 0/1; timedelta values are not labels.")
     if any(isinstance(v, (bool, np.bool_)) or not isinstance(v, Real) for v in original):
         raise ValueError("Binary targets must be explicit numeric 0/1, not Boolean, string, complex or missing labels.")
     # Compare before narrowing: longdouble fractional labels must not round
