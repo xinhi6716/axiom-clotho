@@ -1,7 +1,7 @@
 //! Explicit regression export into the existing saved-series v2 protocol.
 use super::{observed_command::validate_csv, read_bounded, Artifact, Result, Table};
 use clotho_core::saved_comparison::MAX_DECLARATION_BYTES;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 
@@ -15,9 +15,22 @@ struct Contract {
     horizon: String,
 }
 
-pub(super) struct Export {
+pub(super) struct Export<'a> {
     contract: Contract,
-    row_ids: Vec<String>,
+    row_ids: Vec<&'a str>,
+}
+
+// Retain the alphabetical key order produced by the original JSON map.
+#[derive(Serialize)]
+struct SavedSeries<'a> {
+    cohort: &'a str,
+    horizon: &'a str,
+    query_sha256: &'a str,
+    row_ids: &'a [&'a str],
+    schema_version: &'static str,
+    target: &'a str,
+    unit: &'a str,
+    values: &'a [f64],
 }
 
 fn valid_text(value: &str) -> bool {
@@ -26,8 +39,8 @@ fn valid_text(value: &str) -> bool {
         && !value.chars().any(char::is_control)
 }
 
-impl Export {
-    pub(super) fn prepare(path: &str, id_column: &str, data: &Table, artifact: &Artifact) -> Result<Self> {
+impl<'a> Export<'a> {
+    pub(super) fn prepare(path: &str, id_column: &str, data: &'a Table, artifact: &Artifact) -> Result<Self> {
         if artifact.is_binary() {
             return Err("Saved-series export supports regression models only".into());
         }
@@ -43,7 +56,7 @@ impl Export {
         Ok(export)
     }
 
-    fn from_table(path: &str, id_column: &str, data: &Table) -> Result<Self> {
+    fn from_table(path: &str, id_column: &str, data: &'a Table) -> Result<Self> {
         let bytes = read_bounded(path)?;
         if bytes
             .iter()
@@ -65,11 +78,11 @@ impl Export {
         let mut seen = HashSet::new();
         let mut row_ids = Vec::with_capacity(data.rows.len());
         for row in &data.rows {
-            let id = &row[column];
+            let id = row[column].as_str();
             if !valid_text(id) || !seen.insert(id) {
                 return Err("Saved prediction row IDs must be unique, bounded, nonblank text without controls".into());
             }
-            row_ids.push(id.clone());
+            row_ids.push(id);
         }
         Ok(Self { contract, row_ids })
     }
@@ -77,7 +90,7 @@ impl Export {
     pub(super) fn observed(
         path: &str,
         id_column: &str,
-        query: &Table,
+        query: &'a Table,
         labels: &Table,
         query_bytes: &[u8],
     ) -> Result<Vec<u8>> {
@@ -116,7 +129,7 @@ impl Export {
             .row_ids
             .iter()
             .map(|id| {
-                observed.get(id.as_str()).copied()
+                observed.get(*id).copied()
                     .ok_or_else(|| "Observed IDs must match the complete query roster".into())
             })
             .collect::<Result<Vec<f64>>>()?;
@@ -134,16 +147,16 @@ impl Export {
         if predictions.len() != self.row_ids.len() || predictions.iter().any(|v| !v.is_finite()) {
             return Err("Invalid saved prediction values".into());
         }
-        let value = serde_json::json!({
-            "schema_version": "clotho.declared_regression_series.v2",
-            "cohort": self.contract.cohort,
-            "target": self.contract.target,
-            "unit": self.contract.unit,
-            "horizon": self.contract.horizon,
-            "row_ids": self.row_ids,
-            "values": predictions,
-            "query_sha256": format!("{:x}", Sha256::digest(query))
-        });
-        Ok(serde_json::to_vec_pretty(&value)?)
+        let query_sha256 = format!("{:x}", Sha256::digest(query));
+        Ok(serde_json::to_vec_pretty(&SavedSeries {
+            cohort: &self.contract.cohort,
+            horizon: &self.contract.horizon,
+            query_sha256: &query_sha256,
+            row_ids: &self.row_ids,
+            schema_version: "clotho.declared_regression_series.v2",
+            target: &self.contract.target,
+            unit: &self.contract.unit,
+            values: predictions,
+        })?)
     }
 }

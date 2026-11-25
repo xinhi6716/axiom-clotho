@@ -216,3 +216,42 @@ fn v2_export_keeps_original_bytes_of_unambiguous_quoted_query() {
         format!("{:x}", Sha256::digest(query.as_bytes()))
     );
 }
+
+#[test]
+fn bound_serialization_preserves_exact_bytes_and_numeric_literals() {
+    use sha2::{Digest, Sha256};
+    let w = setup();
+    let query = "id,x\r\n\"lot\"\"α\",5\r\n  零  ,6\r\n";
+    w.write("query.csv", query);
+    w.write("labels.csv", "id,y\n  零  ,5e-324\n\"lot\"\"α\",-0e100\n");
+    let hash = format!("{:x}", Sha256::digest(query.as_bytes()));
+    let expected = |values: [f64; 2]| {
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "schema_version": "clotho.declared_regression_series.v2",
+            "cohort": "synthetic",
+            "target": "y",
+            "unit": "ohm",
+            "horizon": "1 write",
+            "row_ids": ["lot\"α", "  零  "],
+            "values": values,
+            "query_sha256": hash
+        }))
+        .unwrap()
+    };
+    let predicted = w.run(&ARGS);
+    assert!(predicted.status.success(), "{predicted:?}");
+    assert_eq!(
+        fs::read(w.0.join("saved.json")).unwrap(),
+        expected([2.0, 2.0])
+    );
+    let observed = w.run(&[
+        "prepare-observed", "--query", "query.csv", "--observed", "labels.csv",
+        "--row-id", "id", "--saved-contract", "contract.json", "--out", "observed.json",
+    ]);
+    assert!(observed.status.success(), "{observed:?}");
+    let actual = fs::read(w.0.join("observed.json")).unwrap();
+    assert_eq!(actual, expected([-0.0, f64::from_bits(1)]));
+    let decoded: serde_json::Value = serde_json::from_slice(&actual).unwrap();
+    assert_eq!(decoded["values"][0].as_f64().unwrap().to_bits(), 1_u64 << 63);
+    assert_eq!(decoded["values"][1].as_f64().unwrap().to_bits(), 1);
+}
