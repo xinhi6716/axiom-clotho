@@ -256,6 +256,12 @@ pub fn extract_branch(a: &Acquisition, s: &[Sample], p: Settings) -> Result<Feat
         .iter()
         .map(|q| (q.gate_voltage_v - x0) / scale)
         .collect();
+    // A strictly monotone gate sweep must remain distinct in the
+    // normalized regression coordinates. Adjacent values suffice because
+    // offsetting and division by positive scale preserve monotone order.
+    if xs.windows(2).any(|w| w[0] == w[1]) {
+        return Err(FetError::NumericalRange);
+    }
     let xm = xs.iter().sum::<f64>() / n;
     let ym = logs.iter().sum::<f64>() / n;
     let xx = xs.iter().map(|x| (x - xm).powi(2)).sum::<f64>();

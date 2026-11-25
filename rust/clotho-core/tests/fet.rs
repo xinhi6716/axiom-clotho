@@ -342,3 +342,24 @@ fn near_left_current_criterion_is_stable_under_sweep_reversal() {
         assert_eq!(b.criterion_source_rows, vec![3, 2]);
     }
 }
+
+#[test]
+fn rejects_distinct_gate_coordinates_collapsed_by_window_normalization() {
+    let mut s = samples();
+    for (sample, voltage) in s.iter_mut().zip([-1.0, 1e-30, 2e-30, 1.0]) {
+        sample.gate_voltage_v = voltage;
+    }
+    let mut p = settings();
+    p.window_min_v = -1.0;
+    p.window_max_v = 1.0;
+    // The original gate coordinates differ, but offset from either extreme
+    // loses their distinction; the two corresponding log currents differ.
+    assert_ne!(s[1].gate_voltage_v, s[2].gate_voltage_v);
+    for _ in 0..2 {
+        assert_eq!(
+            extract_branch(&acquisition(), &s, p).unwrap_err(),
+            FetError::NumericalRange
+        );
+        s.reverse();
+    }
+}
