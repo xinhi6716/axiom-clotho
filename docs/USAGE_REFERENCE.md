@@ -143,7 +143,14 @@ mlcalc run measurements.csv \
 
 The target and group columns are excluded from features automatically. Use `--features` or `--features-file` as an explicit allowlist to exclude specimen IDs, post-outcome measurements, operator notes, or other leakage-prone columns. If neither is given, all other columns become features; the software cannot infer which of them are scientifically valid.
 
-Group labels are preserved as text when reading CSV, including leading zeros. NUL (U+0000) characters in group identifiers are rejected in both the DataFrame API and CSV workflows, before splitting or fitting, because string conversions and grouping can otherwise merge distinct IDs. This is an input-validation tightening: previously accepted NUL-containing DataFrame group IDs must be explicitly repaired in the source, not silently stripped or escaped by the calculator. Group validation never strips or escapes identifier characters. Blank or missing groups, non-finite targets, duplicate headers, unsupported datetime/complex features, and impossible split requests fail with an actionable error. Rows with missing targets are **not** silently dropped.
+Group labels are preserved as text when reading CSV, including leading zeros. NUL (U+0000) characters in group identifiers are rejected in both the DataFrame API and CSV workflows, before splitting or fitting, because string conversions and grouping can otherwise merge distinct IDs. This is an input-validation tightening: previously accepted NUL-containing DataFrame group IDs must be explicitly repaired in the source, not silently stripped or escaped by the calculator. Group validation never strips or escapes identifier characters. Blank or missing groups, non-finite targets, duplicate headers, unsupported datetime, timedelta or complex features, and impossible split requests fail with an actionable error. Rows with missing targets are **not** silently dropped.
+
+Datetime and timedelta feature columns and observed temporal or complex scalars
+in object or categorical columns are rejected before automatic category
+conversion. Convert times to explicitly chosen numeric units or text
+categories, and convert complex features to the intended real representation
+before calling Clotho. Literal text remains text, and unused category levels
+are not interpreted as observed values.
 
 CSV files must use UTF-8 (an optional UTF-8 BOM is supported), with unique, non-blank column names. Each non-blank record must have exactly as many fields as the header: malformed short/long records are rejected **before fitting**, rather than silently padded or shifted into the wrong columns. Represent missing values with explicit empty fields, such as `001,,2`, and quote values containing commas or newlines. Empty lines and lines containing only ASCII spaces/tabs outside quoted values are ignored. Structure errors report physical line numbers and field counts, not cell contents.
 

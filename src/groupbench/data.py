@@ -77,9 +77,19 @@ def validate_features(X: pd.DataFrame) -> pd.DataFrame:
             X[col] = X[col].astype(float)
             if np.isinf(X[col].to_numpy()).any():
                 raise ValueError(f"Infinite feature values are not supported: {col!r}.")
-        elif isinstance(X[col].dtype, pd.DatetimeTZDtype) or pd.api.types.is_datetime64_any_dtype(X[col]):
-            raise ValueError(f"Convert datetime feature {col!r} to explicit numeric/categorical features first.")
+        elif (pd.api.types.is_datetime64_any_dtype(X[col])
+              or pd.api.types.is_timedelta64_dtype(X[col])):
+            raise ValueError(f"Convert datetime or timedelta feature {col!r} to explicit numeric/categorical features first.")
         else:
+            # Check actual values before categorical stringification. In
+            # particular, check observed rows rather than unused categories.
+            for value in X[col]:
+                if type(value) is str:
+                    continue
+                if isinstance(value, (date, timedelta, np.datetime64, np.timedelta64)):
+                    raise ValueError(f"Convert datetime or timedelta feature {col!r} to explicit numeric/categorical features first.")
+                if isinstance(value, (complex, np.complexfloating)):
+                    raise ValueError(f"Complex values are not supported: {col!r}.")
             # This is stateless normalization, not a learned vocabulary.
             X[col] = X[col].map(lambda v: np.nan if pd.isna(v) else str(v)).astype(object)
             # Check observed normalized values, not unused category metadata.

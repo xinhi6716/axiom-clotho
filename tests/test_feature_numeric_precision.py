@@ -1,4 +1,5 @@
 """Synthetic regressions for precision checks on model feature inputs."""
+from datetime import date, datetime, timedelta
 import unittest
 from unittest.mock import patch
 
@@ -88,6 +89,44 @@ class FeatureNumericPrecisionTests(unittest.TestCase):
         categorical = validate_features(source)
         self.assertEqual(categorical.x.tolist(), [str(2**53), str(2**53 + 1)])
         self.assertEqual(str(categorical.x.dtype), "object")
+
+    def test_temporal_and_complex_features_cannot_bypass_schema_as_categories(self):
+        for values, reason in (
+            (pd.Series([date(2025, 1, 1), None], dtype=object), "datetime or timedelta"),
+            (pd.Series([datetime(2025, 1, 1), None], dtype=object), "datetime or timedelta"),
+            (pd.Series([np.datetime64("2025-01-01"), None], dtype=object), "datetime or timedelta"),
+            (pd.Series([np.timedelta64(1, "ns"), None], dtype=object), "datetime or timedelta"),
+            (pd.Series([timedelta(seconds=1), None], dtype=object), "datetime or timedelta"),
+            (pd.Series(pd.to_timedelta([1, 2], unit="ns")), "datetime or timedelta"),
+            (pd.Series(pd.to_timedelta([None, None])), "datetime or timedelta"),
+            (pd.Series(pd.Categorical([pd.Timestamp("2025-01-01"), None])), "datetime or timedelta"),
+            (pd.Series([0, 1j], dtype=object), "Complex values"),
+            (pd.Series([np.complex64(2j), None], dtype=object), "Complex values"),
+        ):
+            with self.subTest(values=values), self.assertRaisesRegex(ValueError, reason):
+                validate_features(pd.DataFrame({"x": values}))
+
+    def test_temporal_features_fail_in_plan_and_after_explicit_conversions_are_allowed(self):
+        categorical_train = pd.DataFrame({
+            "x": ["a", "b", "a", "b"], "lot": ["a", "a", "b", "b"], "y": [0, 1, 0, 1],
+        })
+        incoming = pd.DataFrame({"x": pd.Series([pd.Timestamp("2025-01-01")], dtype=object)})
+        for planner in (plan_prediction, plan_binary_prediction):
+            with self.subTest(planner=planner.__name__), patch(
+                "groupbench.splitting.pd.factorize", side_effect=AssertionError("unexpected split")
+            ) as split:
+                with self.assertRaisesRegex(ValueError, "datetime or timedelta"):
+                    planner(categorical_train, incoming, target="y", group="lot",
+                            inner_splits=2, baselines=("dummy",))
+                split.assert_not_called()
+        literals = pd.DataFrame({"x": ["2025-01-01 00:00:00", "1j", "1 days"]})
+        self.assertEqual(validate_features(literals)["x"].tolist(), literals["x"].tolist())
+        unused = pd.Categorical(["kept", None], categories=["kept", pd.Timestamp("2025-01-01")])
+        clean = validate_features(pd.DataFrame({"x": unused}))
+        self.assertEqual(clean["x"].iloc[0], "kept")
+        self.assertTrue(pd.isna(clean["x"].iloc[1]))
+        elapsed = pd.Series(pd.to_timedelta([1, 2], unit="s")).dt.total_seconds()
+        np.testing.assert_array_equal(validate_features(pd.DataFrame({"x": elapsed}))["x"], [1.0, 2.0])
 
     def test_upstream_float_rounding_cannot_be_recovered(self):
         already_rounded = np.array([2**53, 2**53 + 1], dtype=float)
