@@ -249,21 +249,28 @@ def compare_saved_predictions(run_a, run_b, query_csv, outcomes_csv, contract):
 
     # grouped_metrics above validates integer precision and finite arithmetic
     # before any float conversion in the shared exact contrast primitive.
-    contrasts, grouped, rows = [], {}, []
+    # Exact binary64 values (and differences of their absolute errors) are
+    # integer multiples of 2**-1074. Aggregate that common quantum instead
+    # of retaining and reducing two lists of per-row Fractions.
+    quantum_exponent = 1074
+    quantum_denominator = 1 << quantum_exponent
+    total_units, groups, rows = 0, {}, []
     try:
         for a, b in zip(report_a["scored_rows"], report_b["scored_rows"]):
             difference = paired_absolute_error_difference(a["prediction"], b["prediction"], a["observed"])
-            contrasts.append(difference)
-            grouped.setdefault(a["group"], []).append(difference)
+            units = difference.numerator << (quantum_exponent + 1 - difference.denominator.bit_length())
+            total_units += units
+            subtotal, count = groups.get(a["group"], (0, 0))
+            groups[a["group"]] = subtotal + units, count + 1
             rows.append({"row_position": a["row_position"], "group": a["group"],
                          "observed": a["observed"], "prediction_a": a["prediction"],
                          "prediction_b": b["prediction"],
                          "absolute_error_b_minus_a": contrast_float(difference)})
-        group_means = {group: sum(values, Fraction()) / len(values)
-                       for group, values in grouped.items()}
-        row_mean = contrast_float(sum(contrasts, Fraction()) / n)
+        group_means = {group: Fraction(units, quantum_denominator * count)
+                       for group, (units, count) in groups.items()}
+        row_mean = contrast_float(Fraction(total_units, quantum_denominator * n))
         equal_group_mean = contrast_float(sum(group_means.values(), Fraction()) / len(group_means))
-        per_group = [{"group": group, "n_rows": len(grouped[group]),
+        per_group = [{"group": group, "n_rows": groups[group][1],
                       "mean_absolute_error_b_minus_a": contrast_float(value)}
                      for group, value in sorted(group_means.items())]
     except (ValueError, OverflowError):

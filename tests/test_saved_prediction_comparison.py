@@ -160,6 +160,40 @@ class SavedPredictionComparisonTests(unittest.TestCase):
         self.assertEqual(result['row_mean_absolute_error_b_minus_a'], -1)
         self.assertEqual(result['equal_group_mean_absolute_error_b_minus_a'], -1)
 
+    def test_exact_group_and_pooled_sums_preserve_large_cancellation(self):
+        tokens = ["-18014398509481984", "-1", "18014398509481984", "-2e-151", "-2", "1"]
+        labels = ["large", "large", "large", "small", "other", "other"]
+        target = 2**58
+        self.query.write_text("x,z,response\n" + "".join(f"{i},0,0\n" for i in range(6)))
+        self.outcomes.write_text("row_position,group,observed\n" + "".join(
+            f"{i},{labels[i]},{target}\n" for i in (5, 2, 0, 1, 3, 4)))
+        self.build(self.a, (0,) * len(tokens))
+        self.build(self.b, tokens)
+        report = self.score()
+        # All predictions are strictly below the common target. The exact
+        # absolute-error difference therefore equals the negative prediction.
+        oracle = [-Fraction.from_float(float(token)) for token in tokens]
+        groups = {label: [delta for key, delta in zip(labels, oracle) if key == label]
+                  for label in set(labels)}
+        group_means = {label: sum(values) / len(values) for label, values in groups.items()}
+        self.assertEqual([r["absolute_error_b_minus_a"].hex() for r in report["paired_rows"]],
+                         [float(delta).hex() for delta in oracle])
+        self.assertEqual(report["row_mean_absolute_error_b_minus_a"].hex(),
+                         float(sum(oracle) / len(oracle)).hex())
+        self.assertEqual(report["equal_group_mean_absolute_error_b_minus_a"].hex(),
+                         float(sum(group_means.values()) / len(groups)).hex())
+        self.assertEqual(
+            [(r["group"], float.hex(r["mean_absolute_error_b_minus_a"]), r["n_rows"])
+             for r in report["per_group"]],
+            [(label, float(group_means[label]).hex(), len(groups[label])) for label in sorted(groups)])
+
+    def test_positive_paired_aggregate_cannot_round_to_false_zero(self):
+        self.build(self.a, (0, 0, 0))
+        self.build(self.b, ("-5e-324", 0, 0))
+        self.outcomes.write_text("row_position,group,observed\n0,A,1\n1,B,1\n2,B,1\n")
+        with self.assertRaisesRegex(scoring.SavedScoringError, "Paired contrast arithmetic"):
+            self.score()
+
     def test_literal_groups_and_outcome_reordering(self):
         self.outcomes.write_text('row_position,group,observed\n2,1,0\n0,01,0\n1,1,0\n')
         first = self.score()

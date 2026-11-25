@@ -81,7 +81,9 @@ Two explicitly different summaries are reported:
   supplied group, then give groups equal weight. This does not certify independence.
 
 Group and aggregate means use unrounded rational row contrasts, not rounded
-individual outputs. With differences [0,2,4] and groups [A,B,B], row mean is 2 and
+individual outputs. Per-row and per-group sums accumulate exact integer multiples
+of the binary64 quantum `2**-1074`; division by row or group count remains rational
+until final display. With differences [0,2,4] and groups [A,B,B], row mean is 2 and
 equal-group mean is 1.5. With y=1e20, A=1 and B=2, the contrast is −1 even if both
 rounded absolute errors display as 1e20. Thus subtracting displayed model MAEs
 may differ from the paired contrast. A nonzero contrast that would round to zero,
