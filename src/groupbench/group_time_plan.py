@@ -203,33 +203,39 @@ def plan_group_forward_windows(
     folds = []
     tested = set()
     for index, window in enumerate(bounds):
-        train, test = set(), set()
+        partitions = {}
+        partition_groups = ([], [], [])
         exclusions = []
         for group in group_order:
             span = spans[group]
             if span.label_available_at + gap < window.lower:
-                train.add(group)
                 train_reason = None
             elif span.label_available_at >= window.lower:
                 train_reason = "label_not_available_before_window"
             else:
                 train_reason = "gap_not_elapsed_before_window"
             test_reason = _test_exclusion(span, window)
-            if test_reason is None:
-                test.add(group)
+            role = 0 if train_reason is None else (1 if test_reason is None else 2)
+            partitions[group] = role
+            partition_groups[role].append(group)
             exclusions.append(GroupExclusion(group, train_reason, test_reason))
-        empty = tuple(name for name, members in (("empty_train", train), ("empty_test", test))
+        empty = tuple(name for name, members in (("empty_train", partition_groups[0]),
+                                             ("empty_test", partition_groups[1]))
                       if not members)
         if empty:
             raise ValueError(f"fold {index} [{window.lower}, {window.upper}): {', '.join(empty)}.")
+        # Assign each row once, preserving original order within each partition.
+        partition_rows = ([], [], [])
+        for position, group in enumerate(rows):
+            partition_rows[partitions[group]].append(position)
+        train, test, unused = (Membership(tuple(positions), tuple(groups))
+                               for positions, groups in zip(partition_rows, partition_groups))
         folds.append(ForwardWindowFold(
             index=index, window=window,
-            train=_membership(rows, group_order, train),
-            test=_membership(rows, group_order, test),
-            unused=_membership(rows, group_order, row_identities - train - test),
+            train=train, test=test, unused=unused,
             exclusions=tuple(exclusions),
         ))
-        tested.update(test)
+        tested.update(test.groups)
     return GroupForwardWindowPlan(
         time_unit=time_unit, clock_id=clock_id, gap=gap, row_groups=rows,
         group_spans=tuple(spans[group] for group in group_order), folds=tuple(folds),
