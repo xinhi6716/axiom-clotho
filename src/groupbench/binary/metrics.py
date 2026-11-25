@@ -95,8 +95,13 @@ def _ratio(numerator, denominator):
 def binary_metrics(y_true, probability_1):
     p = _probability_array(probability_1)
     y = validate_binary_target(y_true, len(p) if p.ndim else 0, require_both=False)
-    if p.shape != y.shape or not np.isfinite(p).all() or np.any(p < 0) or np.any(p > 1):
+    if p.shape != y.shape:
         raise ValueError("Binary metrics require finite matching one-dimensional probabilities in [0,1].")
+    return _metrics_on_validated_arrays(y, p)
+
+
+def _metrics_on_validated_arrays(y, p):
+    """Score already validated, nonempty, aligned 1-D int64/float64 arrays."""
     try:
         with np.errstate(over="raise", invalid="raise", divide="raise", under="ignore"):
             residual = p - y
@@ -139,12 +144,14 @@ def grouped_binary_metrics(y_true, probability_1, groups):
     y = validate_binary_target(y_true, len(p) if p.ndim else 0, require_both=False)
     # Validate before NumPy can promote mixed numeric IDs to a lossy dtype.
     g = validate_groups(groups, len(y))
-    overall = binary_metrics(y, p)
+    if p.shape != y.shape:
+        raise ValueError("Binary metrics require finite matching one-dimensional probabilities in [0,1].")
+    overall = _metrics_on_validated_arrays(y, p)
     per_group = []
     # Group positions once instead of scanning all rows for each group.
     for name, positions in pd.Series(np.arange(len(g))).groupby(g, sort=False).groups.items():
         idx = np.asarray(positions, dtype=int)
-        per_group.append({"group": str(name), **binary_metrics(y[idx], p[idx])})
+        per_group.append({"group": str(name), **_metrics_on_validated_arrays(y[idx], p[idx])})
     group_brier = _mean([row["brier"] for row in per_group])
     worst_brier = max(row["brier"] for row in per_group)
     if not np.isfinite(group_brier) or not 0 <= group_brier <= 1 or not 0 <= worst_brier <= 1:
