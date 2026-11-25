@@ -209,6 +209,23 @@ class MeasurementRegressionTests(unittest.TestCase):
                 self.assertEqual(tree(self.prepared), saved)
                 self.assertFalse(self.run_dir.exists())
 
+    def test_cli_plan_rejects_conflicting_feature_source_hashes(self):
+        self.prepare()
+        baseline = self.command("plan", "--prepared", self.prepared)
+        self.assertEqual(baseline.returncode, 0, baseline.stderr)
+        path = self.prepared / "features/provenance.json"
+        provenance = c.parse_json(path.read_bytes())
+        provenance["inputs_sha256"]["manifest.csv"] = "0" * 64
+        path.write_bytes(c.json_bytes(provenance))
+        receipt_path = self.prepared / "COMPLETE.json"
+        receipt = c.parse_json(receipt_path.read_bytes())
+        receipt["files_sha256"]["features/provenance.json"] = c.sha(path.read_bytes())
+        receipt_path.write_bytes(c.json_bytes(receipt))
+        result = self.command("plan", "--prepared", self.prepared)
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn("feature source declarations", result.stderr)
+        self.assertFalse(result.stdout)
+
     def test_replay_rejects_contradictory_preparation_provenance_before_work(self):
         self.prepare()
         receipt_path = self.prepared / "COMPLETE.json"

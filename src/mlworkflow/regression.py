@@ -180,7 +180,13 @@ def _prepared(path):
                 number(row[name])
             if partition == "train":
                 number(row["target"])
-    _check_preparation_provenance(parse_json(payloads["provenance.json"]), len(training), len(future))
+    join_provenance = parse_json(payloads["provenance.json"])
+    _check_preparation_provenance(join_provenance, len(training), len(future))
+    feature_provenance = parse_json(payloads["features/provenance.json"])
+    expected_raw_hashes = {name: join_provenance["input_sha256"][name] for name in RAW_FILES}
+    if (not isinstance(feature_provenance, dict)
+            or feature_provenance.get("inputs_sha256") != expected_raw_hashes):
+        raise WorkflowError("saved RRAM feature source declarations differ from preparation provenance")
     return config, training, future, payloads, receipt_sha
 
 
