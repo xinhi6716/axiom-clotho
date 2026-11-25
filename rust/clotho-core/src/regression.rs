@@ -390,6 +390,14 @@ fn norm(values: &[f64]) -> f64 {
     values.iter().fold(0.0_f64, |n, value| n.hypot(*value))
 }
 
+// Cache each trailing norm for this pivot only. max_by keeps the last
+// equal norm just as the original comparator did.
+fn pivot_with_norm(columns: &[Vec<f64>], k: usize) -> Option<(usize, f64)> {
+    (k..columns.len())
+        .map(|column| (column, norm(&columns[column][k..])))
+        .max_by(|a, b| a.1.total_cmp(&b.1))
+}
+
 /// Returns coefficients in original column order and scale.
 fn solve_qr(mut columns: Vec<Vec<f64>>, mut target: Vec<f64>) -> Result<Vec<f64>, RegressionError> {
     let count = columns.len();
@@ -406,13 +414,11 @@ fn solve_qr(mut columns: Vec<Vec<f64>>, mut target: Vec<f64>) -> Result<Vec<f64>
         scales.push(scale);
     }
     for k in 0..count {
-        let pivot = (k..count)
-            .max_by(|a, b| norm(&columns[*a][k..]).total_cmp(&norm(&columns[*b][k..])))
+        let (pivot, length) = pivot_with_norm(&columns, k)
             .ok_or(RegressionError::IllConditioned)?;
         columns.swap(k, pivot);
         permutation.swap(k, pivot);
         scales.swap(k, pivot);
-        let length = norm(&columns[k][k..]);
         if length <= 64.0 * f64::EPSILON {
             return Err(RegressionError::IllConditioned);
         }
@@ -479,5 +485,22 @@ fn check_condition(columns: &[Vec<f64>]) -> Result<(), RegressionError> {
         Err(RegressionError::IllConditioned)
     } else {
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod pivot_tests {
+    use super::*;
+
+    #[test]
+    fn trailing_pivot_retains_last_equal_norm_and_ignores_the_prefix() {
+        let columns = [
+            vec![8.0, 100.0, 100.0],
+            vec![500.0, 3.0, 4.0],
+            vec![1.0, 4.0, 3.0],
+            vec![0.0, 0.0, 4.0],
+        ];
+        assert_eq!(pivot_with_norm(&columns, 1), Some((2, 5.0)));
+        assert_eq!(pivot_with_norm(&columns, 2), Some((3, 4.0)));
     }
 }
