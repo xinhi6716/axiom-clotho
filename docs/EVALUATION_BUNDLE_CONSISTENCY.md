@@ -47,7 +47,8 @@ Checks cover:
   nonnegative and agree on exact zero; signed zero counts as zero. This tolerance
   is not a scientific error bound, unit inference
   or guarantee of sensitivity to smaller edits. Constant observed targets require
-  null R², not sklearn's substituted score. Overflow/underflow failures propagate.
+  null R², not sklearn's substituted score. A nonzero CSV token that rounds to
+  zero is rejected before recomputation. Arithmetic overflow/underflow failures propagate.
 
 ## Bounds and failure behavior
 

@@ -85,6 +85,39 @@ class EvaluationSchemaTests(unittest.TestCase):
                 (self.root/'predictions.csv').write_text(text); self.rehash()
                 with self.assertRaises(ValueError): validate_evaluation_bundle(self.root)
 
+    def test_nonzero_csv_token_cannot_disappear_in_replay(self):
+        frame = pd.DataFrame({'g': ['a', 'b', 'c', 'd'] * 2,
+                              'x': range(8), 'y': [0.] * 8})
+        zero = benchmark(frame, target='y', group='g', baselines=('dummy',),
+                         outer_splits=2, inner_splits=2)
+        zero.write(self.root, overwrite=True)
+        path = self.root / "predictions.csv"
+        original = path.read_text()
+        header, row, *rest = original.splitlines()
+        fields = row.split(",")
+        for column in (3, 4):
+            for token in ("1e-400", "-5E-9999999999"):
+                with self.subTest(column=column, numeric_token=token):
+                    mutated = list(fields)
+                    self.assertEqual(float(mutated[column]), 0.)
+                    mutated[column] = token
+                    path.write_text("\n".join([header, ",".join(mutated), *rest]) + "\n")
+                    self.rehash()
+                    self.assertEqual(verify_bundle(self.root).bundle_type, "evaluation")
+                    with self.assertRaisesRegex(ValueError, "underflows to zero"):
+                        validate_evaluation_bundle(self.root)
+        fields[3] = "-0E-400"
+        path.write_text("\n".join([header, ",".join(fields), *rest]) + "\n")
+        self.rehash()
+        self.assertEqual(validate_evaluation_bundle(self.root).n_rows, 8)
+
+        # A representable subnormal is valid; identical values have zero error.
+        subnormal = [",".join(item.split(",")[:3] + ["5e-324"] * 3)
+                     for item in [row, *rest]]
+        path.write_text("\n".join([header, *subnormal]) + "\n")
+        self.rehash()
+        self.assertEqual(validate_evaluation_bundle(self.root).n_rows, 8)
+
     def test_checksum_symlink_and_bound(self):
         with patch('groupbench.evaluation_schema.MAX_CSV_BYTES', 8):
             with self.assertRaises(ValueError): validate_evaluation_bundle(self.root)

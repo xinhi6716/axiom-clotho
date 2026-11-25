@@ -153,9 +153,16 @@ def _check(manifest, summary, raw):
                 _fail("invalid row identity, group, fold, or width.")
             values = []
             for token in row[3:]:
-                if len(token) > 64 or not _DECIMAL.fullmatch(token) or not math.isfinite(float(token)):
+                if len(token) > 64 or not _DECIMAL.fullmatch(token):
                     _fail("predictions and observations must be finite decimal numbers.")
-                values.append(float(token))
+                value = float(token)
+                if not math.isfinite(value):
+                    _fail("predictions and observations must be finite decimal numbers.")
+                if value == 0.0:
+                    mantissa = token.lower().split("e", 1)[0]
+                    if any("1" <= digit <= "9" for digit in mantissa):
+                        _fail("nonzero prediction or observation underflows to zero in binary64.")
+                values.append(value)
             groups.append(row[1]); folds.append(int(row[2])); observed.append(values[0])
             for name, value in zip(names, values[1:]):
                 predictions[name].append(value)
