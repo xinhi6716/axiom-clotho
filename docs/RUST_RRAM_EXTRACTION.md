@@ -85,6 +85,10 @@ A new output directory contains:
   not physical line number when fields contain newlines. The report includes the
   lowercase SHA-256 of exact retained input bytes (`input_sha256`) and exact emitted
   `features.csv` bytes (`features_sha256`).
+  For each feature row, `cycle_readpoint_support_counts` partitions its cycles
+  into both states sampled, HRS only interpolated, LRS only interpolated,
+  and both interpolated. These are support counts, not error bounds or counts
+  of independent devices.
 - `COMPLETE`: written last; absent on an interrupted/incomplete write.
 
 No existing path is overwritten, including symlinks. Unix directories/files request

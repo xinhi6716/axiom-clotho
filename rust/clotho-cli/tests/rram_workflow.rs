@@ -256,3 +256,54 @@ fn malformed_quote_framing_does_not_complete_a_capture() {
         assert!(w.0.join("out/COMPLETE").is_file());
     }
 }
+
+#[test]
+fn readpoint_support_counts_are_disjoint_per_feature_row() {
+    let w = Workspace::new();
+    let mut trace = format!("{}\n", DATA.lines().next().unwrap());
+    for (device, cycle, hrs_interpolated, lrs_interpolated) in [
+        ("D", "1", false, false),
+        ("D", "2", true, false),
+        ("D2", "1", false, false),
+        ("D", "3", true, false),
+        ("D", "4", false, true),
+        ("D", "5", true, true),
+    ] {
+        for (suffix, state, current, interpolate) in [
+            ("H", "HRS", "0.125", hrs_interpolated),
+            ("L", "LRS", "0.25", lrs_interpolated),
+        ] {
+            let voltages: &[&str] = if interpolate { &["0.5", "1.5"] } else { &["1"] };
+            for voltage in voltages {
+                trace.push_str(&format!(
+                    "B,W,{device},{cycle},R{cycle},{suffix},{state},C,P,1,300,0,{voltage},{current}\n"
+                ));
+            }
+        }
+    }
+    w.write(&trace);
+    let result = w.run(&[]);
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let data: serde_json::Value =
+        serde_json::from_slice(&fs::read(w.0.join("out/extraction.json")).unwrap()).unwrap();
+    for (i, device, counts) in [(0, "D", [1, 2, 1, 1]), (1, "D2", [1, 0, 0, 0])] {
+        let row = &data["lineage"][i];
+        assert_eq!(row["identity"][2], device);
+        assert_eq!(
+            row["cycle_readpoint_support_counts"],
+            serde_json::json!({
+                "both_sampled": counts[0],
+                "hrs_only_interpolated": counts[1],
+                "lrs_only_interpolated": counts[2],
+                "both_interpolated": counts[3],
+            })
+        );
+        let pairs = row["pairs"].as_array().unwrap();
+        assert_eq!(pairs.len(), counts.iter().sum::<usize>());
+        assert!(pairs.iter().all(|pair| pair["resistance_ratio"] == 2.0));
+    }
+}

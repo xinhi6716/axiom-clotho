@@ -225,9 +225,26 @@ pub fn run(opts: &HashMap<String, String>) -> Result<()> {
             f.lrs_resistance_median_ohm.to_string(),
             f.resistance_ratio_median.to_string(),
         ])?;
+        let mut readpoint_support = [0_usize; 4];
+        for pair in &f.pairs {
+            // extract_cohort reports one source row for a sampled read
+            // and two adjacent rows for an interpolated read.
+            let hrs = usize::from(pair.hrs.selected_source_rows.len() == 2);
+            let lrs = usize::from(pair.lrs.selected_source_rows.len() == 2);
+            readpoint_support[hrs + 2 * lrs] += 1;
+        }
         let pairs: Vec<_> = f.pairs.iter().map(|p| serde_json::json!({"cycle":p.hrs.acquisition.cycle,"HRS":lineage(&p.hrs),"LRS":lineage(&p.lrs),"resistance_ratio":p.resistance_ratio,"ratio_below_one":p.resistance_ratio < 1.0})).collect();
         records.push(
-            serde_json::json!({"identity":[f.batch,f.wafer,f.device,f.condition],"pairs":pairs}),
+            serde_json::json!({
+                "identity": [f.batch, f.wafer, f.device, f.condition],
+                "cycle_readpoint_support_counts": {
+                    "both_sampled": readpoint_support[0],
+                    "hrs_only_interpolated": readpoint_support[1],
+                    "lrs_only_interpolated": readpoint_support[2],
+                    "both_interpolated": readpoint_support[3],
+                },
+                "pairs": pairs
+            }),
         );
     }
     let csv = writer.into_inner()?;
