@@ -125,7 +125,8 @@ class ALDObservation:
 
 
 def preview_ald_contract(records, *, contract, check_absolute_temperature=False,
-                         check_nonnegative_derived_thickness=False):
+                         check_nonnegative_derived_thickness=False,
+                         check_consistent_temperature_setpoints=False):
     """Return declaration conflicts for a bounded list/tuple of observations.
 
     Inputs and frozen declarations are rechecked on every call. Missing or
@@ -135,12 +136,16 @@ def preview_ald_contract(records, *, contract, check_absolute_temperature=False,
     temperature check, a finite valid token strictly below absolute zero in
     its declared unit is flagged. The independent thickness check flags strictly
     negative declared total thickness and its derived average; it does not
-    constrain steady slopes or mutate values. The default remains declaration-only.
+    constrain steady slopes or mutate values. The setpoint consistency check
+    compares exact temperatures within a declared source/version/condition.
+    It never equates measured temperatures. The default remains declaration-only.
     """
     if type(check_absolute_temperature) is not bool:
         raise ValueError("check_absolute_temperature must be an explicit bool.")
     if type(check_nonnegative_derived_thickness) is not bool:
         raise ValueError("check_nonnegative_derived_thickness must be an explicit bool.")
+    if type(check_consistent_temperature_setpoints) is not bool:
+        raise ValueError("check_consistent_temperature_setpoints must be an explicit bool.")
     if type(contract) is not ALDExperimentalContract:
         raise ValueError("An explicit ALDExperimentalContract is required.")
     ALDExperimentalContract.__post_init__(contract)
@@ -170,6 +175,7 @@ def preview_ald_contract(records, *, contract, check_absolute_temperature=False,
             add("feature_not_available_before_process", "feature.availability", feature=position)
 
     identities = defaultdict(list)
+    setpoints = defaultdict(list)
     for position, record in enumerate(records):
         valid_ids = {}
         for field in ("source_id", "source_version", "source_locator", "condition_id",
@@ -222,6 +228,15 @@ def preview_ald_contract(records, *, contract, check_absolute_temperature=False,
             if (check_absolute_temperature and temperature_unit_ok
                     and temperature < _ABSOLUTE_ZERO[record.temperature_unit]):
                 add("temperature_below_absolute_zero", "temperature", row=position)
+            if (check_consistent_temperature_setpoints and temperature_unit_ok
+                    and contract.temperature_basis == "setpoint"
+                    and _member(record.temperature_basis, {"setpoint"})
+                    and _member(record.temperature_role, {contract.temperature_role})
+                    and all(valid_ids[name] for name in ("source_id", "source_version", "condition_id",
+                                                        "temperature_condition_id"))
+                    and record.temperature_condition_id == record.condition_id):
+                key = (record.source_id, record.source_version, record.condition_id)
+                setpoints[key].append((position, temperature - _ABSOLUTE_ZERO[record.temperature_unit]))
         target = None
         if not _member(record.target_unit, _GROWTH_UNITS):
             add("unsupported_growth_unit", "target_unit", row=position)
@@ -278,6 +293,11 @@ def preview_ald_contract(records, *, contract, check_absolute_temperature=False,
         if len(positions) > 1:
             for position in positions:
                 add("repeated_declared_observation_identity", "declared_identity", row=position)
+
+    for declarations in setpoints.values():
+        if len({kelvin for _, kelvin in declarations}) > 1:
+            for position, _ in declarations:
+                add("conflicting_temperature_setpoints", "temperature", row=position)
 
     total = sum(counts.values())
     return {

@@ -67,6 +67,14 @@ in its declared unit: 0 K or −273.15 °C. A lower value produces
 float64. No correction, conversion, or ALD operating-range check is made;
 values equal to or above the bound still require physical and source review.
 
+For datasets whose source/version/condition IDs are intended to fix the
+declared temperature setpoint, opt in with
+`check_consistent_temperature_setpoints=True`. The preview compares valid
+setpoint declarations for the expected role using exact Kelvin-equivalent
+values and flags every member of a conflicting group. Measured temperatures
+are not compared, different source versions stay separate, and no declared
+value or identifier is rewritten. This is not instrument verification.
+
 ### Distinguish target methods
 
 The experimental contract accepts exactly two target methods:

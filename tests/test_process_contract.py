@@ -52,6 +52,32 @@ class ProcessContractTests(unittest.TestCase):
             self.assertEqual(result["issue_count"], 0)
             self.assertEqual(result["training_admission"], "not_performed")
 
+    def test_exact_setpoint_consistency_across_replicates(self):
+        issue = "conflicting_temperature_setpoints"
+        row = observation()
+        equal = replace(row, replicate_id="sample-2", temperature_unit="K", temperature="473.15")
+        different = replace(equal, temperature="473.150000000000000001")
+        other_version = replace(different, source_version="v2",
+                                derivation=replace(row.derivation, source_version="v2"))
+        self.assertEqual(preview_ald_contract([row, different], contract=contract())["issue_counts"], {})
+        cases = ((equal, {}), (different, {issue: 2}), (other_version, {}))
+        for second, expected in cases:
+            with self.subTest(second=second), localcontext() as context:
+                context.prec = 1
+                r = preview_ald_contract([row, second], contract=contract(),
+                                         check_consistent_temperature_setpoints=True)
+                self.assertEqual(r["issue_counts"], expected)
+                if expected:
+                    self.assertEqual([i["row_position"] for i in r["issues"]], [0, 1])
+                    self.assertEqual({i["field"] for i in r["issues"]}, {"temperature"})
+
+        measured = [replace(item, temperature_basis="measured") for item in (row, different)]
+        r = preview_ald_contract(measured, contract=contract(temperature_basis="measured"),
+                                 check_consistent_temperature_setpoints=True)
+        self.assertEqual(r["issue_counts"], {})
+        with self.assertRaisesRegex(ValueError, "explicit bool"):
+            preview_ald_contract([row], contract=contract(), check_consistent_temperature_setpoints=1)
+
     def test_wrong_temperature_role_basis_and_condition_are_distinct_conflicts(self):
         row = observation(temperature="80", temperature_role="precursor_vessel",
                           temperature_basis="measured", temperature_condition_id="other-condition")
