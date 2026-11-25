@@ -118,6 +118,11 @@ product envelope and finite outputs. They are conservative numeric limits, not
 accuracy or convergence guarantees.
 
 Dense, CSR and CSC inputs support 1–20,000 rows and 1–6,400 transformed features.
+Typed integer feature values must be exactly representable in binary64 (including
+large exact values); wider NumPy floating dtypes require explicit conversion.
+Checks use the original typed values before dense or sparse conversion, including
+individual pandas columns. Values that were rounded before passing them to the
+estimator cannot be recovered; this is not arbitrary-precision fitting.
 Named feature order is preserved. Retained masks, malformed groups/sparse buffers,
 invalid numeric ranges and numerical warnings fail rather than clipping, skipping,
 fallback or retrying. Weight sums and equal group totals use float64 tolerance

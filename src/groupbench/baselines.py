@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from datetime import date, timedelta
 from itertools import repeat
 from math import fsum, isclose, lcm, sqrt
-from numbers import Real
+from numbers import Integral, Real
 import warnings
 
 import numpy as np
@@ -211,7 +211,36 @@ def _ridge_numerical_stage(stage):
         ) from exc
 
 
-def _reject_temporal_or_complex(value):
+def _require_exact_float64_features(value):
+    """Check retained typed values before the optional Ridge float64 cast."""
+    integer_error = "Integer features must be exactly representable in float64; rescale or center them explicitly."
+    if isinstance(value, Integral):
+        integer = int(value)
+        if abs(integer) > 2**53:
+            try:
+                exact = int(float(integer)) == integer
+            except OverflowError:
+                exact = False
+            if not exact:
+                raise ValueError(integer_error)
+        return
+    if not isinstance(value, (np.ndarray, np.floating)):
+        return
+    dtype = value.dtype
+    if dtype.kind == "f" and dtype.itemsize > 8:
+        raise ValueError("Floating feature dtypes wider than float64 require explicit conversion.")
+    if dtype.kind in "iu" and dtype.itemsize > 4 and value.size:
+        values = np.asarray(value)
+        if int(values.max()) > 2**53 or (dtype.kind == "i" and int(values.min()) < -2**53):
+            # Only uncommon large typed coordinates reach the scalar loop.
+            # Do not allocate an additional matrix-sized widened copy or mask.
+            for raw in values.flat:
+                integer = int(raw)
+                if abs(integer) > 2**53 and int(float(integer)) != integer:
+                    raise ValueError(integer_error)
+
+
+def _reject_temporal_or_complex(value, *, check_float64=False):
     """Reject temporal/complex features before float conversion loses type."""
     pending = [(iter((value,)), 0)]
     finished = {}
@@ -231,12 +260,22 @@ def _reject_temporal_or_complex(value):
             raise ValueError("X must contain real numeric values, not temporal or complex values.")
         if getattr(getattr(item, "dtype", None), "kind", None) in ("M", "m", "c"):
             raise ValueError("X must contain real numeric values, not temporal or complex values.")
+        if check_float64:
+            _require_exact_float64_features(item)
         if isinstance(item, (list, tuple)):
             children = list.__iter__(item) if isinstance(item, list) else tuple.__iter__(item)
         elif isinstance(item, np.ndarray) and item.dtype.kind == "O":
             children = iter(np.ndarray.flat.__get__(item))
+        elif check_float64 and isinstance(item, pd.DataFrame):
+            # Observe each original column. A mixed frame coerces integer
+            # coordinates to float before this check if viewed as one array.
+            children = (column for _, column in pd.DataFrame.items(item))
         elif isinstance(item, (pd.DataFrame, pd.Series, pd.Index)):
-            cells = item.to_numpy(copy=False)
+            if (check_float64 and pd.api.types.is_integer_dtype(item.dtype)
+                    and pd.api.types.is_extension_array_dtype(item.dtype)):
+                cells = item.to_numpy(dtype=object, copy=False)
+            else:
+                cells = item.to_numpy(copy=False)
             children = iter((cells,))
         elif sparse.issparse(item):
             children = iter((item.data,))
@@ -282,7 +321,7 @@ def _ridge_matrix_and_names(X):
     if sparse.issparse(X) and X.format not in ("csr", "csc"):
         raise ValueError("Only CSR or CSC sparse inputs are supported; other formats are not converted implicitly.")
     _reject_masked(X, "X")
-    _reject_temporal_or_complex(X)
+    _reject_temporal_or_complex(X, check_float64=True)
     shape = getattr(X, "shape", None)
     if shape is not None and (len(shape) != 2 or not 1 <= shape[0] <= MAX_ROWS
                               or not 1 <= shape[1] <= MAX_RIDGE_FEATURES):
