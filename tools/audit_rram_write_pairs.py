@@ -135,6 +135,8 @@ def audit(path):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("csv", type=Path)
+    parser.add_argument("--require-shared-action", action="store_true",
+                        help="also require a declared exact action shared across chip labels")
     args = parser.parse_args()
     try:
         report = audit(args.csv)
@@ -143,8 +145,12 @@ def main():
     except ValueError as exc:
         parser.exit(2, f"error: {exc}\n")
     print(json.dumps(report, indent=2, sort_keys=True))
-    return 1 if (not report["eligible_transitions"] or
-                 report["eligible_transitions"] != report["declared_transitions"]) else 0
+    if (not report["eligible_transitions"]
+            or report["eligible_transitions"] != report["declared_transitions"]):
+        return 1
+    if args.require_shared_action and not report["declared_exact_action_coverage"]["multi_chip_strata"]:
+        return 1
+    return 0
 
 
 if __name__ == "__main__":

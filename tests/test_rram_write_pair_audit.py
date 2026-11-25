@@ -21,12 +21,12 @@ def triplet(chip="chipA", key="t1", start=0):
 
 
 class WritePairAudit(unittest.TestCase):
-    def run_rows(self, rows, header=HEADER):
+    def run_rows(self, rows, header=HEADER, extra=()):
         with tempfile.TemporaryDirectory() as tmp:
             p = Path(tmp) / "input.csv"
             with p.open("w", newline="", encoding="utf-8") as out:
                 csv.writer(out).writerows([header, *rows])
-            return subprocess.run([sys.executable, str(TOOL), str(p)],
+            return subprocess.run([sys.executable, str(TOOL), str(p), *extra],
                                   text=True, capture_output=True, check=False)
 
     def test_interleaved_devices_count_as_declared(self):
@@ -81,6 +81,26 @@ class WritePairAudit(unittest.TestCase):
                 exact = json.loads(result.stdout)["declared_exact_action_coverage"]
                 self.assertEqual(exact["multi_chip_strata"], 1)
                 self.assertEqual(exact["eligible_transitions_in_multi_chip_strata"], 2)
+
+    def test_opt_in_shared_action_gate_keeps_structural_gate_and_report(self):
+        gate = ("--require-shared-action",)
+        a, b = triplet(), triplet("chipB")
+        b[1][7] = "0.000000200"
+        shared = self.run_rows(a + b, extra=gate)
+        self.assertEqual(shared.returncode, 0, shared.stderr)
+        self.assertEqual(json.loads(shared.stdout)["declared_exact_action_coverage"]["multi_chip_strata"], 1)
+
+        invalid = self.run_rows(a + b + triplet("chipC")[1:], extra=gate)
+        self.assertEqual(invalid.returncode, 1)
+        self.assertEqual(json.loads(invalid.stdout)["eligible_transitions"], 2)
+
+        b[1][7] = "4e-7"
+        legacy = self.run_rows(a + b)
+        blocked = self.run_rows(a + b, extra=gate)
+        self.assertEqual(legacy.returncode, 0)
+        self.assertEqual(blocked.returncode, 1)
+        self.assertEqual(blocked.stdout, legacy.stdout)
+        self.assertEqual(json.loads(blocked.stdout)["declared_exact_action_coverage"]["multi_chip_strata"], 0)
 
     def test_exact_action_coverage_counts_chips_not_repeats(self):
         a, b, c = triplet(), triplet("chipB"), triplet(key="t2", start=3)

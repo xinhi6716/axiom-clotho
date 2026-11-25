@@ -39,8 +39,11 @@ settings that round to the same binary64 number do not. Each counts
 eligible transitions in strata with at least two distinct declared chip labels.
 Two labels with no shared strata mean there is no match under these keys,
 not necessarily no continuous overlap. Matching neither
-harmonizes units nor bins nearby settings. This diagnostic does not change the
-exit status and does not replace physical provenance or split verification.
+harmonizes units nor bins nearby settings. By default the diagnostic does not
+change the exit status. Use `--require-shared-action` to also return exit 1
+when there is no exact action stratum shared across at least two declared chip
+labels; JSON is still emitted unchanged. This opt-in gate does not certify
+physical provenance, independence, or adequate support per action.
 Before fitting, reconcile protocol aliases, verify independent die IDs, and
 preserve actual post-write delay and read window in the mapping receipt.
 
