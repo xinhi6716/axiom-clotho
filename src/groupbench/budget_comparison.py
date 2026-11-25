@@ -12,6 +12,9 @@ import stat
 import sys
 
 
+_MAX_CELLS = 20_000
+_UNDECLARED_ROSTER = object()
+
 META = {"metric_definition", "value_unit", "independent_unit_definition", "normalization", "direction"}
 LIMITATIONS = [
     "Descriptive only: no confidence intervals, p-values, causal or population claims.",
@@ -66,12 +69,32 @@ def _outcome(gain):
     return "win" if gain > 0 else "harm" if gain < 0 else "tie"
 
 
-def compare_saved_budgets(document):
+def _expected_pairs(roster):
+    _keys(roster, {"schema_version", "unit_repeats"}, "expected roster")
+    if type(roster["schema_version"]) is not int or roster["schema_version"] != 1:
+        raise ValueError("Expected roster schema_version must be integer 1")
+    rows = roster["unit_repeats"]
+    if not isinstance(rows, list) or not 1 <= len(rows) <= _MAX_CELLS // 4:
+        raise ValueError("Expected roster requires 1 to 5000 declared unit/repeat pairs")
+    pairs = set()
+    for row in rows:
+        _keys(row, {"unit_id", "repeat_id"}, "expected roster row")
+        pair = (_label(row["unit_id"]), _label(row["repeat_id"]))
+        if pair in pairs:
+            raise ValueError("Duplicate expected unit/repeat pair")
+        pairs.add(pair)
+    return pairs
+
+
+def compare_saved_budgets(document, *, expected_roster=_UNDECLARED_ROSTER):
     """Compare ordered method B against A at ordered budgets low then high.
 
-    All values must already be on the same declared metric scale. No fitting,
-    selection, normalization or provenance verification occurs here.
+    All values must already be on the same declared metric scale. Optional
+    expected_roster checks exact declared membership without inferring IDs.
+    No fitting, selection, normalization or provenance verification occurs.
     """
+    expected = (None if expected_roster is _UNDECLARED_ROSTER
+                else _expected_pairs(expected_roster))
     _keys(document, {"schema_version", "methods", "budgets", "metadata", "rows"}, "document")
     if type(document["schema_version"]) is not int or document["schema_version"] != 1:
         raise ValueError("schema_version must be integer 1")
@@ -88,7 +111,7 @@ def compare_saved_budgets(document):
     if metadata["direction"] not in ("minimize", "maximize"):
         raise ValueError("direction must be minimize or maximize")
     rows = document["rows"]
-    if not isinstance(rows, list) or not rows or len(rows) > 20000:
+    if not isinstance(rows, list) or not rows or len(rows) > _MAX_CELLS:
         raise ValueError("rows must be a nonempty list of at most 20000 cells")
     cells = {}
     repeats = {}
@@ -106,6 +129,10 @@ def compare_saved_budgets(document):
             raise ValueError("Duplicate unit/repeat/budget/method key")
         cells[key] = _number(row["value"])
         repeats.setdefault(unit, set()).add(repeat)
+    if expected is not None:
+        supplied = {(unit, repeat) for unit, ids in repeats.items() for repeat in ids}
+        if expected != supplied:
+            raise ValueError("Rows must match the expected unit/repeat roster exactly")
     for unit, ids in repeats.items():
         for repeat in ids:
             for budget in budgets:
@@ -138,10 +165,14 @@ def compare_saved_budgets(document):
     summaries = {b: {"mean_unit_gain": _output(_mean(gs)),
                      "strict_wins": sum(g > 0 for g in gs), "ties": sum(g == 0 for g in gs),
                      "harms": sum(g < 0 for g in gs)} for b, gs in gains_by_budget.items()}
+    coverage = {"units": len(repeats), "matched_repeats": len(observation_rows),
+                "input_cells": len(rows), "omitted_cells": 0}
+    if expected is not None:
+        coverage["expected_roster"] = "exact_declared_unit_repeat_pairs"
     return {"schema_version": 1, "status": "complete_descriptive_comparison", "metadata": dict(metadata),
             "methods": list(methods), "budgets": list(budgets), "provenance_verified": False,
             "gain_convention": "Positive means B improves over A; interaction = high-budget gain minus low-budget gain.",
-            "coverage": {"units": len(repeats), "matched_repeats": len(observation_rows), "input_cells": len(rows), "omitted_cells": 0},
+            "coverage": coverage,
             "by_budget": summaries, "mean_selector_by_budget_interaction": _output(_mean(interactions)),
             "units": unit_rows, "observations": observation_rows, "limitations": list(LIMITATIONS)}
 
@@ -187,9 +218,14 @@ def _read_input(path):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("input", type=Path, help="Local saved-comparison JSON; report is written to stdout")
+    parser.add_argument("--expected-roster", type=Path,
+                        help="Optional separately frozen unit/repeat roster JSON")
     args = parser.parse_args(argv)
     try:
-        report = compare_saved_budgets(load_document(_read_input(args.input)))
+        doc = load_document(_read_input(args.input))
+        roster = (_UNDECLARED_ROSTER if args.expected_roster is None
+                  else load_document(_read_input(args.expected_roster)))
+        report = compare_saved_budgets(doc, expected_roster=roster)
         print(json.dumps(report, indent=2, sort_keys=True, allow_nan=False))
     except (ValueError, OSError, TypeError) as exc:
         print(f"budget comparison rejected: {exc}", file=sys.stderr)

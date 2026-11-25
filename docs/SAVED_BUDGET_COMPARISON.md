@@ -55,7 +55,16 @@ Duplicate keys, unknown methods/budgets, failures, invalid numbers, or missing
 combinations reject the **whole comparison**. Do not preprocess away failures
 or unsuccessful units to make input pass; diagnose and report the failed design.
 A wholly omitted unit cannot be inferred from the supplied file: complete cohort
-accounting is the user's responsibility. Different units may have different
+accounting is the user's responsibility without a separate roster. To check an independently frozen list against actual rows, pass
+`--expected-roster predeclared-roster.json` on the CLI or
+`expected_roster=...` to the Python API. The separate version-1 object has
+exactly `{"schema_version":1,"unit_repeats":[{"unit_id":"A","repeat_id":"0"}]}`
+with one record for every expected pair and at most 5,000 pairs. It rejects
+duplicate expected pairs, unexpected pairs, entirely missing repeats or units,
+and still requires all four cells for every pair. Matching relies on exact IDs,
+not only counts. Freeze this list before seeing results: matching verifies
+the supplied declaration, not the time it was made or its completeness.
+Different units may have different
 numbers of repeats, but a unit's repeat IDs must match all four cells. A repeat
 ID may occur in another unit; it is not an independent sample count.
 
