@@ -41,7 +41,9 @@ for the byte-only verifier; it limits this explicitly selected consumer.
 - For input support 1.0: fixed reference/action, feature names/order, counts
   within their populations, all-missing-source relationships, and necessary
   aggregate union bounds. Numeric below/above counts are mutually exclusive
-  and disjoint from missingness; unrelated flags can overlap. An aggregate
+  and disjoint from missingness. Categorical unsupported rows necessarily also
+  count as unseen; only numeric unsupported rows can raise the unsupported
+  union above the unseen count. Unrelated flags can overlap. An aggregate
   union is **not** assumed to equal the sum of its component counts.
 
 Unknown extra manifest/feature metadata is allowed but **not schema validated**.

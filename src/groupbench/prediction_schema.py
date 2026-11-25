@@ -118,6 +118,7 @@ def _support(support, names, n_train, n_pred):
         _fail("input-support feature count differs from feature schema.")
     components = {key: [] for key in _FLAGS}
     per_feature_flagged = []
+    numeric_unsupported = 0
     for name, item in zip(names, features):
         item = _object(item)
         if item.get("name") != name or item.get("kind") not in ("numeric", "categorical"):
@@ -132,6 +133,7 @@ def _support(support, names, n_train, n_pred):
         components["missing_value"].append(missing)
         components["non_missing_value_in_all_missing_training_feature"].append(unsupported)
         if item["kind"] == "numeric":
+            numeric_unsupported += unsupported
             if "unseen_category_count" in item:
                 _fail("numeric support contains a categorical count.")
             # Require keys even when their values must be null.
@@ -162,6 +164,10 @@ def _support(support, names, n_train, n_pred):
             per_feature_flagged.append(missing + unseen)
     for key in _FLAGS:
         _union(counts[key], components[key], n_pred)
+    # A categorical unsupported row is always unseen. Only unsupported
+    # numeric rows can raise the combined count above the unseen union.
+    if counts["non_missing_value_in_all_missing_training_feature"] > counts["unseen_category"] + numeric_unsupported:
+        _fail("aggregate unsupported count exceeds unseen categorical and unsupported numeric capacity.")
     if any_flag < max(per_feature_flagged, default=0):
         _fail("aggregate union is below a feature's necessarily distinct flagged rows.")
 

@@ -170,6 +170,33 @@ class PredictionSchemaTests(unittest.TestCase):
         support["row_flag_counts"]["unseen_category"] = 1
         self.check(value)  # both flags on one row remains possible
 
+    def test_categorical_unsupported_union_cannot_exceed_unseen_union(self):
+        value = manifest()
+        names = ["left", "right"]
+        value["feature_schema"] = [{"name": name, "dtype": "object"} for name in names]
+        value["config"]["features"] = names
+        support = value["input_support"]
+        support["rows_with_any_flag"] = 2
+        flags = support["row_flag_counts"]
+        flags.update(missing_value=2, numeric_outside_training_range=0, unseen_category=1,
+                     non_missing_value_in_all_missing_training_feature=2)
+        support["features"] = [
+            {"name": name, "kind": "categorical", "training_missing_count": 4,
+             "training_support": "unavailable_all_missing", "prediction_missing_count": 1,
+             "prediction_non_missing_without_training_values_count": 1, "unseen_category_count": 1}
+            for name in names
+        ]
+        self.reject(value)
+        flags["unseen_category"] = 2
+        self.check(value)
+        # A numeric unsupported row need not be unseen categorically.
+        flags["unseen_category"] = 1
+        item = support["features"][0]
+        item.pop("unseen_category_count")
+        item.update(kind="numeric", below_training_min_count=None, above_training_max_count=None)
+        value["feature_schema"][0]["dtype"] = "float64"
+        self.check(value)
+
     def test_support_missingness_constraints(self):
         for update in ({"training_missing_count": 4}, {"prediction_missing_count": 2},
                        {"prediction_non_missing_without_training_values_count": 1},
