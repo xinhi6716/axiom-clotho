@@ -228,9 +228,18 @@ def validate_groups(groups, n_rows: int) -> np.ndarray:
     # A masked identifier cannot establish a physical/source grouping boundary.
     if np.ma.isMaskedArray(groups) and np.ma.getmaskarray(groups).any():
         raise ValueError("groups must have one non-missing group identifier per row.")
+    temporal_error = ("Datetime and timedelta group identifiers require explicit "
+                      "conversion to caller-declared text or numeric IDs.")
+    # Object conversion can expose nanosecond datetime/timedelta storage as
+    # Python integers, while a NumPy timedelta scalar also passes Integral.
+    dtype = getattr(groups, "dtype", None)
+    if pd.api.types.is_datetime64_any_dtype(dtype) or pd.api.types.is_timedelta64_dtype(dtype):
+        raise ValueError(temporal_error)
     a = np.asarray(groups, dtype=object)
     if a.ndim != 1 or len(a) != n_rows or pd.isna(a).any():
         raise ValueError("groups must have one non-missing group identifier per row.")
+    if any(isinstance(v, (date, timedelta, np.datetime64, np.timedelta64)) for v in a):
+        raise ValueError(temporal_error)
     if any(not isinstance(v, (str, int, float, np.integer, np.floating)) or isinstance(v, bool) for v in a):
         raise ValueError("Group identifiers must be strings or finite numbers, not containers or booleans.")
     if any(isinstance(v, (float, np.floating)) and not np.isfinite(v) for v in a):
