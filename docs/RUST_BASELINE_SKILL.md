@@ -66,10 +66,15 @@ selection). Each of the three JSON files must independently supply exactly:
 ```
 
 Save that as `observed.json`. Make `model.json` with the same declarations and
-keys but values `[1, 2]`, and `baseline.json` with values `[0, 1]`. From `rust/`:
+keys but values `[1, 2]`, and `baseline.json` with values `[0, 1]`.
+
+Run the shell examples in this guide from the repository root. Their example
+inputs and outputs are relative to that directory. Cargo uses the explicit
+`rust/Cargo.toml` workspace; see the [native build guide](RUST_NATIVE_WORKFLOW.md#build-and-run)
+for dependency setup and offline builds.
 
 ```sh
-cargo run --locked -p clotho-cli -- compare-saved \
+cargo run --manifest-path rust/Cargo.toml --locked -p clotho-cli -- compare-saved \
   --observed observed.json --model model.json --baseline baseline.json \
   --out comparison.json
 ```
@@ -101,7 +106,7 @@ To check a saved series' declared query digest against a file, use
 Supply the query artifact with `--query`:
 
 ```sh
-cargo run --locked -p clotho-cli -- compare-saved \
+cargo run --manifest-path rust/Cargo.toml --locked -p clotho-cli -- compare-saved \
   --observed observed-v2.json --model model-v2.json --baseline baseline-v2.json \
   --query query.csv --out comparison-v2.json
 ```
@@ -211,7 +216,7 @@ Supply **both** `--row-id ID_COLUMN` and `--saved-contract CONTRACT.json`:
 ```
 
 ```sh
-cargo run --locked -p clotho-cli -- predict \
+cargo run --manifest-path rust/Cargo.toml --locked -p clotho-cli -- predict \
   --artifact model.json --csv query.csv --row-id measurement_id \
   --saved-contract contract.json --out predictions-v2.json
 ```
@@ -259,7 +264,7 @@ training provenance, held-out independence, or correctness of physical data.
 a separate ID/target CSV. This closes the native label-separated scoring path:
 
 ```sh
-cargo run --locked -p clotho-cli -- prepare-observed \
+cargo run --manifest-path rust/Cargo.toml --locked -p clotho-cli -- prepare-observed \
   --query query.csv --observed labels.csv --row-id measurement_id \
   --saved-contract contract.json --out observed-v2.json
 ```
@@ -328,7 +333,7 @@ check before publishing; legacy prediction CSV and byte-only comparison are unch
 ```
 
 ```sh
-cargo run --locked -p clotho-cli -- pool-saved \
+cargo run --manifest-path rust/Cargo.toml --locked -p clotho-cli -- pool-saved \
   --manifest reports.json --out pooled.json
 ```
 
