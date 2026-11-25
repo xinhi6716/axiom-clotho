@@ -74,9 +74,32 @@ pub fn regression_rmse(y_true: &[f64], y_pred: &[f64]) -> Result<f64, Evaluation
     if y_true.iter().chain(y_pred).any(|v| !v.is_finite()) {
         return Err(EvaluationError::NonFinite);
     }
-    let (errors, scale, factor) = differences(y_true, y_pred)?;
-    let squares = compensated_sum(errors.iter().map(|v| v * v));
-    restore_scale((squares / y_true.len() as f64).sqrt(), scale, factor)
+    // The usual path discovers the maximum finite difference in one pass,
+    // then reduces normalized errors without a row-sized scratch vector.
+    let pairs = || y_true.iter().copied().zip(y_pred.iter().copied());
+    let direct_scale = pairs().map(|(a, b)| (a - b).abs()).fold(0.0, f64::max);
+    let (scale, factor) = if direct_scale.is_finite() {
+        (direct_scale, 1.0)
+    } else {
+        let mut scale = 0.0_f64;
+        for (a, b) in pairs() {
+            scale = scale.max(scaled_error(a, b, 0.5)?.abs());
+        }
+        (scale, 0.5)
+    };
+    if scale == 0.0 {
+        return Ok(0.0);
+    }
+    let mut squares = CompensatedSum::default();
+    for (a, b) in pairs() {
+        let normalized = normalize_error(scaled_error(a, b, factor)?, scale)?;
+        squares.add(normalized * normalized);
+    }
+    restore_scale(
+        (squares.total() / y_true.len() as f64).sqrt(),
+        scale,
+        factor,
+    )
 }
 
 /// Relative squared-error improvement against explicit baseline predictions.
@@ -204,28 +227,37 @@ fn differences(a: &[f64], b: &[f64]) -> Result<(Vec<f64>, f64, f64), EvaluationE
     let mut values = Vec::with_capacity(a.len());
     let mut scale = 0.0_f64;
     for (&a, &b) in a.iter().zip(b) {
-        let direct = a - b;
-        let difference = if direct.is_finite() {
-            direct * factor
-        } else {
-            a * factor - b * factor
-        };
-        if !difference.is_finite() || (a != b && difference == 0.0) {
-            return Err(EvaluationError::NumericOverflow);
-        }
+        let difference = scaled_error(a, b, factor)?;
         scale = scale.max(difference.abs());
         values.push(difference);
     }
     if scale > 0.0 {
         for value in &mut values {
-            let normalized = *value / scale;
-            if *value != 0.0 && normalized == 0.0 {
-                return Err(EvaluationError::NumericOverflow);
-            }
-            *value = normalized;
+            *value = normalize_error(*value, scale)?;
         }
     }
     Ok((values, scale, factor))
+}
+
+fn scaled_error(a: f64, b: f64, factor: f64) -> Result<f64, EvaluationError> {
+    let direct = a - b;
+    let difference = if direct.is_finite() {
+        direct * factor
+    } else {
+        a * factor - b * factor
+    };
+    if !difference.is_finite() || (a != b && difference == 0.0) {
+        return Err(EvaluationError::NumericOverflow);
+    }
+    Ok(difference)
+}
+
+fn normalize_error(value: f64, scale: f64) -> Result<f64, EvaluationError> {
+    let normalized = value / scale;
+    if value != 0.0 && normalized == 0.0 {
+        return Err(EvaluationError::NumericOverflow);
+    }
+    Ok(normalized)
 }
 
 fn restore_scale(value: f64, scale: f64, factor: f64) -> Result<f64, EvaluationError> {
@@ -236,19 +268,34 @@ fn restore_scale(value: f64, scale: f64, factor: f64) -> Result<f64, EvaluationE
     Ok(result)
 }
 
-fn compensated_sum(values: impl Iterator<Item = f64>) -> f64 {
-    let mut sum = 0.0_f64;
-    let mut correction = 0.0_f64;
-    for value in values {
-        let next = sum + value;
-        correction += if sum.abs() >= value.abs() {
-            (sum - next) + value
+#[derive(Default)]
+struct CompensatedSum {
+    sum: f64,
+    correction: f64,
+}
+
+impl CompensatedSum {
+    fn add(&mut self, value: f64) {
+        let next = self.sum + value;
+        self.correction += if self.sum.abs() >= value.abs() {
+            (self.sum - next) + value
         } else {
-            (value - next) + sum
+            (value - next) + self.sum
         };
-        sum = next;
+        self.sum = next;
     }
-    sum + correction
+
+    fn total(self) -> f64 {
+        self.sum + self.correction
+    }
+}
+
+fn compensated_sum(values: impl Iterator<Item = f64>) -> f64 {
+    let mut sum = CompensatedSum::default();
+    for value in values {
+        sum.add(value);
+    }
+    sum.total()
 }
 
 /// Row indices for one group-disjoint cross-validation partition.

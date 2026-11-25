@@ -399,3 +399,30 @@ fn many_equal_load_ties_remain_lexical_with_shuffled_singleton_groups() {
         assert!(result.train_indices.windows(2).all(|pair| pair[0] < pair[1]));
     }
 }
+
+#[test]
+fn rms_only_streaming_preserves_overflow_rescue_and_tiny_error_refusal() {
+    use clotho_core::evaluation::regression_rmse;
+    let mut truth = [0.0; 16];
+    let mut predictions = [0.0; 16];
+    truth[0] = f64::MAX;
+    predictions[0] = -f64::MAX;
+    assert_eq!(
+        regression_rmse(&truth, &predictions).unwrap().to_bits(),
+        (f64::MAX * 0.5).to_bits()
+    );
+
+    // The rescued wide error incurs a common halving factor. A distinct
+    // minimum subnormal elsewhere must not silently disappear under it.
+    truth[15] = f64::from_bits(1);
+    assert_eq!(
+        regression_rmse(&truth, &predictions),
+        Err(EvaluationError::NumericOverflow)
+    );
+    assert_eq!(
+        regression_rmse(&[-0.0, 0.0], &[0.0, -0.0])
+            .unwrap()
+            .to_bits(),
+        0
+    );
+}
