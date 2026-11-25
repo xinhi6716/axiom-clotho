@@ -138,6 +138,15 @@ def _features(X):
     return X
 
 
+def _column_names(X):
+    if not isinstance(X, pd.DataFrame):
+        return None
+    names = list(X.columns)
+    if not X.columns.is_unique or any(not isinstance(name, str) for name in names):
+        raise ValueError("Kernel DataFrame features must have unique string column names.")
+    return names
+
+
 def _finite(value, name, shape=None):
     data = value.data if sparse.issparse(value) else np.asarray(value)
     actual_shape = value.shape if sparse.issparse(value) else data.shape
@@ -178,6 +187,8 @@ class NystroemRidgeRegressor(RegressorMixin, BaseEstimator):
     and the component count is min(rank_cap, training rows), not algebraic rank.
     Sampling and fitting weight rows equally; this is not group-balanced fitting.
     No groups or targets are needed for prediction. No executable state is saved.
+    Fit on a named DataFrame requires the same feature names and order at
+    prediction. Unnamed matrices retain positional semantics.
     Failed fitting preserves any previous complete fitted state.
     """
 
@@ -199,7 +210,9 @@ class NystroemRidgeRegressor(RegressorMixin, BaseEstimator):
                 or not 1 <= self.rank_cap <= MAX_RANK):
             raise ValueError(f"rank_cap must be an integer from 1 to {MAX_RANK}.")
         seed = validate_seed(self.random_state)
-        X = _features(X)
+        features = _features(X)
+        names = _column_names(X)
+        X = features
         rows, width = X.shape
         _reject_unsafe_containers(y, "Kernel targets")
         # Reuse the shared numeric/precision policy before any float coercion.
@@ -244,10 +257,16 @@ class NystroemRidgeRegressor(RegressorMixin, BaseEstimator):
         self.__dict__.update(mapper_=mapper, ridge_=model, n_features_in_=width,
                              n_training_rows_=rows, effective_n_components_=components,
                              gamma_=gamma, fit_details_=details)
+        if names is not None:
+            self.feature_names_in_ = np.asarray(names, dtype=object)
+        else:
+            self.__dict__.pop("feature_names_in_", None)
         return self
 
     def predict(self, X):
         check_is_fitted(self, ("mapper_", "ridge_", "fit_details_"))
+        if hasattr(self, "feature_names_in_") and _column_names(X) != self.feature_names_in_.tolist():
+            raise ValueError("Kernel prediction feature names and order must exactly match training.")
         X = _features(X)
         if X.shape[1] != self.n_features_in_:
             raise ValueError("Kernel prediction feature width must match the fitted transformed features.")

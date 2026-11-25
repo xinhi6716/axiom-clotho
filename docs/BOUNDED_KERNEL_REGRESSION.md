@@ -22,6 +22,11 @@ Dense and CSR outputs from that preprocessing are supported. Raw missing values
 are not silently imputed here, and unseen raw categories do not establish valid
 prediction support merely because their encoding produces finite numbers.
 
+For direct fits on a pandas DataFrame, use unique string feature names and
+supply the same names in the same order for prediction. Renamed, reordered
+or unnamed queries reject instead of silently changing feature positions.
+An unnamed matrix fit remains positional, as before.
+
 Constructor parameters:
 
 | Parameter | Contract |

@@ -69,6 +69,42 @@ class KernelRegressionTests(unittest.TestCase):
                 self.assertEqual(sparse.issparse(actual.mapper_.components_), sparse.issparse(X))
                 json.dumps(actual.fit_details_, allow_nan=False)
 
+    def test_named_inference_rejects_reordered_renamed_or_unnamed_queries(self):
+        X = pd.DataFrame({"gate_V": [0., 1., 2., 3., 4., 5.],
+                          "drain_A": [.2, .0, .1, .0, .3, .2]})
+        y = [0., 1., 4., 9., 16., 25.]
+        config = dict(alpha=.1, rank_cap=6, random_state=0)
+        model = NystroemRidgeRegressor(**config).fit(X, y)
+        anonymous = NystroemRidgeRegressor(**config).fit(X.to_numpy(), y)
+        query = X.iloc[2:4].copy()
+        correct = model.predict(query)
+        np.testing.assert_array_equal(correct, anonymous.predict(query.to_numpy()))
+        cases = (query[["drain_A", "gate_V"]], query.rename(columns={"gate_V": "gate_mV"}),
+                 query.to_numpy(), sparse.csr_matrix(query.to_numpy()))
+        for q in cases:
+            with self.subTest(kind=type(q), columns=getattr(q, "columns", None)):
+                with self.assertRaisesRegex(ValueError, "feature names and order"):
+                    model.predict(q)
+        np.testing.assert_array_equal(model.predict(query), correct)
+
+    def test_named_schema_is_published_only_after_successful_fit(self):
+        X = pd.DataFrame(self.X, columns=["voltage", "current"])
+        model = self.fresh().fit(X, self.y)
+        names_before = model.feature_names_in_
+        prediction_before = model.predict(X)
+        mapper_before, ridge_before = model.mapper_, model.ridge_
+        self.assertEqual(names_before.tolist(), list(X))
+        for names in (["gate", "gate"], ["gate", 0]):
+            with self.subTest(names=names), self.assertRaisesRegex(ValueError, "unique string"):
+                model.fit(X.set_axis(names, axis=1), self.y)
+            self.assertIs(model.feature_names_in_, names_before)
+            self.assertIs(model.mapper_, mapper_before)
+            self.assertIs(model.ridge_, ridge_before)
+            np.testing.assert_array_equal(model.predict(X), prediction_before)
+        model.fit(self.X, self.y)
+        self.assertFalse(hasattr(model, "feature_names_in_"))
+        self.assertEqual(model.predict(self.X).shape, (len(X),))
+
     def test_tiny_and_capped_folds_have_explicit_component_counts_without_warning(self):
         for rows in (1, 2, 63, 64, 65):
             with self.subTest(rows=rows), warnings.catch_warnings(record=True) as caught:
