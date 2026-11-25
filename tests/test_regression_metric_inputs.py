@@ -71,6 +71,25 @@ class RegressionMetricInputsTests(unittest.TestCase):
             self.assert_rejected(values, [1, 2])
             self.assert_rejected([1, 2], values)
 
+    def test_timedelta_scalars_never_become_observed_or_predicted_numbers(self):
+        for unit in ("ns", "us", "D"):
+            ticks = [np.timedelta64(0, unit), np.timedelta64(1, unit)]
+            for values in (ticks, tuple(ticks), [0, ticks[1]], np.array(ticks),
+                           np.array(ticks, dtype=object), pd.Series(ticks, dtype=object)):
+                with self.subTest(unit=unit, container=type(values)):
+                    self.assert_rejected(values, [0, 1])
+                    self.assert_rejected([0, 1], values)
+        self.assert_rejected([0, np.timedelta64("NaT")], [0, 1])
+
+    def test_explicitly_converted_ticks_keep_ordinary_numeric_scores(self):
+        times = pd.Series(pd.to_timedelta([0, 1], unit="s"))
+        observed = times.dt.total_seconds()
+        predicted = [np.int32(0), np.float32(1.0)]
+        expected = regression_metrics([0, 1], [0, 1])
+        self.assertEqual(expected["r2"], 1.0)
+        self.assertEqual(regression_metrics(observed, predicted), expected)
+        self.assertEqual(grouped_metrics(observed, predicted, ["a", "b"])[0]["group_mae"], 0.0)
+
     def test_masked_arrays_do_not_turn_hidden_entries_into_observations(self):
         for mask in ([False, True], [False, False]):
             values = np.ma.array([1.0, 2.0], mask=mask)

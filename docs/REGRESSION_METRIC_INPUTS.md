@@ -16,7 +16,7 @@ functions:
   accept the resulting float64 values, not a promise that precision is retained.
 - Numeric lists, tuples, NumPy arrays and pandas Series are supported, including
   object containers whose individual values meet the rules above.
-- Complex numbers, booleans, numeric strings, Decimal values, missing/nonfinite
+- Complex numbers, booleans, datetime or timedelta values, numeric strings, Decimal values, missing/nonfinite
   entries and masked arrays are rejected with `ValueError`. Masked arrays are
   rejected even with an all-false mask: explicitly provide the intended complete
   unmasked vector rather than relying on implicit mask removal. No observations

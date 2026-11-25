@@ -31,7 +31,7 @@ def _metric_vector(values):
     """Validate source values before a float64 conversion can erase errors."""
     message = (
         "Metrics require non-empty finite real numeric one-dimensional arrays "
-        "without booleans, complex values or precision above float64. Integer "
+        "without booleans, timedelta or complex values, or precision above float64. Integer "
         "values must be exactly representable in float64; rescale or explicitly "
         "convert inputs after reviewing their precision."
     )
@@ -61,7 +61,9 @@ def _metric_vector(values):
             raise ValueError(message)
         converted = np.empty(len(original), dtype=np.float64)
         for position, value in enumerate(original):
-            if isinstance(value, (bool, np.bool_)):
+            # NumPy durations are Integral scalars, but converting them would
+            # score their raw unit-dependent tick count rather than a number.
+            if isinstance(value, (bool, np.bool_, np.timedelta64)):
                 raise ValueError(message)
             if isinstance(value, Integral):
                 result = float(value)
