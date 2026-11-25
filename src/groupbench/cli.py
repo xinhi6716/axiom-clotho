@@ -303,6 +303,11 @@ def _verify_main(argv):
         return 2
 
 
+def _leaderboard_float(value):
+    # Preserve nonzero scores below the fixed-decimal display resolution.
+    return f"{value:.4e}" if 0 < abs(value) < 0.0001 else f"{value:.4f}"
+
+
 def main(argv=None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv and argv[0] == "verify":
@@ -488,7 +493,7 @@ The groupbench command is an alias for the same CLI.""",
         else:
             result = benchmark(frame, **options, outer_splits=args.outer_splits)
             report = result.write(args.out, overwrite=args.overwrite)
-            print(result.leaderboard[["model", "group_mae", "mae", "rmse", "r2"]].to_string(index=False, float_format=lambda value: f"{value:.4f}"))
+            print(result.leaderboard[["model", "group_mae", "mae", "rmse", "r2"]].to_string(index=False, float_format=_leaderboard_float))
             print(f"\nOffline report: {report}\nRun key: {result.manifest['run_key']}")
             print("Selection uses only inner folds. Review outputs for sensitive values before sharing.")
         return 0
