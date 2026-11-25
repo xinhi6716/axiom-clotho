@@ -146,17 +146,17 @@ impl LogisticClassifier {
         validate_features(x, self.width)?;
         x.iter()
             .map(|row| {
-                let mut terms = Vec::with_capacity(self.coefficients.len() + 1);
-                terms.push(self.intercept);
+                let mut score = CompensatedSum::default();
+                score.add(self.intercept)?;
                 for ((&column, scaler), &coefficient) in self
                     .columns
                     .iter()
                     .zip(&self.scalers)
                     .zip(&self.coefficients)
                 {
-                    terms.push(finite(scaler.transform(row[column])? * coefficient)?);
+                    score.add(finite(scaler.transform(row[column])? * coefficient)?)?;
                 }
-                Ok(sigmoid(compensated_sum(terms.into_iter())?))
+                Ok(sigmoid(score.total()?))
             })
             .collect()
     }
@@ -264,17 +264,17 @@ fn loss(
     if parameters.iter().any(|value| !value.is_finite()) {
         return Err(ClassificationError::NumericFailure);
     }
-    let mut terms = Vec::with_capacity(x.len() + parameters.len());
+    let mut objective = CompensatedSum::default();
     for (row, &label) in x.iter().zip(y) {
         let score = dot(row, parameters)?;
         let signed = if label == 1.0 { -score } else { score };
         // softplus(signed) avoids exp overflow and loss cancellation.
-        terms.push((signed.max(0.0) + (-signed.abs()).exp().ln_1p()) / x.len() as f64);
+        objective.add((signed.max(0.0) + (-signed.abs()).exp().ln_1p()) / x.len() as f64)?;
     }
     for &coefficient in &parameters[1..] {
-        terms.push(finite(0.5 * finite(alpha * coefficient)? * coefficient)?);
+        objective.add(finite(0.5 * finite(alpha * coefficient)? * coefficient)?)?;
     }
-    compensated_sum(terms.into_iter())
+    objective.total()
 }
 
 /// Diagonally equilibrated Cholesky, without hidden diagonal jitter.
@@ -445,33 +445,62 @@ fn checked_div(numerator: f64, denominator: f64) -> Result<f64, ClassificationEr
     }
 }
 
-fn compensated_sum(values: impl Iterator<Item = f64>) -> Result<f64, ClassificationError> {
-    let mut sum = 0.0_f64;
-    let mut correction = 0.0_f64;
-    for value in values {
-        let next = finite(sum + value)?;
-        correction += if sum.abs() >= value.abs() {
-            (sum - next) + value
+// Allocate no row- or feature-sized term buffers. Every caller keeps the
+// original insertion order, Neumaier correction, and finite checks.
+#[derive(Default)]
+struct CompensatedSum {
+    sum: f64,
+    correction: f64,
+}
+
+impl CompensatedSum {
+    fn add(&mut self, value: f64) -> Result<(), ClassificationError> {
+        let next = finite(self.sum + value)?;
+        self.correction += if self.sum.abs() >= value.abs() {
+            (self.sum - next) + value
         } else {
-            (value - next) + sum
+            (value - next) + self.sum
         };
-        sum = next;
+        self.sum = next;
+        Ok(())
     }
-    finite(sum + correction)
+
+    fn total(self) -> Result<f64, ClassificationError> {
+        finite(self.sum + self.correction)
+    }
+}
+
+fn compensated_sum(values: impl Iterator<Item = f64>) -> Result<f64, ClassificationError> {
+    let mut terms = CompensatedSum::default();
+    for value in values {
+        terms.add(value)?;
+    }
+    terms.total()
 }
 
 fn dot(a: &[f64], b: &[f64]) -> Result<f64, ClassificationError> {
-    let products = a
-        .iter()
-        .zip(b)
-        .map(|(a, b)| finite(a * b))
-        .collect::<Result<Vec<_>, _>>()?;
-    compensated_sum(products.into_iter())
+    let mut products = CompensatedSum::default();
+    for (&left, &right) in a.iter().zip(b) {
+        products.add(finite(left * right)?)?;
+    }
+    products.total()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn streaming_dot_keeps_cancellation_and_rejects_nonfinite_products_or_sums() {
+        let max = f64::MAX;
+        assert_eq!(dot(&[max, 1.0, -max], &[1.0; 3]), Ok(1.0));
+        assert_eq!(dot(&[-max, 1.0, max], &[1.0; 3]), Ok(1.0));
+        assert_eq!(dot(&[max], &[2.0]), Err(ClassificationError::NumericFailure));
+        assert_eq!(
+            dot(&[max, max, -max], &[1.0; 3]),
+            Err(ClassificationError::NumericFailure)
+        );
+    }
 
     #[test]
     fn exhausted_iteration_budget_never_returns_a_model() {
