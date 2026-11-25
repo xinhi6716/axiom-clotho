@@ -31,6 +31,7 @@ For your own measurements, [clotho init](../docs/WORKFLOW_INIT.md) creates blank
 | Question | Example |
 | --- | --- |
 | How do two fixed feature sets behave in a different environment? | [Environment-heldout comparison](environment-heldout-comparison/README.md): five fixed fits, target-free prediction, then separate scoring. |
+| Does holding out devices test a new recipe? | [Held devices versus held protocols](device-versus-protocol/README.md): paired toy scores on the same 20 invented devices, with two separate holdout questions. |
 | Can changing units change a model's predictions? | [A versus nA](numeric-unit-equivalence/README.md): twelve fixed fits comparing raw models and train-only scaling. Requires scikit-learn 1.8.0 and the documented source hash; saved results can be read without fitting. |
 | How does adjusting for an intermediary change a causal question? | [Causal-design rehearsal](causal-design-rehearsal/README.md): OLS and paired interventions in an invented model. Requires the simulation-only flag; it is not a real-data causal estimator. |
 
