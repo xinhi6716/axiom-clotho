@@ -164,14 +164,15 @@ impl RidgeRegressor {
         validate_features(x, self.scalers.len())?;
         x.iter()
             .map(|row| {
-                let mut terms = Vec::with_capacity(row.len() + 1);
-                terms.push(self.intercept);
-                for ((value, scaler), coefficient) in
-                    row.iter().zip(&self.scalers).zip(&self.coefficients)
-                {
-                    terms.push(checked_mul(scaler.transform(*value)?, *coefficient)?);
-                }
-                self.targets.inverse(compensated_sum(terms.into_iter())?)
+                let slopes = row
+                    .iter()
+                    .zip(&self.scalers)
+                    .zip(&self.coefficients)
+                    .map(|((&value, scaler), &coefficient)| {
+                        checked_mul(scaler.transform(value)?, coefficient)
+                    });
+                let terms = std::iter::once(Ok(self.intercept)).chain(slopes);
+                self.targets.inverse(compensated_checked_sum(terms)?)
             })
             .collect()
     }
@@ -492,6 +493,39 @@ fn check_condition(columns: &[Vec<f64>]) -> Result<(), RegressionError> {
 #[cfg(test)]
 mod pivot_tests {
     use super::*;
+
+    #[test]
+    fn affine_prediction_preserves_intercept_order_and_checked_late_terms() {
+        let scaler = FeatureScaler {
+            origin: 0.0,
+            magnitude: 1.0,
+            mean_delta: 0.0,
+            deviation: 1.0,
+        };
+        let mut fit = RidgeRegressor {
+            scalers: vec![scaler; 2],
+            intercept: f64::MAX,
+            coefficients: vec![1.0, -f64::MAX],
+            targets: TargetScaler {
+                origin: 0.0,
+                magnitude: 1.0,
+                deviation: 1.0,
+            },
+        };
+        assert_eq!(fit.predict(&[vec![1.0, 1.0]]), Ok(vec![1.0]));
+        // Moving the intercept after both slopes can hide an intermediate overflow.
+        fit.coefficients = vec![f64::MAX, -f64::MAX];
+        assert_eq!(
+            fit.predict(&[vec![1.0, 1.0]]),
+            Err(RegressionError::NumericFailure)
+        );
+        fit.coefficients = vec![1.0, 0.5];
+        fit.intercept = 0.0;
+        assert_eq!(
+            fit.predict(&[vec![2.0, 1.0], vec![1.0, f64::from_bits(1)]]),
+            Err(RegressionError::NumericFailure)
+        );
+    }
 
     #[test]
     fn qr_dot_keeps_cancellation_and_rejects_product_or_sum_failures() {
