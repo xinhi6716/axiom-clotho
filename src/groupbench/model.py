@@ -24,7 +24,7 @@ from threadpoolctl import threadpool_limits
 from .categorical import LEGACY, categorical_imputer, encoding_options, validate_categorical_encoding
 from .data import (validate_features, validate_groups, validate_prediction_features,
                    validate_seed, validate_target)
-from .metrics import grouped_metrics
+from .metrics import _add_group_aggregates, grouped_metrics, regression_metrics
 from .kernel import NystroemRidgeRegressor
 from .baselines import GroupBalancedMedianRegressor, GroupBalancedRidgeRegressor, _reject_masked
 from .splitting import GroupKFold, audit_split
@@ -301,25 +301,32 @@ class GroupBenchRegressor(RegressorMixin, BaseEstimator):
             for row, (train, test) in zip(audit, splits):
                 row.update(domain_audit(train, test, plan.domains))
         records = []
+        group_order = tuple(dict.fromkeys(groups))
         # Limit BLAS/OpenMP as well as the tree estimator to one thread.
         with threadpool_limits(limits=1):
             for candidate in candidates:
                 oof = np.full(len(X), np.nan)
                 fold_scores = []
+                group_scores = {}
                 inner_fit_details = []
                 for inner_fold, (train, test) in enumerate(splits):
                     pipeline = make_pipeline(X.iloc[train], candidate, seed, **encoding_options(plan.categorical_encoding))
                     _fit_pipeline(pipeline, X.iloc[train], y[train], groups[train], candidate.family)
                     prediction = pipeline.predict(X.iloc[test])
                     oof[test] = prediction
-                    scores, _ = grouped_metrics(y[test], prediction, groups[test])
+                    scores, per_group = grouped_metrics(y[test], prediction, groups[test])
                     fold_scores.append(scores[plan.objective])
+                    group_scores.update((row["group"], row) for row in per_group)
                     details = _optional_fit_details(pipeline, candidate.family, groups[train])
                     if details is not None:
                         inner_fit_details.append({"inner_fold": inner_fold, "train_rows": len(train),
                                                   "test_rows": len(test),
                                                   "details": details})
-                scores, _ = grouped_metrics(y, oof, groups)
+                # Each whole group occurs in precisely one validation fold.
+                # Reuse its checked local score and retain pooled row arithmetic
+                # and the original group encounter order for equal-group means.
+                scores = _add_group_aggregates(regression_metrics(y, oof),
+                                               [group_scores[g] for g in group_order])
                 records.append({
                     "candidate": candidate.name, "family": candidate.family,
                     "params": candidate.params, "selection_score": scores[plan.objective],

@@ -103,15 +103,18 @@ class RegressionFitStateTests(unittest.TestCase):
                 self.assert_preserved(model, before)
 
     def test_inner_or_pooled_metric_failure_preserves_previous_state(self):
-        for position in (1, 3, 12):
-            with self.subTest(metric=position):
-                model = self.fitted()
-                before = self.snapshot(model)
-                fail, calls = self.failing_call(model_module.grouped_metrics, position)
-                with patch.object(model_module, "grouped_metrics", fail), self.assertRaisesRegex(ValueError, "synthetic"):
-                    model.fit(self.incoming, self.new_y, self.new_groups)
-                self.assertEqual(len(calls), position)
-                self.assert_preserved(model, before)
+        stages = {"grouped_metrics": (1, 3, 8), "regression_metrics": (1, 4),
+                  "_add_group_aggregates": (1, 4)}
+        for metric, positions in stages.items():
+            for position in positions:
+                with self.subTest(metric=metric, position=position):
+                    model = self.fitted()
+                    before = self.snapshot(model)
+                    fail, calls = self.failing_call(getattr(model_module, metric), position)
+                    with patch.object(model_module, metric, fail), self.assertRaisesRegex(ValueError, "synthetic"):
+                        model.fit(self.incoming, self.new_y, self.new_groups)
+                    self.assertEqual(len(calls), position)
+                    self.assert_preserved(model, before)
 
     def test_real_metric_arithmetic_failure_preserves_previous_state(self):
         model = self.fitted()
