@@ -120,6 +120,18 @@ impl LogisticClassifier {
             columns.push(column);
             scalers.push(FeatureScaler::fit(x, column)?);
         }
+        let initial_intercept = (positives as f64 / (y.len() - positives) as f64).ln();
+        if columns.is_empty()
+            && intercept_converges_without_a_design(y, initial_intercept).unwrap_or(false)
+        {
+            return Ok(Self {
+                width,
+                columns,
+                scalers,
+                intercept: initial_intercept,
+                coefficients: Vec::new(),
+            });
+        }
         let mut design = Vec::with_capacity(x.len());
         for row in x {
             let mut transformed = Vec::with_capacity(columns.len() + 1);
@@ -130,7 +142,7 @@ impl LogisticClassifier {
             design.push(transformed);
         }
         let mut parameters = vec![0.0; columns.len() + 1];
-        parameters[0] = (positives as f64 / (y.len() - positives) as f64).ln();
+        parameters[0] = initial_intercept;
         let parameters = optimize(&design, y, alpha, parameters, MAX_ITERATIONS)?;
         Ok(Self {
             width,
@@ -160,6 +172,37 @@ impl LogisticClassifier {
             })
             .collect()
     }
+}
+
+// Test exactly the first optimizer iteration for a fixed intercept-only design.
+// If it would not converge, the caller can still run the ordinary optimizer.
+#[cold]
+fn intercept_converges_without_a_design(
+    y: &[f64],
+    initial: f64,
+) -> Result<bool, ClassificationError> {
+    let score = dot(&[1.0], &[initial])?;
+    let exponential = (-score.abs()).exp();
+    let weight = exponential / (1.0 + exponential).powi(2);
+    let count = y.len() as f64;
+    let mut objective = CompensatedSum::default();
+    let mut gradient = 0.0;
+    let mut curvature = 0.0;
+    for &label in y {
+        let residual = if label == 1.0 {
+            -sigmoid(-score)
+        } else {
+            sigmoid(score)
+        };
+        objective.add(logistic_loss_term(score, label, exponential, count))?;
+        gradient += residual * 1.0 / count;
+        curvature += (weight * 1.0 / count) * 1.0;
+    }
+    // There are no slope coefficients, and the intercept is not penalized.
+    objective.total()?;
+    let step = solve_positive_definite(vec![vec![curvature]], &[gradient])?;
+    Ok(gradient.abs() <= GRADIENT_TOLERANCE
+        && step[0].abs() <= STEP_TOLERANCE * (1.0 + initial.abs()))
 }
 
 fn optimize(
@@ -550,6 +593,24 @@ mod tests {
                 let combined = derivatives(&design, &y, alpha, &parameters).unwrap();
                 assert_eq!(combined.value.to_bits(), objective.to_bits());
             }
+        }
+    }
+
+    #[test]
+    fn intercept_gate_matches_first_iteration_and_preserves_fallback() {
+        for n in [2, 7, 113, 7_919, 20_000] {
+            let y: Vec<_> = (0..n).map(|i| f64::from(i != 0)).collect();
+            let design = vec![vec![1.0]; y.len()];
+            let initial = f64::from(n - 1).ln();
+            for trial in [initial, 0.5, -20.0] {
+                let gated = intercept_converges_without_a_design(&y, trial).unwrap();
+                let explicit = optimize(&design, &y, 0.0, vec![trial], 1);
+                assert_eq!(gated, explicit.is_ok());
+            }
+            let baseline = optimize(&design, &y, 1e100, vec![initial], MAX_ITERATIONS).unwrap();
+            let model =
+                LogisticClassifier::fit(&vec![vec![7.0, -0.0]; y.len()], &y, 1e100).unwrap();
+            assert_eq!(model.intercept.to_bits(), baseline[0].to_bits());
         }
     }
 
