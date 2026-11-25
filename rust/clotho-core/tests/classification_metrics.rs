@@ -326,3 +326,31 @@ fn large_tied_input_keeps_auc_in_range() {
     close(metrics.log_loss, 2.0_f64.ln());
     assert_eq!(metrics.brier, 0.25);
 }
+
+#[test]
+fn auc_distinguishes_adjacent_scores_and_ties_both_signed_zeros() {
+    let min = f64::from_bits(1);
+    let below_one = f64::from_bits(1.0_f64.to_bits() - 1);
+    let above_half = f64::from_bits(0.5_f64.to_bits() + 1);
+    for (negative, positive, expected) in [
+        (-0.0, 0.0, 0.5_f64),
+        (0.0, -0.0, 0.5),
+        (-0.0, min, 1.0),
+        (min, 0.0, 0.0),
+        (0.5, above_half, 1.0),
+        (above_half, 0.5, 0.0),
+        (below_one, 1.0, 1.0),
+        (1.0, below_one, 0.0),
+    ] {
+        for (labels, scores) in [
+            ([0.0, 1.0], [negative, positive]),
+            ([1.0, 0.0], [positive, negative]),
+        ] {
+            let auc = binary_metrics(&labels, &scores, 0.5)
+                .unwrap()
+                .roc_auc
+                .unwrap();
+            assert_eq!(auc.to_bits(), expected.to_bits());
+        }
+    }
+}

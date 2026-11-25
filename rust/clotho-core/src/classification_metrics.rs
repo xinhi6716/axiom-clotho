@@ -287,14 +287,17 @@ fn ranked_auc(
     if n_positive == 0 || n_negative == 0 {
         return None;
     }
-    let mut ranked: Vec<_> = probability
+    // A validated probability can have its sign bit set only for -0.0.
+    // Shifting drops that sign (so both zeros tie), preserves all 63 score
+    // bits in their numeric order, and leaves a low bit for the binary label.
+    let mut ranked: Vec<u64> = probability
         .iter()
-        .copied()
-        .zip(y_true.iter().map(|&label| label == 1.0))
+        .zip(y_true)
+        .map(|(&score, &label)| (score.to_bits() << 1) | u64::from(label == 1.0))
         .collect();
-    // All probabilities have been validated as finite. Signed zero compares
-    // equal when collecting ties, even though total_cmp orders its two forms.
-    ranked.sort_unstable_by(|left, right| left.0.total_cmp(&right.0));
+    // Compare only score bits to retain the sort's fast path for an
+    // already ordered sequence that includes ties with differing labels.
+    ranked.sort_unstable_by(|left, right| (left >> 1).cmp(&(right >> 1)));
 
     let mut start = 0;
     let mut negatives_before = 0_usize;
@@ -302,8 +305,9 @@ fn ranked_auc(
     while start < ranked.len() {
         let mut end = start;
         let mut positives = 0_usize;
-        while end < ranked.len() && ranked[end].0 == ranked[start].0 {
-            positives += usize::from(ranked[end].1);
+        let score_key = ranked[start] >> 1;
+        while end < ranked.len() && ranked[end] >> 1 == score_key {
+            positives += (ranked[end] & 1) as usize;
             end += 1;
         }
         let negatives = end - start - positives;
