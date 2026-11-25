@@ -562,6 +562,8 @@ def _metric_equal(saved, expected, *, field=None):
             saved < 0.0 or (saved == 0.0) != (expected == 0.0)
         ):
             _reject("Saved error magnitude sign or zero disagrees with retained predictions.")
+        if field == "r2" and saved > 1.0:
+            _reject("Saved R2 must not exceed one.")
         if not math.isclose(saved, expected, rel_tol=1e-10, abs_tol=1e-12):
             _reject("Saved metric scores disagree with retained predictions.")
     elif type(expected) is dict:

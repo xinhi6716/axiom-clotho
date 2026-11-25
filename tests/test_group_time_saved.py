@@ -715,6 +715,23 @@ class PlanAndPredictionTamperingTests(SavedFixtureTestCase):
         refresh_metrics(zero)
         self.rejected_document(zero)
 
+    def test_r2_upper_bound_is_not_relaxed_by_recomputation_tolerance(self):
+        document = deepcopy(self.document)
+        for row in document["predictions"]:
+            row["prediction_ridge_alpha_1"] = row["observed"]
+        refresh_metrics(document)
+        self.assertEqual(document["metrics"][1]["pooled"]["r2"], 1.0)
+        self.assertEqual(validate(self.install(document)).n_tested_rows, 4)
+        write(exact_result(document), self.fresh())
+        for category in ("pooled", "per_window", "per_group"):
+            changed = deepcopy(document)
+            scores = changed["metrics"][1][category]
+            if category != "pooled":
+                scores = next(score for score in scores if score["r2"] == 1.0)
+            scores["r2"] = math.nextafter(1.0, math.inf)
+            with self.subTest(category=category):
+                self.rejected_document(changed)
+
     def test_observation_edits_are_detected_by_metrics_not_original_target(self):
         document = deepcopy(self.document)
         document["predictions"][0]["observed"] = 9.0
