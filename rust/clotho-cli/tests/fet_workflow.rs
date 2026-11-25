@@ -222,3 +222,51 @@ fn extraction_report_binds_exact_input_and_feature_bytes() {
     assert_ne!(original.0, changed.0);
     assert_ne!(original.1, changed.1);
 }
+
+#[test]
+fn report_retains_validated_conditions_for_interleaved_branches() {
+    let mut lines = DATA.lines();
+    let mut capture = format!("{}\n", lines.next().unwrap());
+    for row in lines {
+        capture.push_str(row);
+        capture.push('\n');
+        capture.push_str(
+            &row.replace(",D,C,", ",D2,C,")
+                .replace(",300,1,0,", ",325,-0.75,-0.25,"),
+        );
+        capture.push('\n');
+    }
+
+    let w = Workspace::new();
+    w.write("data.csv", &capture);
+    let run = extract(&w, "true");
+    assert!(
+        run.status.success(),
+        "{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+    let j: serde_json::Value =
+        serde_json::from_slice(&fs::read(w.0.join("out/extraction.json")).unwrap()).unwrap();
+
+    for (index, device, conditions, rows) in [
+        (0, "D", (300.0, 1.0, 0.0), [2, 4, 6, 8]),
+        (1, "D2", (325.0, -0.75, -0.25), [3, 5, 7, 9]),
+    ] {
+        let branch = &j["lineage"][index];
+        assert_eq!(branch["identity"][2], device);
+        assert_eq!(branch["all_source_rows"], serde_json::json!(rows));
+        assert_eq!(
+            branch["conditions"],
+            serde_json::json!({
+                "temperature_K": conditions.0,
+                "drain_source_voltage_V": conditions.1,
+                "body_source_voltage_V": conditions.2,
+            })
+        );
+    }
+
+    // These conditions are observed context, not a new feature or target.
+    let fields = fs::read_to_string(w.0.join("out/features.csv")).unwrap();
+    assert!(!fields.lines().next().unwrap().contains("temperature_K"));
+    assert!(w.0.join("out/COMPLETE").is_file());
+}

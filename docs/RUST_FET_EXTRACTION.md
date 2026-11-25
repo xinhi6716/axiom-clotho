@@ -59,7 +59,10 @@ characters. CSV formula prefixes are rejected for identifiers on CLI export.
 A fresh directory contains `features.csv`, the exact retained
 `transfer_input.csv`, `extraction.json` and a final `COMPLETE` marker.
 `extraction.json` records acquisition identities, settings, selected and full
-source record IDs, criterion bracket and descriptive log diagnostics. Source
+source record IDs, criterion bracket and descriptive log diagnostics. Each
+lineage entry also reports the validated fixed temperature (K), drain-source
+voltage (V), and body-source voltage (V), as measurement context rather than
+added feature columns. Source
 row IDs mean **logical CSV record index plus header**, not physical line number
 for multiline CSV records. Input order and acquisition order are preserved.
 The report includes the lowercase SHA-256 of exact retained input bytes

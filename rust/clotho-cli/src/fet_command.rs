@@ -163,8 +163,11 @@ pub fn run(opts: &HashMap<String, String>) -> Result<()> {
         "log_current_slope_decades_per_V",
     ])?;
     let mut lineage = Vec::new();
-    for f in &features {
+    // extract_cohort preserves branch order and validates every branch as
+    // nonempty with fixed conditions before returning any features.
+    for (f, (_, samples)) in features.iter().zip(&branches) {
         let a = &f.acquisition;
+        let acquisition_conditions = &samples[0];
         writer.write_record([
             a.lot.clone(),
             a.wafer.clone(),
@@ -175,7 +178,13 @@ pub fn run(opts: &HashMap<String, String>) -> Result<()> {
             f.criterion_gate_voltage_v.to_string(),
             f.log_slope_decades_per_v.to_string(),
         ])?;
-        lineage.push(serde_json::json!({"identity":[a.lot,a.wafer,a.device,a.condition,a.replicate,a.branch],"all_source_rows":f.all_source_rows,"criterion_source_rows":f.criterion_source_rows,"log_selected_source_rows":f.log_selected_source_rows,"criterion_bracket_span_V":f.bracket_span_v,"log_intercept":f.log_intercept,"log_rmse_decades":f.log_rmse_decades}));
+        lineage.push(serde_json::json!({"identity":[a.lot,a.wafer,a.device,a.condition,a.replicate,a.branch],
+            "conditions":{
+                "temperature_K":acquisition_conditions.temperature_k,
+                "drain_source_voltage_V":acquisition_conditions.drain_voltage_v,
+                "body_source_voltage_V":acquisition_conditions.body_voltage_v
+            },
+            "all_source_rows":f.all_source_rows,"criterion_source_rows":f.criterion_source_rows,"log_selected_source_rows":f.log_selected_source_rows,"criterion_bracket_span_V":f.bracket_span_v,"log_intercept":f.log_intercept,"log_rmse_decades":f.log_rmse_decades}));
     }
     let csv = writer.into_inner()?;
     let input_sha256 = format!("{:x}", Sha256::digest(&raw));
