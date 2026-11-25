@@ -47,7 +47,11 @@ class GroupKFold:
         assignments = np.empty(len(unique), dtype=int)
         for group_id in ordered:
             candidates = np.flatnonzero(loads == loads.min())
-            fold = int(rng.choice(candidates))
+            # Uniform choice over an array draws an integer offset. Skip
+            # the singleton (which consumes no RNG state), and retain the
+            # exact candidate order and random draws on ties.
+            fold = int(candidates[0] if candidates.size == 1 else
+                       candidates[rng.integers(candidates.size)])
             assignments[group_id] = fold
             loads[fold] += counts[group_id]
         fold_ids = assignments[ids]
