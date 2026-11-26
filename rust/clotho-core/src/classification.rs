@@ -183,16 +183,19 @@ fn intercept_converges_without_a_design(
 ) -> Result<bool, ClassificationError> {
     let score = dot(&[1.0], &[initial])?;
     let exponential = (-score.abs()).exp();
-    let weight = exponential / (1.0 + exponential).powi(2);
+    let denominator = 1.0 + exponential;
+    let weight = exponential / denominator.powi(2);
+    let negative_label_residual = sigmoid_with_exp(score, exponential, denominator);
+    let positive_label_residual = -sigmoid_with_exp(-score, exponential, denominator);
     let count = y.len() as f64;
     let mut objective = CompensatedSum::default();
     let mut gradient = 0.0;
     let mut curvature = 0.0;
     for &label in y {
         let residual = if label == 1.0 {
-            -sigmoid(-score)
+            positive_label_residual
         } else {
-            sigmoid(score)
+            negative_label_residual
         };
         objective.add(logistic_loss_term(score, label, exponential, count))?;
         gradient += residual * 1.0 / count;
@@ -272,15 +275,18 @@ fn derivatives(
     let count = x.len() as f64;
     for (row, &label) in x.iter().zip(y) {
         let score = dot(row, parameters)?;
-        // Avoid cancellation of sigmoid(score) - 1 for large positive scores.
-        let residual = if label == 1.0 {
-            -sigmoid(-score)
-        } else {
-            sigmoid(score)
-        };
         let exponential = (-score.abs()).exp();
+        let denominator = 1.0 + exponential;
+        // Use -sigmoid(-score) rather than sigmoid(score) - 1 to retain
+        // the positive-class residual in the tails. Either sigmoid sign
+        // uses this same exponential, as do the loss and curvature.
+        let residual = if label == 1.0 {
+            -sigmoid_with_exp(-score, exponential, denominator)
+        } else {
+            sigmoid_with_exp(score, exponential, denominator)
+        };
         objective.add(logistic_loss_term(score, label, exponential, count))?;
-        let weight = exponential / (1.0 + exponential).powi(2);
+        let weight = exponential / denominator.powi(2);
         for j in 0..width {
             gradient[j] += residual * row[j] / count;
             let weighted = weight * row[j] / count;
@@ -402,6 +408,14 @@ fn sigmoid(value: f64) -> f64 {
     } else {
         let exponential = value.exp();
         exponential / (1.0 + exponential)
+    }
+}
+
+fn sigmoid_with_exp(value: f64, exponential: f64, denominator: f64) -> f64 {
+    if value >= 0.0 {
+        1.0 / denominator
+    } else {
+        exponential / denominator
     }
 }
 
@@ -551,6 +565,27 @@ fn dot(a: &[f64], b: &[f64]) -> Result<f64, ClassificationError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shared_exponential_residual_preserves_both_sigmoid_tails_bitwise() {
+        for score in [
+            -f64::MAX, -746.0, -745.0, -710.0, -40.0, -1.0,
+            -f64::from_bits(1), -0.0, 0.0, f64::from_bits(1),
+            1.0, 40.0, 710.0, 745.0, 746.0, f64::MAX,
+        ] {
+            let exponential = (-score.abs()).exp();
+            let denominator = 1.0 + exponential;
+            for signed in [score, -score] {
+                assert_eq!(
+                    sigmoid_with_exp(signed, exponential, denominator).to_bits(),
+                    sigmoid(signed).to_bits()
+                );
+            }
+        }
+        let tail = (-40.0_f64).exp();
+        assert!(-sigmoid_with_exp(-40.0, tail, 1.0 + tail) < 0.0);
+    }
+
 
     #[test]
     fn streaming_dot_keeps_cancellation_and_rejects_nonfinite_products_or_sums() {
