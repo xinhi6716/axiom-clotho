@@ -677,3 +677,59 @@ def paired_parent_mae_deletion_bounds(rows, *, expected_roster, max_deletions):
         "max_deletions": max_deletions,
         "mae_b_minus_a_bounds_by_budget": tuple(bounds),
     }
+
+
+def paired_practical_loss_rates(rows, *, expected_roster, margin):
+    """Describe how often either forecast beats the other by a fixed margin.
+
+    Supply one (row_id, observed, prediction_a, prediction_b) tuple per
+    independently frozen (row_id, group_id) mapping. The nonnegative
+    absolute loss margin is specified in the common target units before
+    outcomes are compared. Differences within or on either margin boundary
+    count as within-margin, not as wins. Every declared row needs both
+    predictions and an observation; none is dropped or imputed.
+
+    Results are exact Fractions over the represented binary64 inputs, with
+    equal-row and equal-declared-group weighting reported separately.
+    Within-margin is a descriptive category, not statistical equivalence.
+    Declared groups do not prove independent replication or future accuracy.
+    """
+    if not all(map(_bounded_paired_sequence, (rows, expected_roster))):
+        raise ValueError("Rows and frozen roster must be bounded nonempty lists or tuples.")
+    margin_units = _paired_binary64_units(margin)
+    if margin_units < 0:
+        raise ValueError("Practical absolute-error margin must be nonnegative.")
+    roster = {}
+    for membership in expected_roster:
+        if (type(membership) is not tuple or len(membership) != 2
+                or not all(map(_paired_roster_id, membership))):
+            raise ValueError("Frozen roster memberships require valid (row ID, group ID) tuples.")
+        row_id, group = membership
+        if row_id in roster:
+            raise ValueError("Frozen roster row IDs must be unique.")
+        roster[row_id] = group
+    seen, by_group = set(), {}
+    for row in rows:
+        if type(row) is not tuple or len(row) != 4 or not _paired_roster_id(row[0]):
+            raise ValueError("Paired rows require an ID, observation and both predictions.")
+        row_id, target, a, b = row
+        if row_id not in roster or row_id in seen:
+            raise ValueError("Paired rows must match the frozen roster exactly.")
+        seen.add(row_id)
+        y, pa, pb = map(_paired_binary64_units, (target, a, b))
+        gap = abs(pb - y) - abs(pa - y)
+        index = 0 if gap > margin_units else 2 if gap < -margin_units else 1
+        by_group.setdefault(roster[row_id], [0, 0, 0])[index] += 1
+    if len(seen) != len(roster):
+        raise ValueError("Paired rows must match the frozen roster exactly.")
+
+    names = ("a_lower_loss_beyond_margin", "within_margin", "b_lower_loss_beyond_margin")
+    row_rates = {name: Fraction(sum(counts[i] for counts in by_group.values()), len(seen))
+                 for i, name in enumerate(names)}
+    equal_group_rates = {name: sum((Fraction(counts[i], sum(counts)) for counts in by_group.values()),
+                                   Fraction()) / len(by_group) for i, name in enumerate(names)}
+    return {
+        "n_rows": len(seen), "n_declared_groups": len(by_group),
+        "margin_exact": Fraction(margin_units, _BINARY64_QUANTUM_DENOMINATOR),
+        "row_weighted": row_rates, "equal_group": equal_group_rates,
+    }
