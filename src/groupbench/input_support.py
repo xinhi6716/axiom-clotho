@@ -241,3 +241,43 @@ def audit_numeric_pair_hull(training, query) -> dict:
         "n_outside_hull_inside_marginal_ranges": outside_joint_inside_marginal,
         "n_inside_or_on_hull": len(candidates) - outside_marginal - outside_joint_inside_marginal,
     }
+
+
+def audit_complete_feature_support_by_group(features: pd.DataFrame, row_groups) -> dict:
+    """Count complete feature support and contrast it with marginal support.
+
+    Supply exactly the predeclared features and matching group identifiers
+    in positional row order. Use original observations, not imputed data.
+    A group with at least one observation per feature need not contain any
+    row with *every* feature observed. Only aggregate counts are returned;
+    no targets, group IDs, values, model fits or imputation are involved.
+
+    Groups are caller-declared counting units. A complete row does not
+    establish independent samples, acquisition provenance or predictability.
+    """
+    from .data import validate_features, validate_groups
+
+    selected = validate_features(features)
+    groups = validate_groups(row_groups, len(selected))
+    present = selected.notna().to_numpy()
+    complete_rows = present.all(axis=1)
+    group_positions = {}
+    inverse = np.fromiter(
+        (group_positions.setdefault(group, len(group_positions)) for group in groups),
+        dtype=np.intp, count=len(groups),
+    )
+    n_groups = len(group_positions)
+    feature_seen = np.zeros((n_groups, present.shape[1]), dtype=bool)
+    np.logical_or.at(feature_seen, inverse, present)
+    rows_per_group = np.bincount(inverse, minlength=n_groups)
+    complete_per_group = np.bincount(inverse[complete_rows], minlength=n_groups)
+    all_seen = feature_seen.all(axis=1)
+
+    return {
+        "n_rows": len(selected), "n_features": present.shape[1], "n_declared_groups": n_groups,
+        "n_complete_rows": int(complete_rows.sum()),
+        "n_groups_with_every_feature_observed_marginally": int(all_seen.sum()),
+        "n_groups_with_marginal_but_no_complete_rows": int((all_seen & (complete_per_group == 0)).sum()),
+        "n_groups_with_at_least_one_complete_row": int((complete_per_group > 0).sum()),
+        "n_groups_with_only_complete_rows": int((complete_per_group == rows_per_group).sum()),
+    }

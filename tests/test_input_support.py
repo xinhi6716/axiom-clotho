@@ -15,7 +15,8 @@ import pandas as pd
 from groupbench import benchmark, fit_predict, plan_benchmark, plan_prediction
 from groupbench.cli import main
 from groupbench.data import validate_features
-from groupbench.input_support import audit_numeric_pair_hull, prediction_input_support
+from groupbench.input_support import (audit_complete_feature_support_by_group,
+                                      audit_numeric_pair_hull, prediction_input_support)
 from groupbench.model import make_pipeline
 from groupbench.verification import _SAFE_OPEN_SUPPORTED, verify_bundle
 
@@ -317,6 +318,50 @@ class ExactNumericalHullSupportTests(unittest.TestCase):
                         [(float("nan"), 0)], [(float("inf"), 1)], [[1, 2]], [(1,)]):
             with self.subTest(invalid=invalid), self.assertRaises(ValueError):
                 audit_numeric_pair_hull([(0, 0)], invalid)
+
+
+class CompleteFeatureSupportByGroupTests(unittest.TestCase):
+    def test_marginal_support_can_hide_no_complete_rows(self):
+        x = pd.DataFrame({"t": [1., None, 1., None, 1., 1., None],
+                          "f": [None, 'a', 'a', 'a', 'b', 'b', None]})
+        groups = ["g0", "g0", "g1", "g1", "g2", "g2", "g3"]
+        original = x.copy()
+        expected = {
+            "n_rows": 7, "n_features": 2, "n_declared_groups": 4, "n_complete_rows": 3,
+            "n_groups_with_every_feature_observed_marginally": 3,
+            "n_groups_with_marginal_but_no_complete_rows": 1,
+            "n_groups_with_at_least_one_complete_row": 2,
+            "n_groups_with_only_complete_rows": 1,
+        }
+        with patch("groupbench.model.GroupBenchRegressor.fit", side_effect=AssertionError("fitted")):
+            self.assertEqual(audit_complete_feature_support_by_group(x, groups), expected)
+        pd.testing.assert_frame_equal(original, x)
+        self.assertEqual(audit_complete_feature_support_by_group(x.iloc[::-1], list(reversed(groups))), expected)
+
+    def test_all_two_group_two_column_masks_match_direct_oracle(self):
+        groups = [0, 1, 0, 1]
+        for bits in product((False, True), repeat=8):
+            masks = (bits[:2], bits[2:4], bits[4:6], bits[6:])
+            frame = pd.DataFrame([[0. if seen else None for seen in mask] for mask in masks],
+                                 columns=["x", "y"])
+            result = audit_complete_feature_support_by_group(frame, groups)
+            each = [tuple(masks[i] for i, group in enumerate(groups) if group == g) for g in (0, 1)]
+            complete = [sum(all(row) for row in group) for group in each]
+            marginal = [all(any(column) for column in zip(*group)) for group in each]
+            self.assertEqual(result["n_complete_rows"], sum(complete))
+            self.assertEqual(result["n_groups_with_every_feature_observed_marginally"], sum(marginal))
+            self.assertEqual(result["n_groups_with_marginal_but_no_complete_rows"],
+                             sum(b and n == 0 for b, n in zip(marginal, complete)))
+            self.assertEqual(result["n_groups_with_at_least_one_complete_row"], sum(n > 0 for n in complete))
+            self.assertEqual(result["n_groups_with_only_complete_rows"], sum(n == 2 for n in complete))
+
+    def test_group_and_feature_inputs_remain_strict(self):
+        frame = pd.DataFrame({"a": [1, 2], "b": [np.nan, 2]})
+        for groups in ([1], [1, "1"], ["a", None], [True, True], ["a", "b\0"]):
+            with self.subTest(groups=groups), self.assertRaises(ValueError):
+                audit_complete_feature_support_by_group(frame, groups)
+        with self.assertRaises(ValueError):
+            audit_complete_feature_support_by_group(frame.assign(a=np.inf), [0, 1])
 
 
 if __name__ == "__main__":
