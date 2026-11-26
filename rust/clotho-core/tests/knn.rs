@@ -197,3 +197,16 @@ fn reverse_distance_order_only_skips_partition_when_strict() {
     let model = KnnRegressor::fit(&x, &y, 2).unwrap();
     assert_eq!(model.predict(&[vec![0.0]]).unwrap(), vec![7.0]);
 }
+
+#[test]
+fn single_neighbor_retains_first_tie_and_exact_target_zero_semantics() {
+    let train = [vec![100.0], vec![-2.0], vec![-0.0], vec![2.0], vec![0.0]];
+    let tiny = -f64::from_bits(1);
+    let targets = [1.0, tiny, -0.0, 3.0, 5.0];
+    let model = KnnRegressor::fit(&train, &targets, 1).unwrap();
+    let predictions = model.predict(&[vec![-1.0], vec![0.0], vec![1.0]]).unwrap();
+    assert_eq!(
+        predictions.iter().map(|x| x.to_bits()).collect::<Vec<_>>(),
+        [tiny.to_bits(), 0, 0]
+    );
+}

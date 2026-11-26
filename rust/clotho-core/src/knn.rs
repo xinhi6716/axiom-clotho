@@ -99,6 +99,25 @@ impl KnnRegressor {
             }
             return Ok(vec![mean; x.len()]);
         }
+        if self.k == 1 {
+            return x
+                .iter()
+                .map(|row| {
+                    self.validate_query_scaling(row)?;
+                    let mut best_distance = f64::INFINITY;
+                    let mut best_index = 0;
+                    // Still validate every distance, even after a perfect
+                    // match. Strict improvement preserves the first-row tie.
+                    self.visit_distances(row, |index, distance| {
+                        if distance.total_cmp(&best_distance).is_lt() {
+                            best_distance = distance;
+                            best_index = index;
+                        }
+                    })?;
+                    exact_mean::checked_mean(std::iter::once(self.targets[best_index]), 1)
+                })
+                .collect();
+        }
         // Every query needs fresh distances, but their capacity depends only
         // on training size. Allocate lazily after the first scaling check.
         let mut distance_workspace = None;
