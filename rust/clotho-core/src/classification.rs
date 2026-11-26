@@ -271,7 +271,8 @@ fn derivatives(
     let width = parameters.len();
     let mut objective = CompensatedSum::default();
     let mut gradient = vec![0.0; width];
-    let mut curvature = vec![vec![0.0; width]; width];
+    // Cholesky reads only the lower triangle. Store each active prefix.
+    let mut curvature: Vec<_> = (1..=width).map(|len| vec![0.0; len]).collect();
     let count = x.len() as f64;
     for (row, &label) in x.iter().zip(y) {
         let score = dot(row, parameters)?;
@@ -287,11 +288,11 @@ fn derivatives(
         };
         objective.add(logistic_loss_term(score, label, exponential, count))?;
         let weight = exponential / denominator.powi(2);
-        for j in 0..width {
-            gradient[j] += residual * row[j] / count;
-            let weighted = weight * row[j] / count;
-            for k in 0..=j {
-                curvature[j][k] += weighted * row[k];
+        for ((gradient, lower_row), &value) in gradient.iter_mut().zip(&mut curvature).zip(row) {
+            *gradient += residual * value / count;
+            let weighted = weight * value / count;
+            for (cell, &predictor) in lower_row.iter_mut().zip(row) {
+                *cell += weighted * predictor;
             }
         }
     }
@@ -301,7 +302,6 @@ fn derivatives(
             curvature[j][j] = finite(curvature[j][j] + alpha)?;
         }
     }
-    // Cholesky reads only the lower triangle.
     Ok(ObjectiveDerivatives {
         value: penalized_objective(objective, parameters, alpha)?,
         gradient,
@@ -565,6 +565,17 @@ fn dot(a: &[f64], b: &[f64]) -> Result<f64, ClassificationError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn packed_lower_curvature_matches_zero_logit_outer_products() {
+        let x = vec![vec![1.0, 2.0, -3.0], vec![1.0, -4.0, 5.0]];
+        let d = derivatives(&x, &[0.0, 1.0], 0.125, &[0.0; 3]).unwrap();
+        assert_eq!(d.gradient, vec![0.0, 1.5, -2.0]);
+        assert_eq!(
+            d.curvature,
+            vec![vec![0.25], vec![-0.25, 2.625], vec![0.25, -3.25, 4.375]]
+        );
+    }
 
     #[test]
     fn shared_exponential_residual_preserves_both_sigmoid_tails_bitwise() {
