@@ -207,7 +207,7 @@ def _paired_binary64_units(value):
     return numerator << (_BINARY64_QUANTUM_EXP + 1 - denominator.bit_length())
 
 
-def paired_mae_missing_bounds(rows, *, expected_roster):
+def paired_mae_missing_bounds(rows, *, expected_roster, truth_bounds=None):
     """Bound the full equal-row B-minus-A MAE on a frozen paired roster.
 
     Supply (row_id, target_or_none, forecast_a, forecast_b) tuples and an
@@ -218,11 +218,18 @@ def paired_mae_missing_bounds(rows, *, expected_roster):
     not as rounded binary64 values. The available-case mean is None when
     no target is observed.
 
-    By the reverse triangle inequality a missing row contributes between
-    −|a−b| and |a−b|, attained at y=b and y=a respectively. Since missing
-    outcomes are unrestricted across rows, averaging these contributions
-    gives sharp bounds. This is not imputation, an uncertainty interval, a
-    missingness assumption, or a claim about physical independence.
+    Optionally supply a dict mapping missing row IDs to (lower, upper)
+    closed truth limits in the same target units. None on either side
+    denotes an unbounded side. Unlisted missing rows remain unrestricted.
+    A bound on an observed row is rejected. A point bound does not count
+    as an observation.
+
+    The B-minus-A loss difference is monotone or constant in truth, so
+    evaluate it at the declared endpoints (or its constant tails). For an
+    unrestricted row the range is [−|a−b|, |a−b|]. Averaging row endpoints
+    is sharp under the Cartesian product of the supplied intervals; with
+    extra cross-row constraints it is only an outer bound. This is not
+    imputation, a confidence interval, or physical independence evidence.
     """
     if not _bounded_paired_sequence(rows):
         raise ValueError("Rows must be a nonempty bounded list or tuple.")
@@ -241,11 +248,26 @@ def paired_mae_missing_bounds(rows, *, expected_roster):
             raise ValueError("Duplicate expected roster row ID.")
         expected.add(row_id)
 
+    bounds = {}
+    if truth_bounds is not None:
+        if type(truth_bounds) is not dict or len(truth_bounds) > len(expected):
+            raise ValueError("Truth bounds must be a bounded dict keyed by roster row ID.")
+        for row_id, limits in truth_bounds.items():
+            if not valid_id(row_id) or row_id not in expected:
+                raise ValueError("Truth bounds must identify only expected roster rows.")
+            if type(limits) is not tuple or len(limits) != 2:
+                raise ValueError("Each truth bound must be a (lower, upper) tuple.")
+            lower, upper = (None if value is None else _paired_binary64_units(value)
+                            for value in limits)
+            if lower is not None and upper is not None and lower > upper:
+                raise ValueError("Truth bound lower endpoint must not exceed its upper endpoint.")
+            bounds[row_id] = lower, upper
+
     ids = set()
     observed_count = 0
     # Accumulate dyadic sums in exact integer quantum units; construct only
     # the final ratios rather than repeatedly reducing row-level Fractions.
-    observed_sum = missing_radius = 0
+    observed_sum = unrestricted_radius = missing_lower = missing_upper = 0
     for row in rows:
         if type(row) is not tuple or len(row) != 4 or not valid_id(row[0]):
             raise ValueError("Each row must provide a row ID, target or None, and both forecasts.")
@@ -257,8 +279,18 @@ def paired_mae_missing_bounds(rows, *, expected_roster):
         ids.add(row_id)
         a, b = map(_paired_binary64_units, (pred_a, pred_b))
         if target is None:
-            missing_radius += abs(a - b)
+            limits = bounds.get(row_id)
+            if limits is None:
+                unrestricted_radius += abs(a - b)
+                continue
+            lower, upper = limits
+            left = b - a if lower is None else abs(b - lower) - abs(a - lower)
+            right = a - b if upper is None else abs(b - upper) - abs(a - upper)
+            missing_lower += min(left, right)
+            missing_upper += max(left, right)
         else:
+            if row_id in bounds:
+                raise ValueError("Truth bounds cannot be supplied for an observed target.")
             y = _paired_binary64_units(target)
             observed_count += 1
             observed_sum += abs(b - y) - abs(a - y)
@@ -273,8 +305,8 @@ def paired_mae_missing_bounds(rows, *, expected_roster):
         "n_observed": observed_count,
         "n_missing": total - observed_count,
         "available_mae_b_minus_a": mean(observed_sum, observed_count) if observed_count else None,
-        "full_mae_b_minus_a_lower": mean(observed_sum - missing_radius, total),
-        "full_mae_b_minus_a_upper": mean(observed_sum + missing_radius, total),
+        "full_mae_b_minus_a_lower": mean(observed_sum + missing_lower - unrestricted_radius, total),
+        "full_mae_b_minus_a_upper": mean(observed_sum + missing_upper + unrestricted_radius, total),
     }
 
 

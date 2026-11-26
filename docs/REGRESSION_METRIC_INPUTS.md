@@ -72,3 +72,41 @@ prediction and observation before summation; summing already rounded float64
 residuals can retain subtraction errors. Review the numerical scale as well. Stable bias calculation
 would require a versioned metric/reader strategy so historical outputs are not
 silently reinterpreted. The other metrics are not certified exact by this note.
+
+## Exact paired MAE sensitivity when truth is missing or bounded
+
+`groupbench.metrics.paired_mae_missing_bounds` is a separate in-memory
+diagnostic, not a prediction or fitting command. Supply one
+`(row_id, observed_or_None, prediction_a, prediction_b)` tuple for every ID
+in the independently declared attempted roster. Both forecasts are required
+on every included row. Optionally declare a closed truth interval for a
+missing outcome using `truth_bounds={row_id: (lower, upper)}`. Use `None` for
+an unbounded side, not infinity, zero or a substitute measurement. Rows
+without a declaration remain unrestricted; bounds on observed rows, reversed
+endpoints and IDs outside the roster reject. The finite numeric inputs are
+built-in floats or integers exactly representable in binary64. A point bound
+still counts as missing rather than as an observation.
+
+```python
+from groupbench.metrics import paired_mae_missing_bounds
+
+result = paired_mae_missing_bounds(
+    [("observed", 0, 0, 1), ("bounded", None, 0, 1)],
+    expected_roster=["observed", "bounded"],
+    truth_bounds={"bounded": (0.75, None)},
+)
+# Available outcome: B-minus-A = 1.
+# Equal-row full roster: lower = Fraction(0), upper = Fraction(1, 4).
+```
+
+The difference `abs(B - y) - abs(A - y)` is monotone or constant in `y`;
+its two range limits are found at the allowed endpoints or constant tails.
+The function returns exact `Fraction` results for the supplied numbers and
+reports observed and missing counts separately. The full-roster bounds are
+sharp when each row may vary independently over its declared interval; any
+additional joint constraints can make them conservative. This is sensitivity
+to supplied limits, not a confidence interval, evidence of physical
+independence, imputation or a certification that an instrument establishes
+the limits. Verify that units and row linkage match the frozen comparison
+before supplying bounds; keep attempts lacking either forecast in a separate
+accounting. Only equal-row weighting is implemented here.
