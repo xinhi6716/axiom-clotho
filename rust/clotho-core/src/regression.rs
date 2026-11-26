@@ -436,24 +436,27 @@ fn solve_qr(mut columns: Vec<Vec<f64>>, mut target: Vec<f64>) -> Result<Vec<f64>
             return Err(RegressionError::IllConditioned);
         }
         let diagonal = -length.copysign(columns[k][k]);
-        let mut reflector = columns[k][k..].to_vec();
+        // The reflector is needed only until the remaining columns and
+        // target are updated. Reuse the disjoint pivot tail until then.
+        let (pivot_columns, trailing_columns) = columns.split_at_mut(k + 1);
+        let reflector = &mut pivot_columns[k][k..];
         reflector[0] -= diagonal;
-        let reflector_norm = norm(&reflector);
-        for value in &mut reflector {
+        let reflector_norm = norm(reflector);
+        for value in reflector.iter_mut() {
             *value = checked_div(*value, reflector_norm)?;
         }
-        for column in &mut columns[k + 1..] {
-            let projection = 2.0 * dot(&reflector, &column[k..])?;
-            for (value, direction) in column[k..].iter_mut().zip(&reflector) {
+        for column in trailing_columns {
+            let projection = 2.0 * dot(reflector, &column[k..])?;
+            for (value, direction) in column[k..].iter_mut().zip(reflector.iter()) {
                 *value = finite(*value - checked_mul(projection, *direction)?)?;
             }
         }
-        let projection = 2.0 * dot(&reflector, &target[k..])?;
-        for (value, direction) in target[k..].iter_mut().zip(&reflector) {
+        let projection = 2.0 * dot(reflector, &target[k..])?;
+        for (value, direction) in target[k..].iter_mut().zip(reflector.iter()) {
             *value = finite(*value - checked_mul(projection, *direction)?)?;
         }
-        columns[k][k] = diagonal;
-        columns[k][k + 1..].fill(0.0);
+        reflector[0] = diagonal;
+        reflector[1..].fill(0.0);
     }
     check_condition(&columns)?;
     let mut solution = vec![0.0; count];
@@ -503,6 +506,23 @@ fn check_condition(columns: &[Vec<f64>]) -> Result<(), RegressionError> {
 #[cfg(test)]
 mod pivot_tests {
     use super::*;
+
+    #[test]
+    fn reflector_updates_do_not_overwrite_previous_pivot_rows() {
+        let columns = vec![
+            vec![1.0, 2.0, -1.0, 3.0, 4.0],
+            vec![0.0, 2.0, 4.0, -1.0, 2.0],
+            vec![2.0, 1.0, 0.0, -1.0, 3.0],
+        ];
+        let expected = [2.0, -3.0, 0.5];
+        let target = (0..5)
+            .map(|i| columns.iter().zip(expected).map(|(col, beta)| col[i] * beta).sum())
+            .collect();
+        let actual = solve_qr(columns, target).unwrap();
+        for (actual, expected) in actual.into_iter().zip(expected) {
+            assert!((actual - expected).abs() < 1e-12);
+        }
+    }
 
     #[test]
     fn affine_prediction_preserves_intercept_order_and_checked_late_terms() {
