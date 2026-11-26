@@ -201,6 +201,33 @@ def whole_episode_stress_status(history):
     return "unknown_without_observed_off_schedule_bias"
 
 
+def readout_paths(path, expected):
+    paths = defaultdict(dict)
+    for key, (raw_nominal, route) in records(path, IDENTITY + ("nominal_us", "readout_path")):
+        nominal = integer(raw_nominal)
+        if nominal not in ANCHORS:
+            raise ValueError("readout path table includes an off-anchor slot")
+        if key not in expected or len(expected[key].get(nominal, ())) != 1:
+            raise ValueError("readout path does not identify one captured frozen anchor")
+        if route and not KEY.fullmatch(route):
+            raise ValueError("invalid observed readout path label")
+        if nominal in paths[key]:
+            raise ValueError("duplicate readout path for the same captured anchor")
+        paths[key][nominal] = route
+    return paths
+
+
+def readout_path_status(slots, metadata):
+    if any(len(slots.get(nominal, ())) != 1 for nominal in ANCHORS):
+        return "missing_or_ambiguous_capture"
+    known = [path for path in metadata.values() if path]
+    if len(set(known)) > 1:
+        return "observed_path_change"
+    if len(known) == len(ANCHORS):
+        return "same_declared_path_at_all_anchors"
+    return "missing_or_unknown_path_without_observed_change"
+
+
 def validate_digest(digest, label):
     if digest is not None and (not isinstance(digest, str) or not SHA256.fullmatch(digest)):
         raise ValueError(f"{label} SHA-256 must be 64 lowercase hexadecimal digits")
@@ -209,7 +236,7 @@ def validate_digest(digest, label):
 def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=None,
           diagnose_dies=False, block_map_path=None, block_map_sha256=None, stress_history_path=None,
           diagnose_die_stress=False, diagnose_duplicate_anchors=False,
-          diagnose_terminal_alternatives=False, capture_sha256=None):
+          diagnose_terminal_alternatives=False, capture_sha256=None, readout_path_table=None):
     validate_digest(roster_sha256, "frozen roster")
     validate_digest(capture_sha256, "timestamp capture")
     validate_digest(block_map_sha256, "acquisition block map")
@@ -251,6 +278,8 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
             continue
         expected[key].setdefault(nominal, []).append(stamp)
 
+    paths = readout_paths(readout_path_table, expected) if readout_path_table is not None else None
+    attempted_paths, eligible_paths = Counter(), Counter()
     classifications = Counter()
     die_counts = defaultdict(lambda: [0, 0]) if diagnose_dies else None
     eligible_block_dies = defaultdict(set)
@@ -264,6 +293,11 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
     for key, slots in expected.items():
         reason = verdict(slots) if key in present else "missing_capture"
         classifications[reason] += 1
+        if paths is not None:
+            path_status = readout_path_status(slots, paths.get(key, {}))
+            attempted_paths[path_status] += 1
+            if reason == "eligible":
+                eligible_paths[path_status] += 1
         if die_counts is not None:
             counts = die_counts[key[:3]]
             counts[0] += 1
@@ -377,6 +411,11 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
                 status: len(dies) for status, dies in sorted(die_stress_eligible.items())
             },
         }
+    if paths is not None:
+        report["declared_readout_path_support"] = {
+            "frozen_attempted_by_status": dict(sorted(attempted_paths.items())),
+            "timing_eligible_by_status": dict(sorted(eligible_paths.items())),
+        }
     return report
 
 
@@ -404,6 +443,8 @@ def main():
                         help="report off-slot timing for absent terminal rows without substituting")
     parser.add_argument("--capture-sha256",
                         help="verify exact outcome-free timestamp capture against a trusted SHA-256")
+    parser.add_argument("--readout-paths", type=Path,
+                        help="independent captured anchor to readout path metadata")
     args = parser.parse_args()
     try:
         report = audit(args.frozen_roster, args.capture, diagnose_anchors=args.diagnose_anchors,
@@ -413,7 +454,7 @@ def main():
                        stress_history_path=args.stress_history, diagnose_die_stress=args.diagnose_die_stress,
                        diagnose_duplicate_anchors=args.diagnose_duplicate_anchors,
                        diagnose_terminal_alternatives=args.diagnose_terminal_alternatives,
-                       capture_sha256=args.capture_sha256)
+                       capture_sha256=args.capture_sha256, readout_path_table=args.readout_paths)
     except (OSError, UnicodeError, csv.Error):
         parser.exit(2, "error: input could not be read as UTF-8 CSV\n")
     except ValueError as exc:

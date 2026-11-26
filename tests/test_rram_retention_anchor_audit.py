@@ -24,7 +24,7 @@ def episode(key=BASE, early=1_000_000, final=100_000_000_000, error=0):
 
 
 class RetentionAnchorAudit(unittest.TestCase):
-    def run_capture(self, roster, rows, capture_header=IDS + TIMES, *, extra=(), block_map=None, stress=None):
+    def run_capture(self, roster, rows, capture_header=IDS + TIMES, *, extra=(), block_map=None, stress=None, readout_paths=None):
         with tempfile.TemporaryDirectory() as tmp:
             folder = Path(tmp)
             for name, header, payload in (
@@ -41,6 +41,11 @@ class RetentionAnchorAudit(unittest.TestCase):
                 with history.open("w", newline="", encoding="utf-8") as stream:
                     csv.writer(stream).writerows((IDS + ("bias_0_to_1s", "bias_1s_to_100ks"), *stress))
                 extra = (*extra, "--stress-history", str(history))
+            if readout_paths is not None:
+                paths = folder / "paths.csv"
+                with paths.open("w", newline="", encoding="utf-8") as stream:
+                    csv.writer(stream).writerows((IDS + ("nominal_us", "readout_path"), *readout_paths))
+                extra = (*extra, "--readout-paths", str(paths))
             return subprocess.run(
                 [sys.executable, str(TOOL), "--frozen-roster", str(folder / "roster.csv"),
                  "--capture", str(folder / "capture.csv"), *extra],
@@ -533,6 +538,44 @@ class RetentionAnchorAudit(unittest.TestCase):
         self.assertEqual(report["eligible_episodes"], 1)
         self.assertNotIn("unknown_epoch", checked.stdout)
         self.assertNotIn("privateLot", checked.stdout)
+
+    def test_observed_readout_path_is_not_inferred_from_common_clock(self):
+        roster = [(*BASE[:4], f"E{i}") for i in range(4)]
+        capture = [row for key in roster[:3] for row in episode(key)]
+        capture.extend(episode(roster[3])[:2])
+        ns = (0, 1_000_000, 100_000_000_000)
+        paths = [(*roster[0], nominal, "privatePathA") for nominal in ns]
+        paths += [(*roster[1], ns[0], "privatePathA"), (*roster[1], ns[2], "privatePathB")]
+        paths += [(*roster[2], ns[1], ""), (*roster[2], ns[2], "privatePathA")]
+        paths += [(*roster[3], ns[0], "privatePathA")]
+        ordinary = self.run_capture(roster, capture)
+        checked = self.run_capture(roster, capture, readout_paths=paths)
+        self.assertEqual((ordinary.returncode, checked.returncode), (1, 1))
+        report = json.loads(checked.stdout)
+        timing = {"same_declared_path_at_all_anchors": 1, "observed_path_change": 1,
+                  "missing_or_unknown_path_without_observed_change": 1}
+        self.assertEqual(report.pop("declared_readout_path_support"), {
+            "frozen_attempted_by_status": {**timing, "missing_or_ambiguous_capture": 1},
+            "timing_eligible_by_status": timing,
+        })
+        self.assertEqual(report, json.loads(ordinary.stdout))
+        self.assertNotIn("privatePath", checked.stdout)
+
+    def test_readout_path_map_cannot_bind_missing_repeated_or_off_anchor_records(self):
+        rows = episode()
+        path = (*BASE, 100_000_000_000, "privatePath")
+        for capture, mapping, diagnostic in (
+            (rows[:2], [path], "does not identify one captured frozen anchor"),
+            (rows + [rows[-1]], [path], "does not identify one captured frozen anchor"),
+            (rows, [path, path], "duplicate readout path"),
+            (rows, [(*BASE, 99_999_000_000, "privatePath")], "off-anchor slot"),
+        ):
+            with self.subTest(diagnostic=diagnostic):
+                denied = self.run_capture([BASE], capture, readout_paths=mapping)
+                self.assertEqual(denied.returncode, 2)
+                self.assertFalse(denied.stdout)
+                self.assertIn(diagnostic, denied.stderr)
+                self.assertNotIn("privatePath", denied.stderr)
 
     def test_capture_cannot_supply_labels_or_change_frozen_identity_set(self):
         r = self.run_capture([BASE], [(*row, "sensitive-value") for row in episode()],

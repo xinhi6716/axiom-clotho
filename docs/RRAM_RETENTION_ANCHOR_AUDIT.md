@@ -149,3 +149,16 @@ clock or timestamp, and all rows proven outside. That order resolves mixed
 cases. It never selects an off-slot read or adds it to the eligible
 endpoint. A duplicated or unresolved nominal terminal row is not an absent
 one; use the other diagnostics for those cases.
+
+For observed readout-path provenance, add `--readout-paths paths.csv` with
+exact columns `lot,wafer,die,cell,episode,nominal_us,readout_path`. Use
+one opaque path label per uniquely captured frozen anchor, or leave the
+path blank when unknown. The label can represent the instrument channel,
+gain/range, and read configuration as one documented identity; do not
+infer one from a shared clock or nominal setting. A row must refer to
+one captured 0, 1 s, or 100 ks slot; duplicate map rows or ambiguous or
+absent capture bindings are rejected. The report distinguishes observed
+changes, all three paths declared identical, missing/unknown paths, and
+absent/ambiguous capture, separately on the attempted and timing-eligible
+denominators. Matching labels do not establish calibration or equivalent
+electrical response, and no timing eligibility or exit rule changes.
