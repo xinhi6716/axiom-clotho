@@ -6,6 +6,7 @@ preparation, planning or prediction. Descriptive log-slope extraction is not an 
 model fit and is not a certification of subthreshold behavior.
 """
 from decimal import Decimal, InvalidOperation
+from fractions import Fraction
 import math
 from pathlib import Path
 import re
@@ -108,6 +109,27 @@ def validate_config(config):
     return config
 
 
+def _check_normalized_measurement_parameters(params, vth, logarithmic, rows):
+    """Match retained binary64 SI diagnostics to exact decimal declarations."""
+    divisors = {"V": 1, "mV": 10**3, "uV": 10**6,
+                "A": 1, "mA": 10**3, "uA": 10**6, "nA": 10**9, "pA": 10**12}
+    fields = (
+        (vth, "criterion_current", "criterion_current_unit", "signed_current_criterion_A"),
+        (vth, "max_bracket_span", "voltage_unit", "max_bracket_span_V"),
+        (logarithmic, "window_min", "voltage_unit", "window_min_V"),
+        (logarithmic, "window_max", "voltage_unit", "window_max_V"),
+    )
+    for report, declaration, unit, diagnostic in fields:
+        # Rational scaling and one conversion mirror the extraction tools;
+        # a caller's Decimal context cannot round the normalized declaration.
+        expected = float(Fraction(_decimal(params[declaration])) / divisors[params[unit]])
+        retained = report["parameters"][diagnostic]
+        if (type(retained) not in (int, float) or retained != expected
+                or any(not c.NUMBER.fullmatch(r[diagnostic]) or len(r[diagnostic]) > 64
+                       or float(r[diagnostic]) != expected for r in rows)):
+            raise c.WorkflowError("saved FET unit normalization differs from the declared measurement parameters")
+
+
 def _feature_rows(features, config):
     """Validate retained report identity and byte lineage, without rerunning extraction."""
     if set(features) != set(FET_FILES) or any(not isinstance(v, bytes) for v in features.values()):
@@ -166,6 +188,7 @@ def _feature_rows(features, config):
                 or logarithmic["parameters"]["window_min_input"] != params["window_min"]
                 or logarithmic["parameters"]["window_max_input"] != params["window_max"]):
             raise c.WorkflowError("saved FET reports do not match the explicit measurement configuration")
+        _check_normalized_measurement_parameters(params, vth, logarithmic, rows)
         for report in reports:
             if (type(report["schema_version"]) is not int or report["schema_version"] != 1
                     or report["provenance"]["input_sha256"] != raw_sha

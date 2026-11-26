@@ -317,6 +317,45 @@ class FetAdapterTests(unittest.TestCase):
                 self.assertIn("FET support metadata", failed.stderr)
                 self.assertFalse(failed.stdout)
 
+    def test_cli_rejects_rehashed_fet_unit_normalizations_conflicting_with_config(self):
+        self.prepare()
+        feature_dir = self.output / "features"
+        baseline = {p.name: p.read_bytes() for p in feature_dir.iterdir()}
+        env = dict(os.environ, PYTHONPATH=str(ROOT / "src"), PYTHONDONTWRITEBYTECODE="1",
+                   OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1")
+        command = [sys.executable, "-m", "mlworkflow", "plan", "--prepared", str(self.output)]
+
+        def plan():
+            return subprocess.run(command, cwd=self.root, env=env, text=True,
+                                  capture_output=True, timeout=15)
+
+        self.assertEqual(plan().returncode, 0)
+        for name, report_name in (("signed_current_criterion_A", "vth_report.json"),
+                                  ("max_bracket_span_V", "vth_report.json"),
+                                  ("window_min_V", "log_slope_report.json"),
+                                  ("window_max_V", "log_slope_report.json")):
+            with self.subTest(field=name):
+                report = c.parse_json(baseline[report_name])
+                report["parameters"][name] = 77.0
+                rows = c.parse_csv(baseline["features.csv"], fet.FEATURE_COLUMNS)
+                for row in rows:
+                    row[name] = "77.0"
+                data = {**baseline, report_name: c.json_bytes(report),
+                        "features.csv": c.csv_bytes(fet.FEATURE_COLUMNS, rows)}
+                provenance = c.parse_json(data["provenance.json"])
+                provenance["output_sha256"].update({key: c.sha(data[key]) for key in (report_name, "features.csv")})
+                data["provenance.json"] = c.json_bytes(provenance)
+                for path, raw in data.items():
+                    (feature_dir / path).write_bytes(raw)
+                rehash(self.output)
+                load_bundle(self.output, "prepared")
+                saved = {p: p.read_bytes() for p in self.output.rglob("*") if p.is_file()}
+                failed = plan()
+                self.assertEqual(failed.returncode, 2, failed.stderr)
+                self.assertIn("FET unit normalization", failed.stderr)
+                self.assertFalse(failed.stdout)
+                self.assertEqual({p: p.read_bytes() for p in saved}, saved)
+
     def test_plan_rejects_noninteger_extraction_group_counts(self):
         self.prepare()
         report = self.output / "features/vth_report.json"
