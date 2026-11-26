@@ -97,6 +97,33 @@ class RetentionAnchorAudit(unittest.TestCase):
         self.assertEqual(report["eligible_episodes"], 2)
         self.assertNotIn("privateLot", r.stdout)
 
+    def test_diagnostic_counts_die_support_on_frozen_not_captured_denominator(self):
+        # Reused die names on different wafers are distinct; different cells
+        # and episodes on that same physical die are not additional dies.
+        same_die = (*BASE[:3], "C2", "E2")
+        another = (BASE[0], "W2", *BASE[2:])
+        partial_other = (*another[:4], "E2")
+        entirely_absent = (BASE[0], "W3", *BASE[2:])
+        extra_die = (BASE[0], "W4", *BASE[2:])
+        roster = [BASE, same_die, another, partial_other, entirely_absent]
+        capture = episode(BASE) + episode(same_die) + episode(another)
+        capture += episode(partial_other, early=0) + episode(extra_die)
+        ordinary = self.run_capture(roster, capture)
+        diag = self.run_capture(roster, capture, extra=("--diagnose-dies",))
+        self.assertEqual((ordinary.returncode, diag.returncode), (1, 1))
+        report = json.loads(diag.stdout)
+        self.assertEqual(report.pop("declared_die_timing_support"), {
+            "dies_with_all_frozen_episodes_eligible": 1,
+            "dies_with_some_but_not_all_frozen_episodes_eligible": 1,
+            "dies_with_no_frozen_episodes_eligible": 1,
+            "max_eligible_episodes_on_one_die": 2,
+        })
+        self.assertEqual(report, json.loads(ordinary.stdout))
+        self.assertEqual(report["frozen_attempted_dies"], 3)
+        self.assertEqual(report["eligible_episodes"], 3)
+        self.assertEqual(report["unexpected_capture_episodes"], 1)
+        self.assertNotIn("privateLot", diag.stdout)
+
     def test_cannot_borrow_late_or_other_episode_measurement(self):
         rows = episode()[:2]
         rows.append([*BASE, 95_000_000_000, "counter", "epoch", 100_001_000_047, 0])

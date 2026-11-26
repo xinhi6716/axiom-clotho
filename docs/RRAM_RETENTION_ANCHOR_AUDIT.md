@@ -55,3 +55,12 @@ reported timing but an absent, duplicate, or unknown origin is marked
 `unusable_origin`, not `different_clock_or_epoch` or `within_window`. The
 diagnostic never makes an individual read scorable and does not change
 whole-episode eligibility, exit status, or the baseline report fields.
+
+For a frozen group denominator, add `--diagnose-dies`. On the declared
+`(lot,wafer,die)` keys, the report counts dies with all, some but not all, or
+none of their frozen episodes timing-eligible. An entirely missing die stays
+in the denominator and an unexpected die does not enter it. The maximum
+eligible-episode count on any one die makes concentration visible without
+emitting identities. These counts describe timing availability, not independent
+samples, valid electrical readout, or cross-chip model performance. They do
+not alter the exit status.

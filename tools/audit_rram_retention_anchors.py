@@ -1,6 +1,6 @@
 """Audit frozen RRAM retention slots without reading conductance or fitting."""
 import argparse
-from collections import Counter
+from collections import Counter, defaultdict
 import csv
 import hashlib
 import io
@@ -117,7 +117,8 @@ def verdict(slots):
     return "eligible"
 
 
-def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=None):
+def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=None,
+          diagnose_dies=False):
     if roster_sha256 is not None and (
             not isinstance(roster_sha256, str) or not SHA256.fullmatch(roster_sha256)):
         raise ValueError("frozen roster SHA-256 must be 64 lowercase hexadecimal digits")
@@ -147,10 +148,15 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
             continue
         expected[key].setdefault(nominal, []).append(stamp)
 
-    classifications = Counter(
-        verdict(slots) if key in present else "missing_capture"
-        for key, slots in expected.items()
-    )
+    classifications = Counter()
+    die_counts = defaultdict(lambda: [0, 0]) if diagnose_dies else None
+    for key, slots in expected.items():
+        reason = verdict(slots) if key in present else "missing_capture"
+        classifications[reason] += 1
+        if die_counts is not None:
+            counts = die_counts[key[:3]]
+            counts[0] += 1
+            counts[1] += int(reason == "eligible")
     report = {
         "schema": "clotho.rram_retention_anchor_audit.v1",
         "frozen_attempted_episodes": len(expected),
@@ -170,6 +176,19 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
         report["frozen_nominal_anchor_statuses_by_us"] = {
             nominal: dict(sorted(counts.items())) for nominal, counts in by_anchor.items()
         }
+    if die_counts is not None:
+        complete = partial = absent = maximum = 0
+        for attempted, eligible in die_counts.values():
+            complete += int(eligible == attempted)
+            partial += int(0 < eligible < attempted)
+            absent += int(eligible == 0)
+            maximum = max(maximum, eligible)
+        report["declared_die_timing_support"] = {
+            "dies_with_all_frozen_episodes_eligible": complete,
+            "dies_with_some_but_not_all_frozen_episodes_eligible": partial,
+            "dies_with_no_frozen_episodes_eligible": absent,
+            "max_eligible_episodes_on_one_die": maximum,
+        }
     return report
 
 
@@ -181,10 +200,12 @@ def main():
                         help="report separate frozen-roster status counts for 0, 1 s and 100 ks")
     parser.add_argument("--frozen-roster-sha256",
                         help="verify exact roster bytes against a previously trusted SHA-256")
+    parser.add_argument("--diagnose-dies", action="store_true",
+                        help="summarize frozen timing support by declared physical die")
     args = parser.parse_args()
     try:
         report = audit(args.frozen_roster, args.capture, diagnose_anchors=args.diagnose_anchors,
-                       roster_sha256=args.frozen_roster_sha256)
+                       roster_sha256=args.frozen_roster_sha256, diagnose_dies=args.diagnose_dies)
     except (OSError, UnicodeError, csv.Error):
         parser.exit(2, "error: input could not be read as UTF-8 CSV\n")
     except ValueError as exc:
