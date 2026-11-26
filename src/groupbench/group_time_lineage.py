@@ -73,6 +73,7 @@ class GroupTimeLineageAudit:
     n_features: int
     n_revisions_declared: int
     n_row_revisions_checked: int
+    frozen_timing_roster_matched: bool = False
 
 
 def _fail(message):
@@ -206,10 +207,34 @@ def _catalog(revisions, scopes):
     return by_ref, timelines
 
 
+def _check_frozen_revision_timing(roster, by_ref):
+    roster = _items(roster, name="Frozen revision timing roster", maximum=_MAX_REVISIONS)
+    expected = {}
+    for entry in roster:
+        if type(entry) is not tuple or len(entry) != 3:
+            _fail("Frozen timing entries require (RevisionRef, measured tick, available tick).")
+        ref, measured, available = entry
+        _ref(ref)
+        _tick(measured)
+        _tick(available)
+        if measured > available:
+            _fail("A frozen revision cannot become available before it was measured.")
+        if ref in expected:
+            _fail("Duplicate revision in the frozen timing roster.")
+        expected[ref] = (measured, available)
+    if expected.keys() != by_ref.keys():
+        _fail("Declared revisions must exactly match the frozen timing roster.")
+    for ref, ticks in expected.items():
+        revision, _ = by_ref[ref]
+        if ticks != (revision.measured_at, revision.available_at):
+            _fail("Revision clocks differ from the frozen timing roster.")
+
+
 def audit_group_time_lineage(
     plan: GroupForwardWindowPlan, *, clock_id: str, time_unit: str,
     features: tuple[str, ...], rows: tuple[ForecastRow, ...],
     lineage: tuple[RowLineage, ...], revisions: tuple[EventRevision, ...],
+    expected_revision_timing: tuple[tuple[RevisionRef, int, int], ...] | None = None,
 ) -> GroupTimeLineageAudit:
     """Check declared selected revisions against their row's historical snapshot.
 
@@ -218,7 +243,12 @@ def audit_group_time_lineage(
     root or ancestor must be the last version strictly before that cutoff;
     a revision at the cutoff is unresolved. Each used parent must strictly
     precede its child's availability and share source, group, and episode.
-    No sync between independent clocks, labels, values, fit, or I/O.
+    Optionally bind the entire catalog to an independently frozen sequence
+    of (ref, measured_at, available_at) tuples. This detects omissions and
+    clock changes against that declaration, not independent clock provenance,
+    status or ancestry authenticity. Without this input, an omitted correction
+    is not detectable. No sync between independent clocks, labels, values,
+    fit or I/O.
     """
     plan = _checked_plan(plan)
     _name(clock_id, "Clock ID")
@@ -262,6 +292,8 @@ def audit_group_time_lineage(
         roots_by_row.append(tuple(root.root for root in roots))
 
     by_ref, timelines = _catalog(revisions, {_scope(key) for key in keys})
+    if expected_revision_timing is not None:
+        _check_frozen_revision_timing(expected_revision_timing, by_ref)
     checks = visited_count = 0
     for row, roots in zip(rows, roots_by_row):
         pending = list(roots)
@@ -296,4 +328,5 @@ def audit_group_time_lineage(
 
     return GroupTimeLineageAudit(
         "group-forward-as-of-lineage-v1", size, len(features), len(revisions), visited_count,
+        frozen_timing_roster_matched=expected_revision_timing is not None,
     )

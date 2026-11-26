@@ -190,3 +190,39 @@ class GroupTimeLineageTests(TestCase):
                                   for row, roots in zip(self.rows, self.roots)),
                     revisions=nodes,
                 )
+
+    def test_frozen_timing_detects_an_omitted_newer_correction(self):
+        correction = replace(self.raw_test, ref=replace(self.raw_test.ref, ordinal=1),
+                             available_at=9)
+        roster = [(item.ref, item.measured_at, item.available_at)
+                  for item in (*self.revisions, correction)]
+        self.assertFalse(self.audit().frozen_timing_roster_matched)
+        with self.assertRaisesRegex(GroupTimeLineageError, 'exactly match the frozen'):
+            self.audit(expected_revision_timing=roster)
+        with self.assertRaisesRegex(GroupTimeLineageError, 'latest revision'):
+            self.audit(revisions=(*self.revisions, correction), expected_revision_timing=roster)
+
+    def test_frozen_timing_detects_retiming_even_when_ancestry_still_passes(self):
+        roster = [(x.ref, x.measured_at, x.available_at) for x in self.revisions]
+        valid = self.audit(expected_revision_timing=roster[::-1], revisions=self.revisions[::-1])
+        self.assertTrue(valid.frozen_timing_roster_matched)
+        for measured, available in ((self.raw_test.measured_at - 1, self.raw_test.available_at),
+                                    (self.raw_test.measured_at, self.raw_test.available_at + 1)):
+            changed = replace(self.raw_test, measured_at=measured, available_at=available)
+            self.assertEqual(self.audit(revisions=(self.raw_train, changed, self.derived)),
+                             self.audit())
+            with self.assertRaisesRegex(GroupTimeLineageError, 'clocks differ'):
+                self.audit(revisions=(self.raw_train, changed, self.derived),
+                           expected_revision_timing=roster)
+
+    def test_frozen_timing_validates_exact_typed_keys_and_ticks(self):
+        roster = [(x.ref, x.measured_at, x.available_at) for x in self.revisions]
+        entry = roster[0]
+        for bad in ([], roster + [entry], [list(entry), *roster[1:]],
+                    [(entry[0], True, entry[2]), *roster[1:]],
+                    [(entry[0], entry[2]+1, entry[2]), *roster[1:]],
+                    [(replace(entry[0], event=replace(entry[0].event, group='1')),
+                      *entry[1:]), *roster[1:]],
+                    {entry}):
+            with self.subTest(roster=bad), self.assertRaises(GroupTimeLineageError):
+                self.audit(expected_revision_timing=bad)
