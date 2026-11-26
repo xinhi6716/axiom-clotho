@@ -102,3 +102,23 @@ fn final_rounding_is_nearest_even_in_normal_and_subnormal_ranges() {
     // places the mean strictly above it, even though the retained bit is even.
     assert_mean_bits(&[binade2, binade2_next, binade2_next], binade2_next);
 }
+
+#[test]
+fn whole_roster_reuses_exact_mean_but_still_checks_every_query_distance() {
+    let model = KnnRegressor::fit(
+        &[vec![-1.0, -1.0], vec![1.0, 1.0], vec![0.0, 0.0]],
+        &[1e308, -1e308, 1e-15],
+        3,
+    )
+    .unwrap();
+    let expected = (1e-15_f64 / 3.0).to_bits();
+    for actual in model.predict(&[vec![-3.0, 4.0], vec![0.0, 0.0], vec![9.0, 2.0]]).unwrap() {
+        assert_eq!(actual.to_bits(), expected);
+    }
+    // Per-coordinate scaling is finite; the final norm of two MAX deltas
+    // overflows. An invalid later query must suppress the entire batch.
+    assert_eq!(
+        model.predict(&[vec![0.0, 0.0], vec![f64::MAX, f64::MAX]]),
+        Err(clotho_core::knn::KnnError::NumericOverflow)
+    );
+}

@@ -85,46 +85,73 @@ impl KnnRegressor {
     }
     pub fn predict(&self, x: &[Vec<f64>]) -> Result<Vec<f64>, KnnError> {
         validate(x, self.scales.len())?;
+        if self.k == self.training.len() {
+            // The whole roster always contributes, but distance guards
+            // remain part of prediction and still run for every query.
+            let mut rows = x.iter();
+            let first = rows.next().ok_or(KnnError::Empty)?;
+            self.validate_query_scaling(first)?;
+            self.visit_distances(first, |_, _| {})?;
+            let mean = exact_mean::checked_mean(self.targets.iter().copied(), self.k)?;
+            for row in rows {
+                self.validate_query_scaling(row)?;
+                self.visit_distances(row, |_, _| {})?;
+            }
+            return Ok(vec![mean; x.len()]);
+        }
         // Every query needs fresh distances, but their capacity depends only
         // on training size. Allocate lazily after the first scaling check.
         let mut distance_workspace = None;
         x.iter()
             .map(|row| {
-                let q: Vec<f64> = row.iter().zip(&self.scales).map(|(v, s)| v / s).collect();
-                if q.iter()
-                    .zip(row)
-                    .any(|(v, original)| !v.is_finite() || (*original != 0.0 && *v == 0.0))
-                {
-                    return Err(KnnError::NumericOverflow);
-                }
+                self.validate_query_scaling(row)?;
                 let distances = distance_workspace
                     .get_or_insert_with(|| Vec::with_capacity(self.training.len()));
                 distances.clear();
-                for (i, train) in self.training.iter().enumerate() {
-                    let mut d = 0.0_f64;
-                    for ((a, b), scale) in row.iter().zip(train).zip(&self.scales) {
-                        let direct = a - b;
-                        let delta = if direct.is_finite() {
-                            direct / scale
-                        } else {
-                            // Opposite extreme values may overflow subtraction
-                            // while their scaled difference remains representable.
-                            a / scale - b / scale
-                        };
-                        if !delta.is_finite() || (a != b && delta == 0.0) {
-                            return Err(KnnError::NumericOverflow);
-                        }
-                        d = d.hypot(delta);
-                    }
-                    if !d.is_finite() {
-                        return Err(KnnError::NumericOverflow);
-                    }
-                    distances.push((d, i));
-                }
+                self.visit_distances(row, |i, d| distances.push((d, i)))?;
                 let neighbors = nearest_subset(distances, self.k);
                 exact_mean::checked_mean(neighbors.iter().map(|(_, i)| self.targets[*i]), self.k)
             })
             .collect()
+    }
+
+    fn validate_query_scaling(&self, row: &[f64]) -> Result<(), KnnError> {
+        for (&value, &scale) in row.iter().zip(&self.scales) {
+            let scaled = value / scale;
+            if !scaled.is_finite() || (value != 0.0 && scaled == 0.0) {
+                return Err(KnnError::NumericOverflow);
+            }
+        }
+        Ok(())
+    }
+
+    fn visit_distances(
+        &self,
+        row: &[f64],
+        mut visit: impl FnMut(usize, f64),
+    ) -> Result<(), KnnError> {
+        for (i, train) in self.training.iter().enumerate() {
+            let mut d = 0.0_f64;
+            for ((a, b), scale) in row.iter().zip(train).zip(&self.scales) {
+                let direct = a - b;
+                let delta = if direct.is_finite() {
+                    direct / scale
+                } else {
+                    // Opposite extreme values may overflow subtraction
+                    // while their scaled difference remains representable.
+                    a / scale - b / scale
+                };
+                if !delta.is_finite() || (a != b && delta == 0.0) {
+                    return Err(KnnError::NumericOverflow);
+                }
+                d = d.hypot(delta);
+            }
+            if !d.is_finite() {
+                return Err(KnnError::NumericOverflow);
+            }
+            visit(i, d);
+        }
+        Ok(())
     }
 }
 // Only membership matters: the exact mean and its normalization check
