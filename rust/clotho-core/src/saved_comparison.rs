@@ -3,7 +3,7 @@
 //! Labels are caller declarations, not authenticated query bytes or physical
 //! identity. This module does not load models, files, or fit any parameters.
 use crate::evaluation::{mse_skill_from_checked_rmse, regression_rmse, EvaluationError};
-use std::collections::BTreeSet;
+use std::collections::HashSet;
 use std::fmt;
 
 pub const MAX_SAVED_ROWS: usize = 20_000;
@@ -101,13 +101,23 @@ fn validate(
     // fully checked so its existing diagnostics take precedence.
     let same_roster = checked_roster == Some(series.row_ids);
     if !same_roster {
-        let mut seen = BTreeSet::new();
-        for id in series.row_ids {
-            if !valid_text(id) {
+        let descending = series.row_ids[0] > series.row_ids[n - 1];
+        if series.row_ids.windows(2).all(|pair| {
+            if descending { pair[0] > pair[1] } else { pair[0] < pair[1] }
+        }) {
+            // Strict order proves uniqueness without allocating an index.
+            if series.row_ids.iter().any(|id| !valid_text(id)) {
                 return Err(SavedComparisonError::Declaration);
             }
-            if !seen.insert(*id) {
-                return Err(SavedComparisonError::DuplicateRow);
+        } else {
+            let mut seen = HashSet::with_capacity(n);
+            for id in series.row_ids {
+                if !valid_text(id) {
+                    return Err(SavedComparisonError::Declaration);
+                }
+                if !seen.insert(*id) {
+                    return Err(SavedComparisonError::DuplicateRow);
+                }
             }
         }
     }

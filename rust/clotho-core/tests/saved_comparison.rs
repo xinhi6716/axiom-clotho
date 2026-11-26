@@ -229,3 +229,36 @@ fn mismatching_rosters_preserve_individual_diagnostics_before_comparison() {
         );
     }
 }
+
+#[test]
+fn monotone_and_shuffled_rosters_preserve_values_and_validation_precedence() {
+    let y = [1.0, 2.0, 4.0];
+    let model = [1.0, 2.0, 2.0];
+    let baseline = [0.0; 3];
+    for roster in [["a", "b", "c"], ["c", "b", "a"], ["b", "a", "c"]] {
+        let got = compare_saved_regression(
+            series(&roster, &y),
+            series(&roster, &model),
+            series(&roster, &baseline),
+        )
+        .unwrap();
+        assert_eq!(got.model_rmse, (4.0_f64 / 3.0).sqrt());
+        // With equal values but shuffled keys, equality cannot be inferred.
+        let wrong_keys = [roster[2], roster[0], roster[1]];
+        assert_eq!(
+            compare_saved_regression(
+                series(&roster, &y),
+                series(&wrong_keys, &model),
+                series(&roster, &baseline),
+            ),
+            Err(SavedComparisonError::RowOrderMismatch)
+        );
+    }
+    for (keys, expected) in [
+        (["b", "b", ""], SavedComparisonError::DuplicateRow),
+        (["", "b", "b"], SavedComparisonError::Declaration),
+    ] {
+        let input = series(&keys, &y);
+        assert_eq!(compare_saved_regression(input, input, input), Err(expected));
+    }
+}
