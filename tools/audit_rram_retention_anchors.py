@@ -12,6 +12,8 @@ import stat
 
 IDENTITY = ("lot", "wafer", "die", "cell", "episode")
 TIMING = ("nominal_us", "clock", "epoch", "tick_us", "error_us")
+STRESS_INTERVALS = ("bias_0_to_1s", "bias_1s_to_100ks")
+STRESS_STATES = ("off_schedule_bias_observed", "no_off_schedule_bias_documented", "unknown")
 ANCHORS = (0, 1_000_000, 100_000_000_000)
 EARLY_UPPER = 1_020_000
 TERMINAL_LOWER, TERMINAL_UPPER = 80_000_000_000, 120_000_000_000
@@ -134,13 +136,27 @@ def acquisition_blocks(path, expected, *, expected_sha256=None):
     return blocks
 
 
+def stress_history(path, expected):
+    """Validate optional redacted stress observations, not treatment assignments."""
+    result = {}
+    for key, history in records(path, IDENTITY + STRESS_INTERVALS):
+        if key not in expected:
+            raise ValueError("stress history contains a non-roster episode")
+        if key in result:
+            raise ValueError("duplicate episode in stress history")
+        if any(state not in STRESS_STATES for state in history):
+            raise ValueError("invalid stress history status")
+        result[key] = history
+    return result
+
+
 def validate_digest(digest, label):
     if digest is not None and (not isinstance(digest, str) or not SHA256.fullmatch(digest)):
         raise ValueError(f"{label} SHA-256 must be 64 lowercase hexadecimal digits")
 
 
 def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=None,
-          diagnose_dies=False, block_map_path=None, block_map_sha256=None):
+          diagnose_dies=False, block_map_path=None, block_map_sha256=None, stress_history_path=None):
     validate_digest(roster_sha256, "frozen roster")
     validate_digest(block_map_sha256, "acquisition block map")
     if block_map_sha256 is not None and block_map_path is None:
@@ -155,6 +171,7 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
 
     blocks = (acquisition_blocks(block_map_path, expected, expected_sha256=block_map_sha256)
               if block_map_path is not None else None)
+    stress = stress_history(stress_history_path, expected) if stress_history_path is not None else None
     present, unexpected = set(), set()
     off_anchor_rows = 0
     for key, (nominal, clock, epoch, tick, error) in records(capture_path, IDENTITY + TIMING):
@@ -177,6 +194,8 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
     die_counts = defaultdict(lambda: [0, 0]) if diagnose_dies else None
     eligible_block_dies = defaultdict(set)
     eligible_die_blocks = defaultdict(set)
+    stress_attempted = [Counter(), Counter()]
+    stress_eligible = [Counter(), Counter()]
     for key, slots in expected.items():
         reason = verdict(slots) if key in present else "missing_capture"
         classifications[reason] += 1
@@ -188,6 +207,11 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
             block, die = blocks[key], key[:3]
             eligible_block_dies[block].add(die)
             eligible_die_blocks[die].add(block)
+        if stress is not None:
+            for i, state in enumerate(stress.get(key, ("missing_declaration",) * 2)):
+                stress_attempted[i][state] += 1
+                if reason == "eligible":
+                    stress_eligible[i][state] += 1
     report = {
         "schema": "clotho.rram_retention_anchor_audit.v1",
         "frozen_attempted_episodes": len(expected),
@@ -233,6 +257,14 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
                 len(die_blocks) > 1 for die_blocks in eligible_die_blocks.values()
             ),
         }
+    if stress is not None:
+        report["declared_stress_history_support"] = {
+            field: {
+                "frozen_attempted_by_status": dict(sorted(stress_attempted[i].items())),
+                "timing_eligible_by_status": dict(sorted(stress_eligible[i].items())),
+            }
+            for i, field in enumerate(STRESS_INTERVALS)
+        }
     return report
 
 
@@ -250,12 +282,15 @@ def main():
                         help="exact frozen episode-to-block metadata map for aggregate support")
     parser.add_argument("--acquisition-block-map-sha256",
                         help="verify exact block map bytes against a previously trusted SHA-256")
+    parser.add_argument("--stress-history", type=Path,
+                        help="optional episode-keyed off-schedule electrical stress declarations")
     args = parser.parse_args()
     try:
         report = audit(args.frozen_roster, args.capture, diagnose_anchors=args.diagnose_anchors,
                        roster_sha256=args.frozen_roster_sha256, diagnose_dies=args.diagnose_dies,
                        block_map_path=args.acquisition_block_map,
-                       block_map_sha256=args.acquisition_block_map_sha256)
+                       block_map_sha256=args.acquisition_block_map_sha256,
+                       stress_history_path=args.stress_history)
     except (OSError, UnicodeError, csv.Error):
         parser.exit(2, "error: input could not be read as UTF-8 CSV\n")
     except ValueError as exc:

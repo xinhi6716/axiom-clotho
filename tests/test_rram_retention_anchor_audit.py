@@ -24,7 +24,7 @@ def episode(key=BASE, early=1_000_000, final=100_000_000_000, error=0):
 
 
 class RetentionAnchorAudit(unittest.TestCase):
-    def run_capture(self, roster, rows, capture_header=IDS + TIMES, *, extra=(), block_map=None):
+    def run_capture(self, roster, rows, capture_header=IDS + TIMES, *, extra=(), block_map=None, stress=None):
         with tempfile.TemporaryDirectory() as tmp:
             folder = Path(tmp)
             for name, header, payload in (
@@ -36,6 +36,11 @@ class RetentionAnchorAudit(unittest.TestCase):
                 with block_map_path.open("w", newline="", encoding="utf-8") as stream:
                     csv.writer(stream).writerows((IDS + ("acquisition_block",), *block_map))
                 extra = (*extra, "--acquisition-block-map", str(block_map_path))
+            if stress is not None:
+                history = folder / "history.csv"
+                with history.open("w", newline="", encoding="utf-8") as stream:
+                    csv.writer(stream).writerows((IDS + ("bias_0_to_1s", "bias_1s_to_100ks"), *stress))
+                extra = (*extra, "--stress-history", str(history))
             return subprocess.run(
                 [sys.executable, str(TOOL), "--frozen-roster", str(folder / "roster.csv"),
                  "--capture", str(folder / "capture.csv"), *extra],
@@ -204,6 +209,56 @@ class RetentionAnchorAudit(unittest.TestCase):
                 self.assertFalse(r.stdout)
                 self.assertIn(diagnostic, r.stderr)
                 self.assertNotIn("privateLot", r.stderr)
+
+    def test_stress_history_separates_unknown_absent_and_observed_by_interval(self):
+        second = (*BASE[:4], "E2")
+        third = (*BASE[:4], "E3")
+        fourth = (*BASE[:4], "E4")
+        roster = [BASE, second, third, fourth]
+        rows = episode(BASE) + episode(second) + episode(third, early=0)
+        documented = "no_off_schedule_bias_documented"
+        biased = "off_schedule_bias_observed"
+        history = [(*BASE, documented, biased), (*second, "unknown", documented),
+                   (*third, biased, "unknown")]
+        ordinary = self.run_capture(roster, rows)
+        diagnostic = self.run_capture(roster, rows, stress=history)
+        self.assertEqual((ordinary.returncode, diagnostic.returncode), (1, 1))
+        report = json.loads(diagnostic.stdout)
+        self.assertEqual(report.pop("declared_stress_history_support"), {
+            "bias_0_to_1s": {
+                "frozen_attempted_by_status": {
+                    documented: 1, biased: 1, "unknown": 1, "missing_declaration": 1,
+                },
+                "timing_eligible_by_status": {documented: 1, "unknown": 1},
+            },
+            "bias_1s_to_100ks": {
+                "frozen_attempted_by_status": {
+                    documented: 1, biased: 1, "unknown": 1, "missing_declaration": 1,
+                },
+                "timing_eligible_by_status": {documented: 1, biased: 1},
+            },
+        })
+        self.assertEqual(report, json.loads(ordinary.stdout))
+        self.assertNotIn("privateLot", diagnostic.stdout)
+        absent = self.run_capture([BASE], episode(), stress=[])
+        self.assertEqual(absent.returncode, 0)
+        self.assertEqual(json.loads(absent.stdout)["declared_stress_history_support"]
+                         ["bias_1s_to_100ks"]["timing_eligible_by_status"],
+                         {"missing_declaration": 1})
+
+    def test_stress_history_checks_membership_duplicates_and_explicit_status(self):
+        valid = (*BASE, "unknown", "unknown")
+        for rows, diagnostic in (
+            ([valid, valid], "duplicate episode"),
+            ([(*BASE[:4], "not_enrolled", "unknown", "unknown")], "non-roster"),
+            ([(*BASE, "", "unknown")], "invalid stress history status"),
+        ):
+            with self.subTest(diagnostic=diagnostic):
+                result = self.run_capture([BASE], episode(), stress=rows)
+                self.assertEqual(result.returncode, 2)
+                self.assertFalse(result.stdout)
+                self.assertIn(diagnostic, result.stderr)
+                self.assertNotIn("privateLot", result.stderr)
 
     def test_cannot_borrow_late_or_other_episode_measurement(self):
         rows = episode()[:2]

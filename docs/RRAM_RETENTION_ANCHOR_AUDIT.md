@@ -84,3 +84,19 @@ row order fail without a report even if the map still covers the roster. A
 successful check adds a boolean only, not the digest or any identities.
 This receipt is separate from the frozen-roster receipt and does not prove
 when the block assignments were made or establish independence.
+
+To audit whether timing-eligible episodes also have electrical stress history,
+supply `--stress-history history.csv`. Its exact columns are
+`lot,wafer,die,cell,episode,bias_0_to_1s,bias_1s_to_100ks`. For each interval
+between nominal anchors, use `off_schedule_bias_observed` for recorded extra
+electrical bias, `no_off_schedule_bias_documented` only when a complete,
+linked record supports its absence, or `unknown` otherwise. The scheduled
+anchor reads themselves are not extra bias. Do not infer the category from
+the schedule or a missing instrument log. A missing episode declaration is
+counted separately from an explicit unknown, and unrecognized categories,
+duplicates, or episodes outside the roster are rejected.
+
+The report separates the full frozen and timing-eligible episode counts for
+each interval status. It changes no timing eligibility or success criterion,
+and does not certify physical exposure, equal read bias or stress dose,
+or mechanism. Those need separately validated measurement evidence.
