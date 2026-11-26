@@ -2,6 +2,7 @@
 
 from contextlib import redirect_stderr, redirect_stdout
 import io
+from itertools import combinations, product
 import json
 from pathlib import Path
 import tempfile
@@ -14,7 +15,7 @@ import pandas as pd
 from groupbench import benchmark, fit_predict, plan_benchmark, plan_prediction
 from groupbench.cli import main
 from groupbench.data import validate_features
-from groupbench.input_support import prediction_input_support
+from groupbench.input_support import audit_numeric_pair_hull, prediction_input_support
 from groupbench.model import make_pipeline
 from groupbench.verification import _SAFE_OPEN_SUPPORTED, verify_bundle
 
@@ -248,6 +249,74 @@ class PredictionSupportIntegrationTests(unittest.TestCase):
             self.assertEqual(pd.read_csv(out / "predictions.csv").columns.tolist(), ["row_position", "prediction"])
             if _SAFE_OPEN_SUPPORTED:
                 self.assertEqual(verify_bundle(out.resolve()).bundle_type, "prediction")
+
+
+class ExactNumericalHullSupportTests(unittest.TestCase):
+    def test_joint_gap_missed_by_coordinates_and_closed_boundary(self):
+        training = [(0, 0), (1, 0), (0, 1), (1, 0)]
+        query = [(.75, .75), (.25, .25), (.25, .75), (1, 0), (2, 0)]
+        self.assertEqual(audit_numeric_pair_hull(training, query), {
+            "n_training_rows": 4, "n_distinct_training_points": 3,
+            "training_affine_dimension": 2, "n_query_rows": 5,
+            "n_outside_marginal_ranges": 1,
+            "n_outside_hull_inside_marginal_ranges": 1, "n_inside_or_on_hull": 3})
+        self.assertEqual(audit_numeric_pair_hull(training[::-1], query[::-1]),
+                         audit_numeric_pair_hull(training, query))
+
+    def test_degenerate_point_vertical_and_diagonal_hulls(self):
+        for train, query, expected in (
+            ([(0, 1)] * 2, [(0, 1), (0, 2)], (0, 1, 0, 1)),
+            ([(0, 1), (0, 2), (0, 3)], [(0, 1), (0, 4), (0, 2), (1, 2)], (1, 2, 0, 2)),
+            ([(0, 0), (1, 1), (2, 2)], [(1, 0), (2, 2), (3, 3)], (1, 1, 1, 1)),
+        ):
+            with self.subTest(train=train):
+                result = audit_numeric_pair_hull(train, query)
+                self.assertEqual(tuple(result[key] for key in (
+                    "training_affine_dimension", "n_outside_marginal_ranges",
+                    "n_outside_hull_inside_marginal_ranges", "n_inside_or_on_hull")), expected)
+
+    def test_binary64_orientation_handles_extremes_and_subnormals(self):
+        m = float(np.finfo(float).max)
+        with_extremes = audit_numeric_pair_hull([(-m, -m), (m, -m), (-m, m)], [(m, m), (0, 0)])
+        self.assertEqual(with_extremes["n_inside_or_on_hull"], 1)
+        tiny = float(np.nextafter(0., 1.))
+        result = audit_numeric_pair_hull([(0, 0), (tiny, 0), (0, tiny)], [(tiny, tiny), (tiny, 0)])
+        self.assertEqual(result["training_affine_dimension"], 2)
+        self.assertEqual(result["n_inside_or_on_hull"], 1)
+
+    def test_every_small_roster_matches_independent_triangle_oracle(self):
+        grid = list(product(range(3), repeat=2))
+        queries = list(product((0., .5, 1., 1.5, 2.), repeat=2))
+
+        def det(a, b, q):
+            return a[0] * (b[1] - q[1]) + b[0] * (q[1] - a[1]) + q[0] * (a[1] - b[1])
+
+        def accepted(q, train, segments, triangles):
+            if q in train:
+                return True
+            for a, b in segments:
+                if det(a, b, q) == 0 and all(min(x, y) <= z <= max(x, y)
+                                             for x, y, z in zip(a, b, q)):
+                    return True
+            for a, b, c in triangles:
+                area = det(a, b, c)
+                if area and all(area * part >= 0 for part in (det(a, b, q),
+                                                              det(b, c, q), det(c, a, q))):
+                    return True
+            return False
+
+        for mask in range(1, 1 << len(grid)):
+            train = [p for i, p in enumerate(grid) if mask & (1 << i)]
+            segments, triangles = list(combinations(train, 2)), list(combinations(train, 3))
+            expected = sum(accepted(q, train, segments, triangles) for q in queries)
+            self.assertEqual(audit_numeric_pair_hull(train, queries)["n_inside_or_on_hull"],
+                             expected, mask)
+
+    def test_invalid_or_incomplete_points_reject(self):
+        for invalid in ([], [(None, 1)], [(True, 1)], [(2**53 + 1, 0)],
+                        [(float("nan"), 0)], [(float("inf"), 1)], [[1, 2]], [(1,)]):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                audit_numeric_pair_hull([(0, 0)], invalid)
 
 
 if __name__ == "__main__":

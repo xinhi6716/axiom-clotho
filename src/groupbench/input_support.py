@@ -153,3 +153,91 @@ def outer_fold_input_support(X: pd.DataFrame, groups, *, outer_splits: int = 5,
             "Inner selection feasibility is not checked by this target-free diagnostic.",
         ],
     }
+
+
+def audit_numeric_pair_hull(training, query) -> dict:
+    """Check closed convex-hull membership for two preselected numeric features.
+
+    Supply bounded sequences of (x, y) tuples in matched units. Coordinates
+    must be finite built-in binary64 floats or ints exactly representable as
+    binary64. Incomplete coordinates fail rather than being dropped or
+    imputed. Selection and unit provenance are the caller's responsibility.
+
+    Membership and affine dimension are exact for the represented inputs.
+    Repeated training points do not change the hull. Marginal ranges and
+    hull containment are descriptive only: inside the hull does not prove
+    local density, a feasible recipe, group independence or transfer skill.
+    Only counts are returned, not coordinates, row labels or hull vertices.
+    """
+    from .data import MAX_ROWS
+    from .metrics import _paired_binary64_units
+
+    def points(values):
+        if type(values) not in (list, tuple) or not 1 <= len(values) <= MAX_ROWS:
+            raise ValueError("Each coordinate roster must be a bounded nonempty list or tuple.")
+        result = []
+        for pair in values:
+            if type(pair) is not tuple or len(pair) != 2:
+                raise ValueError("Each numeric point must be an ordered two-coordinate tuple.")
+            result.append(tuple(_paired_binary64_units(number) for number in pair))
+        return result
+
+    fitted, candidates = points(training), points(query)
+    vertices = sorted(set(fitted))
+
+    def turn(a, b, c):
+        return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+
+    def chain(sequence):
+        edge = []
+        for point in sequence:
+            while len(edge) > 1 and turn(edge[-2], edge[-1], point) <= 0:
+                edge.pop()
+            edge.append(point)
+        return edge
+
+    hull = vertices if len(vertices) == 1 else chain(vertices)[:-1] + chain(reversed(vertices))[:-1]
+    n = len(hull)
+    xmin, xmax = vertices[0][0], vertices[-1][0]
+    ymin, ymax = min(point[1] for point in vertices), max(point[1] for point in vertices)
+
+    def on_segment(a, b, q):
+        # Collinearity was checked by the caller; lexicographic order then
+        # bounds both axes, including vertical segments.
+        return min(a, b) <= q <= max(a, b)
+
+    def inside(q):
+        if n == 1:
+            return q == hull[0]
+        left = turn(hull[0], hull[1], q)
+        if n == 2:
+            return left == 0 and on_segment(hull[0], hull[1], q)
+        right = turn(hull[0], hull[-1], q)
+        if left < 0 or right > 0:
+            return False
+        if left == 0:
+            return on_segment(hull[0], hull[1], q)
+        if right == 0:
+            return on_segment(hull[0], hull[-1], q)
+        lower, upper = 1, n - 1
+        while upper - lower > 1:
+            middle = (lower + upper) // 2
+            if turn(hull[0], hull[middle], q) >= 0:
+                lower = middle
+            else:
+                upper = middle
+        return turn(hull[lower], hull[upper], q) >= 0
+
+    outside_marginal = outside_joint_inside_marginal = 0
+    for q in candidates:
+        if not (xmin <= q[0] <= xmax and ymin <= q[1] <= ymax):
+            outside_marginal += 1
+        elif not inside(q):
+            outside_joint_inside_marginal += 1
+    return {
+        "n_training_rows": len(fitted), "n_distinct_training_points": len(vertices),
+        "training_affine_dimension": min(n - 1, 2), "n_query_rows": len(candidates),
+        "n_outside_marginal_ranges": outside_marginal,
+        "n_outside_hull_inside_marginal_ranges": outside_joint_inside_marginal,
+        "n_inside_or_on_hull": len(candidates) - outside_marginal - outside_joint_inside_marginal,
+    }
