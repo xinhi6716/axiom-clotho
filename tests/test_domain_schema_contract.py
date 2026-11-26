@@ -217,6 +217,37 @@ class DomainSchemaContractTests(unittest.TestCase):
             self.assertFalse(reply.stdout)
             self.assertEqual({p.name: p.read_bytes() for p in root.iterdir()}, frozen)
 
+    def test_cli_rejects_domain_configuration_with_stale_run_key(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            self.evaluation.write(root)
+            command = [sys.executable, "-m", "groupbench.cli", "validate-evaluation-bundle", str(root)]
+            env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1] / "src"),
+                       OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1", PYTHONDONTWRITEBYTECODE="1")
+
+            def replay():
+                return subprocess.run(command, env=env, capture_output=True, text=True, timeout=30)
+
+            self.assertEqual(replay().returncode, 0)
+            path = root / "manifest.json"
+            manifest = json.loads(path.read_text())
+            self.assertIn("x", manifest["config"]["features"])
+            # The retained observations and audited domains are the same, but
+            # this now declares a different training feature under the old key.
+            manifest["config"]["features"] = ["different_measurement"]
+            path.write_text(json.dumps(manifest))
+            receipt_path = root / "checksums.json"
+            receipt = json.loads(receipt_path.read_text())
+            receipt["files"]["manifest.json"] = hashlib.sha256(path.read_bytes()).hexdigest()
+            receipt_path.write_text(json.dumps(receipt))
+            self.assertEqual(verify_bundle(root).bundle_type, "evaluation")
+            before = {p.name: p.read_bytes() for p in root.iterdir()}
+            reply = replay()
+            self.assertEqual(reply.returncode, 2, reply.stderr)
+            self.assertIn("run-key declaration", reply.stderr)
+            self.assertFalse(reply.stdout)
+            self.assertEqual({p.name: p.read_bytes() for p in root.iterdir()}, before)
+
     def test_saved_selection_tie_does_not_hide_nonzero_decimal_underflow(self):
         m = deepcopy(self.pred)
         for record in m["inner_selection"]:

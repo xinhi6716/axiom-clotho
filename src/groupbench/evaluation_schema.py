@@ -4,11 +4,13 @@ import csv
 import io
 import math
 import os
+import re
 
 import numpy as np
 
 from .data import validate_groups
 from .domain_selection import domain_metadata
+from .evaluation import _evaluation_run_key
 from .metrics import regression_metrics, _checked_arithmetic
 from .prediction_schema import (_manifest, _DECIMAL, _optional_selection_metadata, _extension_families,
     _DOMAIN_FIELDS, _domain_config, _domain_selection, _reject_domain_audits, _domain_candidates,
@@ -210,6 +212,12 @@ def _check(manifest, summary, raw):
             _fail("domain-vector fingerprint requires Unicode scalar domain names.")
         if derived["domain_values_sha256"] != config["domain_values_sha256"]:
             _fail("domain-vector fingerprint differs from retained outer row order.")
+        # The normalized training data are absent, so data_sha256 remains
+        # a declaration. The historical key must still bind it to this config.
+        data_digest = manifest.get("data_sha256")
+        if (type(data_digest) is not str or re.fullmatch(r"[0-9a-f]{64}", data_digest) is None
+                or manifest.get("run_key") != _evaluation_run_key(data_digest, config)):
+            _fail("domain run-key declaration differs from the saved configuration and data fingerprint.")
         inner_counts = config.get("inner_splits_per_outer")
         if not isinstance(inner_counts, list) or len(inner_counts) != nf:
             _fail("domain inner fold schedule coverage differs.")
