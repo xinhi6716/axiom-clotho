@@ -433,3 +433,62 @@ def audit_categorical_tuple_group_support(training, query, *, training_groups,
         "n_query_rows_meeting_threshold_for_full_tuple": full_supported,
         "n_query_rows_with_common_pair_support_but_not_full_support": common_group_supported - full_supported,
     }
+
+
+def audit_numeric_group_range_support(training, query, *, training_groups,
+                                      minimum_training_groups: int) -> dict:
+    """Describe the declared group ranges supporting one preselected feature.
+
+    Provide one complete finite value per training/query position in common
+    units. Each group's closed minimum-to-maximum interval contributes at
+    most one vote per query; duplicates do not add votes. Use a group-count
+    threshold fixed before examining the query results. Only aggregate counts
+    are returned, with no group IDs or source extrema.
+
+    Within a group's range does not imply an observed value, sufficient
+    local density, physical independence, or accurate predictions.
+    """
+    from bisect import bisect_left, bisect_right
+
+    from .data import MAX_ROWS, validate_groups
+    from .metrics import _validated_paired_float
+
+    if any(type(values) not in (list, tuple) or not 1 <= len(values) <= MAX_ROWS
+           for values in (training, query)):
+        raise ValueError("Training and query values require bounded nonempty sequences.")
+    if type(minimum_training_groups) is not int or not 1 <= minimum_training_groups <= MAX_ROWS:
+        raise ValueError("The minimum training group count must be a bounded positive integer.")
+    groups = validate_groups(training_groups, len(training))
+    queries = [_validated_paired_float(value) for value in query]
+
+    ranges = {}
+    for value, group in zip(training, groups):
+        x = _validated_paired_float(value)
+        previous = ranges.get(group)
+        ranges[group] = (x, x) if previous is None else (min(x, previous[0]), max(x, previous[1]))
+    starts = sorted(lo for lo, _ in ranges.values())
+    ends = sorted(hi for _, hi in ranges.values())
+
+    external = gap = below_threshold = meets_threshold = 0
+    for x in queries:
+        if x < starts[0] or x > ends[-1]:
+            external += 1
+            continue
+        # Count intervals which have started, subtract only intervals whose
+        # end is strictly below x. Singleton intervals include their point.
+        count = bisect_right(starts, x) - bisect_left(ends, x)
+        if count == 0:
+            gap += 1
+        elif count < minimum_training_groups:
+            below_threshold += 1
+        else:
+            meets_threshold += 1
+    return {
+        "n_training_rows": len(training), "n_query_rows": len(queries),
+        "n_declared_training_groups": len(ranges),
+        "minimum_training_groups": minimum_training_groups,
+        "n_query_rows_outside_pooled_range": external,
+        "n_query_rows_inside_pooled_range_without_group_support": gap,
+        "n_query_rows_with_group_support_below_threshold": below_threshold,
+        "n_query_rows_with_group_support_at_threshold_or_above": meets_threshold,
+    }

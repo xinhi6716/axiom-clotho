@@ -18,7 +18,8 @@ from groupbench.data import validate_features
 from groupbench.input_support import (audit_categorical_pair_group_support,
                                       audit_complete_feature_support_by_group,
                                       audit_categorical_tuple_group_support,
-                                      audit_numeric_pair_hull, prediction_input_support)
+                                      audit_numeric_group_range_support, audit_numeric_pair_hull,
+                                      prediction_input_support)
 from groupbench.model import make_pipeline
 from groupbench.verification import _SAFE_OPEN_SUPPORTED, verify_bundle
 
@@ -478,6 +479,61 @@ class ExactCategoricalTupleTests(unittest.TestCase):
             wide = [("x",) * 8] * 10_000
             audit_categorical_tuple_group_support(wide, wide, training_groups=[0] * len(wide),
                                                    minimum_training_groups=1)
+
+
+class NumericGroupRangeSupportTests(unittest.TestCase):
+    def test_pooled_range_hides_group_gap_and_duplicate_rows_dont_add_support(self):
+        training = [0, 1, 1, 4, 5, 5, 6]
+        groups = ["early", "early", "early", "late", "late", "far", "far"]
+        queries = [-1, 0, 2, 4, 5, 6, 7]
+        pooled = diagnostics(pd.DataFrame({"x": training}), pd.DataFrame({"x": queries}))
+        self.assertEqual(pooled["row_flag_counts"]["numeric_outside_training_range"], 2)
+        got = audit_numeric_group_range_support(training, queries, training_groups=groups,
+                                                minimum_training_groups=2)
+        self.assertEqual(got, {
+            "n_training_rows": 7, "n_query_rows": 7, "n_declared_training_groups": 3,
+            "minimum_training_groups": 2, "n_query_rows_outside_pooled_range": 2,
+            "n_query_rows_inside_pooled_range_without_group_support": 1,
+            "n_query_rows_with_group_support_below_threshold": 3,
+            "n_query_rows_with_group_support_at_threshold_or_above": 1,
+        })
+        self.assertEqual(got, audit_numeric_group_range_support(
+            training[::-1], queries[::-1], training_groups=groups[::-1], minimum_training_groups=2))
+
+    def test_closed_endpoints_and_singletons_match_direct_oracle(self):
+        from itertools import combinations_with_replacement
+        values = (-1, 0, 1)
+        intervals = tuple(combinations_with_replacement(values, 2))
+        queries = (-2, -1, -.5, 0, .5, 1, 2)
+        for roster in product(intervals, repeat=3):
+            training = [endpoint for pair in roster for endpoint in pair]
+            for threshold in (1, 2, 3, 4):
+                got = audit_numeric_group_range_support(training, queries, training_groups=[0, 0, 1, 1, 2, 2],
+                                                        minimum_training_groups=threshold)
+                expected = [0, 0, 0, 0]
+                for x in queries:
+                    hits = sum(lo <= x <= hi for lo, hi in roster)
+                    bucket = (0 if not min(training) <= x <= max(training) else
+                              1 if hits == 0 else 2 if hits < threshold else 3)
+                    expected[bucket] += 1
+                self.assertEqual([got["n_query_rows_" + name] for name in (
+                    "outside_pooled_range", "inside_pooled_range_without_group_support",
+                    "with_group_support_below_threshold", "with_group_support_at_threshold_or_above")],
+                    expected)
+
+    def test_extreme_and_malformed_values_are_not_rounded_silently(self):
+        max_value = float(np.finfo(float).max)
+        tiny = float(np.nextafter(0., 1.))
+        got = audit_numeric_group_range_support([-max_value, 0, tiny, max_value], [0, tiny],
+                                                training_groups=[0, 0, 1, 1], minimum_training_groups=2)
+        self.assertEqual(got["n_query_rows_with_group_support_below_threshold"], 2)
+        for value in (True, 2**53 + 1, "0", None, float("nan"), float("inf")):
+            with self.assertRaises(ValueError):
+                audit_numeric_group_range_support([0], [value], training_groups=[0],
+                                                   minimum_training_groups=1)
+        with self.assertRaisesRegex(ValueError, "minimum"):
+            audit_numeric_group_range_support([0], [0], training_groups=[0],
+                                               minimum_training_groups=True)
 
 
 if __name__ == "__main__":
