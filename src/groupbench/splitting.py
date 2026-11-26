@@ -110,6 +110,49 @@ def audit_split(train: np.ndarray, test: np.ndarray, groups: np.ndarray) -> dict
     }
 
 
+def audit_split_row_eligibility(train, test, groups, *, eligibility) -> dict:
+    """Describe declared eligibility against an unchanged grouped split.
+
+    Give one literal status per original row, including unused rows:
+    "eligible", "ineligible", or "unknown". Unknown is kept apart from a
+    declared failure. The caller freezes the roster and eligibility criterion
+    independently of outcomes and verifies provenance. This audit does not
+    choose rows, repair labels, resplit, fit, or access any outcomes.
+    """
+    statuses = ("eligible", "ineligible", "unknown")
+    if (type(eligibility) not in (list, tuple) or not 1 <= len(eligibility) <= MAX_ROWS
+            or any(type(s) is not str or s not in statuses for s in eligibility)):
+        raise ValueError("Row eligibility requires an ordered roster of explicit eligibility statuses.")
+    groups = validate_groups(groups, len(eligibility))
+    train, train_rows = _device_partition(train, len(groups), "training")
+    test, test_rows = _device_partition(test, len(groups), "validation")
+    if train_rows & test_rows or set(groups[train]) & set(groups[test]):
+        raise ValueError("Invalid split: training and validation observations overlap.")
+
+    def summarize(positions):
+        row_counts = dict.fromkeys(statuses, 0)
+        group_statuses = {}
+        for pos in positions:
+            status = eligibility[pos]
+            row_counts[status] += 1
+            group_statuses.setdefault(groups[pos], set()).add(status)
+        state_sets = group_statuses.values()
+        return {
+            "n_declared_rows": sum(row_counts.values()), "n_declared_groups": len(group_statuses),
+            "eligible_rows": row_counts["eligible"], "ineligible_rows": row_counts["ineligible"],
+            "unknown_rows": row_counts["unknown"],
+            "groups_with_eligible_rows": sum("eligible" in state for state in state_sets),
+            "groups_with_all_rows_eligible": sum(state == {"eligible"} for state in state_sets),
+            "groups_with_no_eligible_rows_but_unknown": sum(
+                "eligible" not in state and "unknown" in state for state in state_sets),
+            "groups_with_only_ineligible_rows": sum(state == {"ineligible"} for state in state_sets),
+        }
+
+    used = train_rows | test_rows
+    return {"train": summarize(train), "test": summarize(test),
+            "unused": summarize(i for i in range(len(groups)) if i not in used)}
+
+
 @dataclass(frozen=True, slots=True)
 class DeviceAlias:
     """A row's declared device label in its original source namespace."""
