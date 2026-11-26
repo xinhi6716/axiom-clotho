@@ -371,3 +371,70 @@ def audit_group_forward_label_timing(
         fold_train_label_counts=tuple(fold.train.n_rows for fold in plan.folds),
         fold_test_label_counts=tuple(fold.test.n_rows for fold in plan.folds),
     )
+
+
+@dataclass(frozen=True, slots=True)
+class ForwardParentIsolationAudit:
+    """Counts of declared parents, not physical independence estimates."""
+
+    n_declared_parents: int
+    n_tested_parents: int
+    n_parents_tested_in_multiple_windows: int
+    fold_train_parent_counts: tuple[int, ...]
+    fold_test_parent_counts: tuple[int, ...]
+
+
+def audit_group_forward_parent_isolation(
+    plan: GroupForwardWindowPlan, *,
+    parent_by_group: list[tuple[GroupIdentity, GroupIdentity]] | tuple[tuple[GroupIdentity, GroupIdentity], ...],
+    require_unique_test_window_per_parent: bool = False,
+) -> ForwardParentIsolationAudit:
+    """Require train/test parent disjointness in each canonical forward fold.
+
+    Declare the entire group-to-parent mapping (including unused groups) at
+    one frozen level using canonical IDs, such as lot-qualified wafer IDs.
+    Without the optional uniqueness policy, the same parent may be tested
+    in several windows if no train/test parent overlaps within each fold.
+    Such repeated test appearances are counted, not treated as independent.
+    This audit neither replans windows nor verifies physical identity.
+    """
+    plan = _canonical_label_plan(plan)
+    if type(require_unique_test_window_per_parent) is not bool:
+        raise ValueError("The unique-test-window policy must be an explicit boolean.")
+    keys = set(plan.total.groups)
+    if type(parent_by_group) not in (list, tuple) or len(parent_by_group) != len(keys):
+        raise ValueError("Parent bindings must cover each plan group exactly, including unused groups.")
+    parents = {}
+    for entry in parent_by_group:
+        if type(entry) is not tuple or len(entry) != 2:
+            raise ValueError("Parent bindings require (group, parent) tuples.")
+        group, parent = entry
+        _identity(group, "Bound group")
+        _identity(parent, "Physical parent")
+        if type(parent) is str and (
+            len(parent) > 256 or parent.strip() != parent or "\x00" in parent
+            or any(0xd800 <= ord(c) <= 0xdfff for c in parent)
+            or parent.casefold() in {"unknown", "unreported", "not_reported"}
+        ):
+            raise ValueError("Physical parent identifiers must be resolved text or signed-64-bit integers.")
+        if group not in keys or group in parents:
+            raise ValueError("Parent bindings must cover each plan group exactly, including unused groups.")
+        parents[group] = parent
+
+    training_counts, test_counts, tested, repeated = [], [], set(), set()
+    for fold in plan.folds:
+        train_parents = {parents[group] for group in fold.train.groups}
+        test_parents = {parents[group] for group in fold.test.groups}
+        if train_parents & test_parents:
+            raise ValueError(f"Declared parents overlap training and test in forward fold {fold.index}.")
+        overlap = tested & test_parents
+        if overlap and require_unique_test_window_per_parent:
+            raise ValueError(f"A declared parent is tested in more than one window (fold {fold.index}).")
+        repeated.update(overlap)
+        tested.update(test_parents)
+        training_counts.append(len(train_parents))
+        test_counts.append(len(test_parents))
+    return ForwardParentIsolationAudit(
+        len(set(parents.values())), len(tested), len(repeated),
+        tuple(training_counts), tuple(test_counts),
+    )

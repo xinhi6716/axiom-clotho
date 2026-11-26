@@ -107,3 +107,58 @@ class GroupForwardLabelTimingTests(TestCase):
         ):
             with self.assertRaisesRegex(ValueError, "plan work bound"):
                 self.audit()
+
+
+class ForwardParentIsolationTests(TestCase):
+    def make_plan(self, first_ready=25):
+        return plan_group_forward_windows(
+            ["initial", "early", "late", "unused"],
+            group_spans=[GroupSpan("initial", 0, 2, 4), GroupSpan("early", 10, 11, first_ready),
+                         GroupSpan("late", 20, 21, 25), GroupSpan("unused", 30, 31, 32)],
+            windows=[TimeWindow(10, 15), TimeWindow(20, 24)],
+            clock_id="bench", time_unit="ticks", gap=2,
+        )
+
+    def test_different_group_labels_can_cross_train_and_test_at_same_parent(self):
+        plan = self.make_plan(first_ready=12)
+        self.assertEqual(plan.folds[1].train.groups, ("initial", "early"))
+        self.assertEqual(plan.folds[1].test.groups, ("late",))
+        self.assertFalse(set(plan.folds[1].train.groups) & set(plan.folds[1].test.groups))
+        mapping = [("initial", "wafer-a"), ("early", "wafer-b"),
+                   ("late", "wafer-b"), ("unused", "wafer-c")]
+        with self.assertRaisesRegex(ValueError, 'overlap training and test.*fold 1'):
+            temporal.audit_group_forward_parent_isolation(plan, parent_by_group=mapping)
+        mapping[2] = ("late", "wafer-d")
+        control = temporal.audit_group_forward_parent_isolation(plan, parent_by_group=mapping,
+                                                                 require_unique_test_window_per_parent=True)
+        self.assertEqual(control.fold_train_parent_counts, (1, 2))
+        self.assertEqual(control.fold_test_parent_counts, (1, 1))
+        self.assertEqual((control.n_declared_parents, control.n_tested_parents), (4, 2))
+
+    def test_repeated_evaluation_parent_is_not_new_support(self):
+        plan = self.make_plan()
+        mapping = [("initial", 1), ("early", "1"), ("late", "1"), ("unused", 1)]
+        report = temporal.audit_group_forward_parent_isolation(plan, parent_by_group=mapping[::-1])
+        self.assertEqual((report.n_declared_parents, report.n_tested_parents,
+                          report.n_parents_tested_in_multiple_windows), (2, 1, 1))
+        self.assertEqual(report.fold_test_parent_counts, (1, 1))
+        with self.assertRaisesRegex(ValueError, 'tested in more than one window.*fold 1'):
+            temporal.audit_group_forward_parent_isolation(plan, parent_by_group=mapping,
+                                                           require_unique_test_window_per_parent=True)
+
+    def test_requires_canonical_plan_and_exact_group_parent_bindings(self):
+        plan = self.make_plan()
+        mapping = [(name, name) for name in plan.total.groups]
+        for bad in (mapping[:-1], mapping[:-1] + [mapping[0]],
+                    mapping[:-1] + [("wrong", "extra")],
+                    mapping[:-1] + [("unused", "unknown")],
+                    mapping[:-1] + [("unused", True)]):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                temporal.audit_group_forward_parent_isolation(plan, parent_by_group=bad)
+        with self.assertRaisesRegex(ValueError, 'boolean'):
+            temporal.audit_group_forward_parent_isolation(plan, parent_by_group=mapping,
+                                                           require_unique_test_window_per_parent=1)
+        first, second = plan.folds
+        forged = replace(plan, folds=(first, replace(second, test=first.test)))
+        with self.assertRaisesRegex(ValueError, 'canonical membership'):
+            temporal.audit_group_forward_parent_isolation(forged, parent_by_group=mapping)
