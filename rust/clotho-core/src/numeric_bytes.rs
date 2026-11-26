@@ -4,8 +4,8 @@
 //! are decoded one at a time with safe byte copies, without decoded column buffers.
 
 use crate::input_support::{
-    FeatureCounts, FeatureSupport, InputSupport, RowFlagCounts, TrainingSupport, MAX_FEATURES,
-    MAX_ROWS,
+    summarize_row_flags, FeatureCounts, FeatureSupport, InputSupport, TrainingSupport,
+    MAX_FEATURES, MAX_ROWS, MISSING, OUTSIDE, UNSUPPORTED,
 };
 use std::collections::{HashMap, HashSet};
 use std::fmt;
@@ -92,9 +92,6 @@ pub fn prediction_input_support_bytes(
     if training.len() != incoming.len() || training.iter().any(|c| !by_name.contains_key(c.name)) {
         return Err(NumericBytesError::SchemaMismatch);
     }
-    const MISSING: u8 = 1;
-    const OUTSIDE: u8 = 2;
-    const UNSUPPORTED: u8 = 8;
     let mut flags = vec![0u8; n_prediction_rows];
     let mut features = Vec::with_capacity(training.len());
     for source in training {
@@ -154,22 +151,15 @@ pub fn prediction_input_support_bytes(
             },
         });
     }
+    let (rows_with_any_flag, row_flag_counts) = summarize_row_flags(&flags);
     Ok(InputSupport {
         schema_version: "1.0",
         reference: "full_training_features_before_imputation",
         action: "diagnostic_only_no_input_changes",
         n_training_rows,
         n_prediction_rows,
-        rows_with_any_flag: flags.iter().filter(|&&f| f != 0).count(),
-        row_flag_counts: RowFlagCounts {
-            missing_value: flags.iter().filter(|&&f| f & MISSING != 0).count(),
-            numeric_outside_training_range: flags.iter().filter(|&&f| f & OUTSIDE != 0).count(),
-            unseen_category: 0,
-            non_missing_value_in_all_missing_training_feature: flags
-                .iter()
-                .filter(|&&f| f & UNSUPPORTED != 0)
-                .count(),
-        },
+        rows_with_any_flag,
+        row_flag_counts,
         features,
     })
 }
@@ -246,9 +236,6 @@ impl NumericSupportReference {
         {
             return Err(NumericBytesError::SchemaMismatch);
         }
-        const MISSING: u8 = 1;
-        const OUTSIDE: u8 = 2;
-        const UNSUPPORTED: u8 = 8;
         let mut flags = vec![0u8; n_prediction_rows];
         let mut features = Vec::with_capacity(self.features.len());
         for source in &self.features {
@@ -296,22 +283,15 @@ impl NumericSupportReference {
                 },
             });
         }
+        let (rows_with_any_flag, row_flag_counts) = summarize_row_flags(&flags);
         Ok(InputSupport {
             schema_version: "1.0",
             reference: "full_training_features_before_imputation",
             action: "diagnostic_only_no_input_changes",
             n_training_rows: self.n_training_rows,
             n_prediction_rows,
-            rows_with_any_flag: flags.iter().filter(|&&f| f != 0).count(),
-            row_flag_counts: RowFlagCounts {
-                missing_value: flags.iter().filter(|&&f| f & MISSING != 0).count(),
-                numeric_outside_training_range: flags.iter().filter(|&&f| f & OUTSIDE != 0).count(),
-                unseen_category: 0,
-                non_missing_value_in_all_missing_training_feature: flags
-                    .iter()
-                    .filter(|&&f| f & UNSUPPORTED != 0)
-                    .count(),
-            },
+            rows_with_any_flag,
+            row_flag_counts,
             features,
         })
     }

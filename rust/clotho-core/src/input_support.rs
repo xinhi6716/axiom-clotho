@@ -73,6 +73,26 @@ pub struct RowFlagCounts {
     pub non_missing_value_in_all_missing_training_feature: usize,
 }
 
+// Keep row flags and their aggregation shared with the borrowed byte API.
+pub(crate) const MISSING: u8 = 1;
+pub(crate) const OUTSIDE: u8 = 2;
+pub(crate) const UNSEEN: u8 = 4;
+pub(crate) const UNSUPPORTED: u8 = 8;
+
+pub(crate) fn summarize_row_flags(flags: &[u8]) -> (usize, RowFlagCounts) {
+    let mut any = 0;
+    let mut counts = RowFlagCounts::default();
+    for &flag in flags {
+        any += usize::from(flag != 0);
+        counts.missing_value += usize::from(flag & MISSING != 0);
+        counts.numeric_outside_training_range += usize::from(flag & OUTSIDE != 0);
+        counts.unseen_category += usize::from(flag & UNSEEN != 0);
+        counts.non_missing_value_in_all_missing_training_feature +=
+            usize::from(flag & UNSUPPORTED != 0);
+    }
+    (any, counts)
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct InputSupport {
     pub schema_version: &'static str,
@@ -173,10 +193,6 @@ pub fn prediction_input_support(
     }
 
     // Bit flags keep aggregate row unions bounded by the prediction row limit.
-    const MISSING: u8 = 1;
-    const OUTSIDE: u8 = 2;
-    const UNSEEN: u8 = 4;
-    const UNSUPPORTED: u8 = 8;
     let mut flags = vec![0u8; n_prediction_rows];
     let mut features = Vec::with_capacity(training.len());
     for source in training {
@@ -287,25 +303,37 @@ pub fn prediction_input_support(
             counts,
         });
     }
+    let (rows_with_any_flag, row_flag_counts) = summarize_row_flags(&flags);
     Ok(InputSupport {
         schema_version: "1.0",
         reference: "full_training_features_before_imputation",
         action: "diagnostic_only_no_input_changes",
         n_training_rows,
         n_prediction_rows,
-        rows_with_any_flag: flags.iter().filter(|&&flag| flag != 0).count(),
-        row_flag_counts: RowFlagCounts {
-            missing_value: flags.iter().filter(|&&flag| flag & MISSING != 0).count(),
-            numeric_outside_training_range: flags
-                .iter()
-                .filter(|&&flag| flag & OUTSIDE != 0)
-                .count(),
-            unseen_category: flags.iter().filter(|&&flag| flag & UNSEEN != 0).count(),
-            non_missing_value_in_all_missing_training_feature: flags
-                .iter()
-                .filter(|&&flag| flag & UNSUPPORTED != 0)
-                .count(),
-        },
+        rows_with_any_flag,
+        row_flag_counts,
         features,
     })
+}
+
+#[cfg(test)]
+mod row_flag_tests {
+    use super::*;
+
+    #[test]
+    fn overlapping_flags_count_once_in_union_and_once_per_kind() {
+        let flags: Vec<_> = (0..16).collect();
+        assert_eq!(
+            summarize_row_flags(&flags),
+            (
+                15,
+                RowFlagCounts {
+                    missing_value: 8,
+                    numeric_outside_training_range: 8,
+                    unseen_category: 8,
+                    non_missing_value_in_all_missing_training_feature: 8,
+                }
+            )
+        );
+    }
 }
