@@ -23,7 +23,7 @@ def episode(key=BASE, early=1_000_000, final=100_000_000_000, error=0):
 
 
 class RetentionAnchorAudit(unittest.TestCase):
-    def run_capture(self, roster, rows, capture_header=IDS + TIMES):
+    def run_capture(self, roster, rows, capture_header=IDS + TIMES, *, extra=()):
         with tempfile.TemporaryDirectory() as tmp:
             folder = Path(tmp)
             for name, header, payload in (
@@ -32,7 +32,7 @@ class RetentionAnchorAudit(unittest.TestCase):
                     csv.writer(stream).writerows((header, *payload))
             return subprocess.run(
                 [sys.executable, str(TOOL), "--frozen-roster", str(folder / "roster.csv"),
-                 "--capture", str(folder / "capture.csv")],
+                 "--capture", str(folder / "capture.csv"), *extra],
                 text=True, capture_output=True, check=False,
             )
 
@@ -84,6 +84,50 @@ class RetentionAnchorAudit(unittest.TestCase):
                 self.assertEqual(r.returncode, int(reason != "eligible"), r.stderr)
                 self.assertEqual(json.loads(r.stdout)["frozen_episodes_by_primary_reason"],
                                  {reason: 1})
+
+    def test_anchor_diagnosis_exposes_secondary_faults_on_the_same_denominator(self):
+        off_early = episode(early=0, final=80_000_000_000, error=1)
+        off_early[2][7] = "other-epoch"
+        other = (*BASE[:4], "E2")
+        duplicate_origin = episode(other)
+        duplicate_origin.append(duplicate_origin[0])
+        duplicate_origin[2][8] = ""
+        absent = (*BASE[:4], "E3")
+        ok = (*BASE[:4], "E4")
+        roster = [BASE, other, absent, ok]
+        capture = off_early + duplicate_origin + episode(ok)
+        before = self.run_capture(roster, capture)
+        richer = self.run_capture(roster, capture, extra=("--diagnose-anchors",))
+        self.assertEqual((before.returncode, richer.returncode), (1, 1))
+        result = json.loads(richer.stdout)
+        counts = result.pop("frozen_nominal_anchor_statuses_by_us")
+        self.assertEqual(result, json.loads(before.stdout))
+        self.assertEqual(counts, {
+            "0": {
+                "duplicate_nominal_anchor": 1, "missing_nominal_anchor": 1,
+                "usable_timestamp": 2,
+            },
+            "1000000": {
+                "boundary_uncertain": 1, "missing_nominal_anchor": 1,
+                "unusable_origin": 1, "within_window": 1,
+            },
+            "100000000000": {
+                "different_clock_or_epoch": 1, "missing_nominal_anchor": 1,
+                "unknown_clock_or_time": 1, "within_window": 1,
+            },
+        })
+        self.assertTrue(all(sum(statuses.values()) == len(roster) for statuses in counts.values()))
+        self.assertNotIn("other-epoch", richer.stdout)
+        self.assertNotIn("privateLot", richer.stdout)
+
+    def test_single_fault_does_not_disable_unrelated_anchor_diagnosis(self):
+        rows = episode(early=0)
+        richer = self.run_capture([BASE], rows, extra=("--diagnose-anchors",))
+        self.assertEqual(richer.returncode, 1, richer.stderr)
+        data = json.loads(richer.stdout)
+        self.assertEqual(data["frozen_episodes_by_primary_reason"], {"early_outside_window": 1})
+        self.assertEqual(data["frozen_nominal_anchor_statuses_by_us"]["100000000000"],
+                         {"within_window": 1})
 
     def test_capture_cannot_supply_labels_or_change_frozen_identity_set(self):
         r = self.run_capture([BASE], [(*row, "sensitive-value") for row in episode()],

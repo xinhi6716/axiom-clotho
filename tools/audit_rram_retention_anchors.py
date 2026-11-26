@@ -58,6 +58,43 @@ def elapsed(reference, read):
     return difference - error, difference + error
 
 
+def timing_status(origin, read, nominal):
+    if origin[:2] != read[:2]:
+        return "different_clock_or_epoch"
+    lower, upper = elapsed(origin, read)
+    if nominal == ANCHORS[1]:
+        if upper <= 0 or lower > EARLY_UPPER:
+            return "outside_window"
+        if lower <= 0 or upper > EARLY_UPPER:
+            return "boundary_uncertain"
+    else:
+        if upper < TERMINAL_LOWER or lower > TERMINAL_UPPER:
+            return "outside_window"
+        if lower < TERMINAL_LOWER or upper > TERMINAL_UPPER:
+            return "boundary_uncertain"
+    return "within_window"
+
+
+def anchor_statuses(slots):
+    """One redacted state for each exact declared slot, never a model score."""
+    origin_rows = slots.get(ANCHORS[0], ())
+    origin = origin_rows[0] if len(origin_rows) == 1 else None
+    for nominal in ANCHORS:
+        rows = slots.get(nominal, ())
+        if not rows:
+            yield "missing_nominal_anchor"
+        elif len(rows) > 1:
+            yield "duplicate_nominal_anchor"
+        elif rows[0] is None:
+            yield "unknown_clock_or_time"
+        elif nominal == ANCHORS[0]:
+            yield "usable_timestamp"
+        elif origin is None:
+            yield "unusable_origin"
+        else:
+            yield timing_status(origin, rows[0], nominal)
+
+
 def verdict(slots):
     # A duplicate scheduled anchor is ambiguous even when both rows agree.
     if any(len(slots.get(key, ())) > 1 for key in ANCHORS):
@@ -69,20 +106,14 @@ def verdict(slots):
         return "unknown_clock_or_time"
     if not origin[:2] == early[:2] == terminal[:2]:
         return "different_clock_or_epoch"
-    lower, upper = elapsed(origin, early)
-    if upper <= 0 or lower > EARLY_UPPER:
-        return "early_outside_window"
-    if lower <= 0 or upper > EARLY_UPPER:
-        return "early_boundary_uncertain"
-    lower, upper = elapsed(origin, terminal)
-    if upper < TERMINAL_LOWER or lower > TERMINAL_UPPER:
-        return "terminal_outside_window"
-    if lower < TERMINAL_LOWER or upper > TERMINAL_UPPER:
-        return "terminal_boundary_uncertain"
+    for role, nominal, read in zip(("early", "terminal"), ANCHORS[1:], (early, terminal)):
+        status = timing_status(origin, read, nominal)
+        if status != "within_window":
+            return f"{role}_{status}"
     return "eligible"
 
 
-def audit(roster_path, capture_path):
+def audit(roster_path, capture_path, *, diagnose_anchors=False):
     expected = {}
     for key, _ in records(roster_path, IDENTITY):
         if key in expected:
@@ -113,7 +144,7 @@ def audit(roster_path, capture_path):
         verdict(slots) if key in present else "missing_capture"
         for key, slots in expected.items()
     )
-    return {
+    report = {
         "schema": "clotho.rram_retention_anchor_audit.v1",
         "frozen_attempted_episodes": len(expected),
         "frozen_attempted_dies": len({key[:3] for key in expected}),
@@ -122,15 +153,26 @@ def audit(roster_path, capture_path):
         "nonscheduled_rows_in_frozen_episodes": off_anchor_rows,
         "frozen_episodes_by_primary_reason": dict(sorted(classifications.items())),
     }
+    if diagnose_anchors:
+        by_anchor = {str(nominal): Counter() for nominal in ANCHORS}
+        for slots in expected.values():
+            for nominal, status in zip(ANCHORS, anchor_statuses(slots)):
+                by_anchor[str(nominal)][status] += 1
+        report["frozen_nominal_anchor_statuses_by_us"] = {
+            nominal: dict(sorted(counts.items())) for nominal, counts in by_anchor.items()
+        }
+    return report
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--frozen-roster", type=Path, required=True)
     parser.add_argument("--capture", type=Path, required=True)
+    parser.add_argument("--diagnose-anchors", action="store_true",
+                        help="report separate frozen-roster status counts for 0, 1 s and 100 ks")
     args = parser.parse_args()
     try:
-        report = audit(args.frozen_roster, args.capture)
+        report = audit(args.frozen_roster, args.capture, diagnose_anchors=args.diagnose_anchors)
     except (OSError, UnicodeError, csv.Error):
         parser.exit(2, "error: input could not be read as UTF-8 CSV\n")
     except ValueError as exc:

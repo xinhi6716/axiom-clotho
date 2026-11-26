@@ -37,3 +37,13 @@ frozen episodes are counted but do not determine eligibility. The tool
 does not verify that the roster was frozen, a pulse was delivered, clocks
 are calibrated, or a read is physically comparable. A confirmed origin and
 calibrated acquisition metadata must come from the instrument and protocol.
+
+
+For troubleshooting, add `--diagnose-anchors`. It reports a disjoint set
+of status counts for each nominal slot on the same frozen-episode denominator,
+including absent captures. A terminal clock or boundary problem remains visible
+even if an earlier issue already explains the episode's failure. A read with
+reported timing but an absent, duplicate, or unknown origin is marked
+`unusable_origin`, not `different_clock_or_epoch` or `within_window`. The
+diagnostic never makes an individual read scorable and does not change
+whole-episode eligibility, exit status, or the baseline report fields.
