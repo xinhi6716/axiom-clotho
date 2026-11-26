@@ -39,6 +39,14 @@ are calibrated, or a read is physically comparable. A confirmed origin and
 calibrated acquisition metadata must come from the instrument and protocol.
 
 
+To check the roster against a receipt archived independently before outcome
+access, supply `--frozen-roster-sha256` with its 64-character lowercase SHA-256.
+The check binds the exact bytes subsequently parsed, including an optional BOM,
+line endings, and row order. A mismatch stops before opening the capture. The
+aggregate report records that verification passed, without printing the digest
+or roster. A hash calculated from the current roster is not evidence of when
+that roster was created or whether it was changed before archiving.
+
 For troubleshooting, add `--diagnose-anchors`. It reports a disjoint set
 of status counts for each nominal slot on the same frozen-episode denominator,
 including absent captures. A terminal clock or boundary problem remains visible

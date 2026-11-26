@@ -2,6 +2,7 @@
 import argparse
 from collections import Counter
 import csv
+import hashlib
 import io
 import json
 import os
@@ -18,9 +19,10 @@ MAX_BYTES = 8 * 1024 * 1024
 MAX_ROWS = 100_000
 KEY = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.:-]{0,127}", re.ASCII)
 INTEGER = re.compile(r"[0-9]{1,18}", re.ASCII)
+SHA256 = re.compile(r"[a-f0-9]{64}", re.ASCII)
 
 
-def records(path, fields):
+def records(path, fields, *, expected_sha256=None):
     descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0)
                          | getattr(os, "O_BINARY", 0))
     with os.fdopen(descriptor, "rb") as stream:
@@ -29,6 +31,8 @@ def records(path, fields):
         raw = stream.read(MAX_BYTES + 1)
     if len(raw) > MAX_BYTES:
         raise ValueError("input exceeds byte limit")
+    if expected_sha256 is not None and hashlib.sha256(raw).hexdigest() != expected_sha256:
+        raise ValueError("frozen roster SHA-256 mismatch")
     reader = csv.reader(io.StringIO(raw.decode("utf-8-sig"), newline=""), strict=True)
     header = next(reader, [])
     if len(header) != len(fields) or set(header) != set(fields):
@@ -113,9 +117,12 @@ def verdict(slots):
     return "eligible"
 
 
-def audit(roster_path, capture_path, *, diagnose_anchors=False):
+def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=None):
+    if roster_sha256 is not None and (
+            not isinstance(roster_sha256, str) or not SHA256.fullmatch(roster_sha256)):
+        raise ValueError("frozen roster SHA-256 must be 64 lowercase hexadecimal digits")
     expected = {}
-    for key, _ in records(roster_path, IDENTITY):
+    for key, _ in records(roster_path, IDENTITY, expected_sha256=roster_sha256):
         if key in expected:
             raise ValueError("duplicate frozen acquisition identity")
         expected[key] = {}
@@ -153,6 +160,8 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False):
         "nonscheduled_rows_in_frozen_episodes": off_anchor_rows,
         "frozen_episodes_by_primary_reason": dict(sorted(classifications.items())),
     }
+    if roster_sha256 is not None:
+        report["frozen_roster_byte_digest_verified"] = True
     if diagnose_anchors:
         by_anchor = {str(nominal): Counter() for nominal in ANCHORS}
         for slots in expected.values():
@@ -170,9 +179,12 @@ def main():
     parser.add_argument("--capture", type=Path, required=True)
     parser.add_argument("--diagnose-anchors", action="store_true",
                         help="report separate frozen-roster status counts for 0, 1 s and 100 ks")
+    parser.add_argument("--frozen-roster-sha256",
+                        help="verify exact roster bytes against a previously trusted SHA-256")
     args = parser.parse_args()
     try:
-        report = audit(args.frozen_roster, args.capture, diagnose_anchors=args.diagnose_anchors)
+        report = audit(args.frozen_roster, args.capture, diagnose_anchors=args.diagnose_anchors,
+                       roster_sha256=args.frozen_roster_sha256)
     except (OSError, UnicodeError, csv.Error):
         parser.exit(2, "error: input could not be read as UTF-8 CSV\n")
     except ValueError as exc:

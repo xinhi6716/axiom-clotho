@@ -1,4 +1,5 @@
 import csv
+import hashlib
 import json
 from pathlib import Path
 import subprocess
@@ -35,6 +36,56 @@ class RetentionAnchorAudit(unittest.TestCase):
                  "--capture", str(folder / "capture.csv"), *extra],
                 text=True, capture_output=True, check=False,
             )
+
+    def test_archived_roster_digest_binds_exact_bytes_before_capture_access(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            roster = folder / "roster.csv"
+            capture = folder / "capture.csv"
+            original = (",".join(IDS) + "\r\n" + ",".join(BASE) + "\r\n").encode()
+            digest = hashlib.sha256(original).hexdigest()
+            roster.write_bytes(original)
+            with capture.open("w", newline="", encoding="utf-8") as stream:
+                csv.writer(stream).writerows((IDS + TIMES, *episode()))
+
+            def run(*extra):
+                return subprocess.run(
+                    [sys.executable, str(TOOL), "--frozen-roster", str(roster),
+                     "--capture", str(capture), *extra],
+                    text=True, capture_output=True, check=False,
+                )
+
+            before = json.loads(run().stdout)
+            for byte_change in (
+                original.replace(b"\r\n", b"\n"),
+                b"\xef\xbb\xbf" + original,
+                original.replace(b"E1", b"E2"),
+                original + b" ",
+            ):
+                roster.write_bytes(byte_change)
+                r = run("--frozen-roster-sha256", digest)
+                self.assertEqual(r.returncode, 2)
+                self.assertIn("SHA-256 mismatch", r.stderr)
+                self.assertFalse(r.stdout)
+                self.assertNotIn(digest, r.stderr)
+                self.assertNotIn("privateLot", r.stderr)
+            roster.write_bytes(original)
+            r = run("--frozen-roster-sha256", digest)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            after = json.loads(r.stdout)
+            self.assertIs(after.pop("frozen_roster_byte_digest_verified"), True)
+            self.assertEqual(before, after)
+            self.assertNotIn(digest, r.stdout)
+
+            capture.unlink()
+            r = run("--frozen-roster-sha256", "0" * 64)
+            self.assertEqual(r.returncode, 2)
+            self.assertIn("SHA-256 mismatch", r.stderr)
+            self.assertFalse(r.stdout)
+            r = run("--frozen-roster-sha256", digest.upper())
+            self.assertEqual(r.returncode, 2)
+            self.assertIn("64 lowercase", r.stderr)
+            self.assertFalse(r.stdout)
 
     def test_complete_interleaved_episodes_use_physical_die_keys(self):
         other = ("privateLot", "W2", "D1", "C1", "E1")
