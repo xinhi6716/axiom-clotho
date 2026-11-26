@@ -226,6 +226,36 @@ class MeasurementRegressionTests(unittest.TestCase):
         self.assertIn("feature source declarations", result.stderr)
         self.assertFalse(result.stdout)
 
+    def test_cli_revalidates_embedded_feature_contract_after_receipt_check(self):
+        self.prepare()
+        baseline = self.command("plan", "--prepared", self.prepared)
+        self.assertEqual(baseline.returncode, 0, baseline.stderr)
+        relative = "features/feature_schema.json"
+        path = self.prepared / relative
+        receipt_path = self.prepared / "COMPLETE.json"
+        good = c.parse_json(path.read_bytes())
+        receipt = c.parse_json(receipt_path.read_bytes())
+        cases = (
+            ("feature_units", {**good["feature_units"], c.FEATURES[0]: "A"}),
+            ("schema_version", True),
+            ("row_key", ["wafer"]),
+            ("target_columns", ["target"]),
+            ("model_feature_allowlist", list(reversed(c.FEATURES))),
+        )
+        for field, value in cases:
+            with self.subTest(field=field):
+                raw = c.json_bytes({**good, field: value})
+                path.write_bytes(raw)
+                receipt["files_sha256"][relative] = c.sha(raw)
+                receipt_path.write_bytes(c.json_bytes(receipt))
+                c.load_bundle(self.prepared, "prepared")
+                saved = tree(self.prepared)
+                result = self.command("plan", "--prepared", self.prepared)
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertIn("measurement feature schema", result.stderr)
+                self.assertFalse(result.stdout)
+                self.assertEqual(tree(self.prepared), saved)
+
     def test_replay_rejects_contradictory_preparation_provenance_before_work(self):
         self.prepare()
         receipt_path = self.prepared / "COMPLETE.json"

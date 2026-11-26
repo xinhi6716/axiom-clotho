@@ -42,6 +42,16 @@ def _load_component(name, relative):
     return module
 
 
+def _check_feature_schema(schema):
+    expected_units = dict(zip(FEATURES, ("ohm", "ohm", "dimensionless")))
+    if (not isinstance(schema, dict)
+            or type(schema.get("schema_version")) is not int or schema["schema_version"] != 1
+            or schema.get("row_key") != ["device"] or schema.get("target_columns") != []
+            or schema.get("model_feature_allowlist") != list(FEATURES)
+            or schema.get("feature_units") != expected_units):
+        raise WorkflowError("unsupported measurement feature schema: expected v1 device keys, fixed units and allowlist")
+
+
 def _check_groups(cohort, config):
     for row in cohort:
         for key in ("device", "group", "batch", "wafer"):
@@ -85,9 +95,7 @@ def prepare(input_dir, partitions_csv, training_targets_csv, config_json, output
         except extractor.InputError:
             raise WorkflowError("measurement extraction rejected the declared acquisitions; inspect the original input contract") from None
     feature_rows = keyed(parse_csv(features["features.csv"].encode(), FEATURE_COLUMNS))
-    schema = parse_json(features["feature_schema.json"].encode())
-    if schema["row_key"] != ["device"] or schema["target_columns"] != [] or schema["model_feature_allowlist"] != list(FEATURES):
-        raise WorkflowError("unsupported measurement feature row unit or allowlist")
+    _check_feature_schema(parse_json(features["feature_schema.json"].encode()))
     if set(partitions) != set(feature_rows):
         raise WorkflowError("partition IDs must match every extracted device exactly; no rows were dropped or guessed")
     cohort = []
@@ -151,6 +159,7 @@ def _prepared(path):
         return prepared(path)
     payloads, receipt_sha = load_bundle(path, "prepared")
     config = validate_config(parse_json(payloads["config.json"]))
+    _check_feature_schema(parse_json(payloads["features/feature_schema.json"]))
     cohort = parse_csv(payloads["cohort.csv"], COHORT_COLUMNS)
     by_id = keyed(cohort)
     # Preparation uses sorted device IDs, so a rehashed reorder cannot
