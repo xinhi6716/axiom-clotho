@@ -424,6 +424,41 @@ class RetentionAnchorAudit(unittest.TestCase):
         self.assertEqual(data["frozen_nominal_anchor_statuses_by_us"]["100000000000"],
                          {"within_window": 1})
 
+    def test_duplicate_anchor_diagnosis_does_not_repair_or_guess_readings(self):
+        roster = [(*BASE[:4], f"E{i}") for i in range(4)]
+        ticks = [episode(key) for key in roster]
+        copy_origin = ticks[0][0].copy()
+        copy_origin[8] = "00047"  # Same exact tick even though the CSV spelling differs.
+        ticks[0].append(copy_origin)
+        unknown_early = ticks[1][1].copy()
+        unknown_early[6] = ""
+        ticks[1].append(unknown_early)
+        conflict_early = ticks[1][1].copy()
+        conflict_early[9] = 1  # A different uncertainty bound is conflicting metadata.
+        ticks[1].append(conflict_early)
+        unknown_final = ticks[2][-1].copy()
+        unknown_final[7] = ""
+        ticks[2].append(unknown_final)
+        ticks[3][-1][7] = ""
+        second_unknown_final = ticks[3][-1].copy()
+        second_unknown_final[7] = "epoch"
+        second_unknown_final[8] = ""
+        ticks[3].append(second_unknown_final)
+        rows = [row for group in ticks for row in group]
+        ordinary = self.run_capture(roster, rows)
+        richer = self.run_capture(roster, rows, extra=("--diagnose-duplicate-anchors",))
+        self.assertEqual((ordinary.returncode, richer.returncode), (1, 1))
+        result = json.loads(richer.stdout)
+        self.assertEqual(result.pop("duplicate_frozen_anchor_metadata_by_us"), {
+            "0": {"identical_usable_stamps": 1},
+            "1000000": {"conflicting_usable_stamps": 1},
+            "100000000000": {"usable_and_unresolved_stamps": 1, "all_stamps_unresolved": 1},
+        })
+        self.assertEqual(result, json.loads(ordinary.stdout))
+        self.assertEqual(result["eligible_episodes"], 0)
+        self.assertEqual(result["frozen_episodes_by_primary_reason"], {"duplicate_nominal_anchor": 4})
+        self.assertNotIn("privateLot", richer.stdout)
+
     def test_capture_cannot_supply_labels_or_change_frozen_identity_set(self):
         r = self.run_capture([BASE], [(*row, "sensitive-value") for row in episode()],
                              IDS + TIMES + ("conductance_S",))

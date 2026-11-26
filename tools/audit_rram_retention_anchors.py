@@ -101,6 +101,24 @@ def anchor_statuses(slots):
             yield timing_status(origin, rows[0], nominal)
 
 
+def duplicate_anchor_status(rows):
+    """Describe repeated metadata without deciding which row to keep."""
+    first = None
+    unknown = False
+    for stamp in rows:
+        if stamp is None:
+            unknown = True
+        elif first is None:
+            first = stamp
+        elif stamp != first:
+            return "conflicting_usable_stamps"
+    if first is None:
+        return "all_stamps_unresolved"
+    if unknown:
+        return "usable_and_unresolved_stamps"
+    return "identical_usable_stamps"
+
+
 def verdict(slots):
     # A duplicate scheduled anchor is ambiguous even when both rows agree.
     if any(len(slots.get(key, ())) > 1 for key in ANCHORS):
@@ -167,7 +185,7 @@ def validate_digest(digest, label):
 
 def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=None,
           diagnose_dies=False, block_map_path=None, block_map_sha256=None, stress_history_path=None,
-          diagnose_die_stress=False):
+          diagnose_die_stress=False, diagnose_duplicate_anchors=False):
     validate_digest(roster_sha256, "frozen roster")
     validate_digest(block_map_sha256, "acquisition block map")
     if block_map_sha256 is not None and block_map_path is None:
@@ -261,6 +279,16 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
         report["frozen_nominal_anchor_statuses_by_us"] = {
             nominal: dict(sorted(counts.items())) for nominal, counts in by_anchor.items()
         }
+    if diagnose_duplicate_anchors:
+        duplicates = {str(nominal): Counter() for nominal in ANCHORS}
+        for slots in expected.values():
+            for nominal in ANCHORS:
+                rows = slots.get(nominal, ())
+                if len(rows) > 1:
+                    duplicates[str(nominal)][duplicate_anchor_status(rows)] += 1
+        report["duplicate_frozen_anchor_metadata_by_us"] = {
+            nominal: dict(sorted(counts.items())) for nominal, counts in duplicates.items()
+        }
     if die_counts is not None:
         complete = partial = absent = maximum = 0
         for attempted, eligible in die_counts.values():
@@ -329,13 +357,16 @@ def main():
                         help="optional episode-keyed off-schedule electrical stress declarations")
     parser.add_argument("--diagnose-die-stress", action="store_true",
                         help="count declared dice by whole-episode stress status; requires --stress-history")
+    parser.add_argument("--diagnose-duplicate-anchors", action="store_true",
+                        help="describe repeated scheduled timestamp metadata without repairing it")
     args = parser.parse_args()
     try:
         report = audit(args.frozen_roster, args.capture, diagnose_anchors=args.diagnose_anchors,
                        roster_sha256=args.frozen_roster_sha256, diagnose_dies=args.diagnose_dies,
                        block_map_path=args.acquisition_block_map,
                        block_map_sha256=args.acquisition_block_map_sha256,
-                       stress_history_path=args.stress_history, diagnose_die_stress=args.diagnose_die_stress)
+                       stress_history_path=args.stress_history, diagnose_die_stress=args.diagnose_die_stress,
+                       diagnose_duplicate_anchors=args.diagnose_duplicate_anchors)
     except (OSError, UnicodeError, csv.Error):
         parser.exit(2, "error: input could not be read as UTF-8 CSV\n")
     except ValueError as exc:

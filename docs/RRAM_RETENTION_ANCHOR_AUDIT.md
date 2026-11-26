@@ -120,3 +120,13 @@ episode and a documented no-extra-bias episode, so do not sum the category
 counts. Matching episode marginals can hide concentration of the clean
 episodes on one die. Reported counts do not establish independence or
 comparability between dies. This option changes no eligibility or exit rule.
+
+To investigate dropped or repeated exports, add `--diagnose-duplicate-anchors`.
+For each nominal slot, this counts frozen episodes having multiple rows and
+distinguishes identical usable timestamps, conflicting usable timestamps, a
+mixture of usable and unresolved metadata, and entirely unresolved metadata.
+Conflicts include differences in clock, epoch, tick, or error bound; examples
+with both a conflict and an unresolved row are counted as conflicts. Equivalent
+integer encodings are identical timestamp metadata, not necessarily identical
+raw rows or electrical measurements. The tool never selects a preferred row
+or repairs a duplicate. Every such episode remains timing-ineligible.
