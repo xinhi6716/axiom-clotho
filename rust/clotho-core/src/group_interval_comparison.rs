@@ -5,7 +5,6 @@ use crate::group_interval_diagnostics::{
 };
 use crate::group_max_calibration::RowKey;
 use crate::group_max_intervals::GroupMaxIntervals;
-use std::collections::BTreeMap;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct CoverageTransitions {
@@ -63,22 +62,32 @@ pub fn compare_interval_coverage(
             });
         }
     };
-    let mut group: BTreeMap<&str, (bool, bool)> = BTreeMap::new();
+    // Each map has already matched the exact same sorted composite keys.
+    // Zip them in key order, so each group is one contiguous run.
     let mut rows = CoverageTransitions::default();
-    for &key in roster {
-        let v = matched.observed[&key];
-        let (lo, hi) = left_bounds[&key];
-        let l = lo <= v && v <= hi;
-        let (lo, hi) = right_bounds[&key];
-        let r = lo <= v && v <= hi;
-        rows.add(l, r);
-        let entry = group.entry(key.group).or_insert((true, true));
-        entry.0 &= l;
-        entry.1 &= r;
-    }
     let mut whole_groups = CoverageTransitions::default();
-    for (l, r) in group.into_values() {
-        whole_groups.add(l, r);
+    let mut current = None;
+    let (mut left_all, mut right_all) = (true, true);
+    for (((key, &value), (left_key, &(left_lo, left_hi))), (right_key, &(right_lo, right_hi))) in
+        matched.observed.iter().zip(left_bounds.iter()).zip(right_bounds.iter())
+    {
+        debug_assert_eq!(key, left_key);
+        debug_assert_eq!(key, right_key);
+        if current != Some(key.group) {
+            if current.is_some() {
+                whole_groups.add(left_all, right_all);
+            }
+            current = Some(key.group);
+            (left_all, right_all) = (true, true);
+        }
+        let left = left_lo <= value && value <= left_hi;
+        let right = right_lo <= value && value <= right_hi;
+        rows.add(left, right);
+        left_all &= left;
+        right_all &= right;
+    }
+    if current.is_some() {
+        whole_groups.add(left_all, right_all);
     }
     Ok(PairedIntervalCoverage { rows, whole_groups })
 }
@@ -116,6 +125,37 @@ mod tests {
         assert_eq!(score.whole_groups, CoverageTransitions { both:0, left_only:1, right_only:1, neither:0 });
         let same = compare_interval_coverage(&roster, &l, &l, &observed).unwrap();
         assert_eq!(same.whole_groups, CoverageTransitions { both:1, left_only:0, right_only:0, neither:1 });
+    }
+
+    #[test]
+    fn all_transition_types_use_each_exact_group_after_independent_permutations() {
+        let a = key("a", "b:c");
+        let b = key("a:b", "c");
+        let c = key("a:b", "d");
+        let d = key("m", "one");
+        let e = key("z", "one");
+        let f = key("z", "two");
+        let roster = [d, f, b, a, e, c];
+        let observed = [e, c, d, a, b, f].map(|key| IntervalObservation { key, value: -0.0 });
+        let left = arm(&[(f, true), (b, true), (a, true), (d, false), (c, true), (e, false)]);
+        let right = arm(&[(c, true), (d, true), (e, true), (b, false), (f, false), (a, true)]);
+        let score = compare_interval_coverage(&roster, &left, &right, &observed).unwrap();
+        assert_eq!(
+            score,
+            PairedIntervalCoverage {
+                rows: CoverageTransitions { both: 2, left_only: 2, right_only: 2, neither: 0 },
+                whole_groups: CoverageTransitions { both: 1, left_only: 1, right_only: 1, neither: 1 },
+            }
+        );
+        let GroupMaxIntervals::Finite { mut intervals, groups, rank, radius } = right else {
+            unreachable!()
+        };
+        intervals[0].key = intervals[1].key;
+        let duplicate = GroupMaxIntervals::Finite { intervals, groups, rank, radius };
+        assert_eq!(
+            compare_interval_coverage(&roster, &left, &duplicate, &observed),
+            Err(IntervalComparisonError::Right(IntervalDiagnosticError::RosterMismatch)),
+        );
     }
 
     #[test]
