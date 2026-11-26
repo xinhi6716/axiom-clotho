@@ -123,6 +123,45 @@ class EvaluationSchemaTests(unittest.TestCase):
         self.assertFalse(reply.stdout)
         self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
 
+    def test_cli_group_median_replays_only_outer_training_labels(self):
+        from groupbench.baselines import GroupBalancedMedianRegressor
+
+        frame = pd.DataFrame({
+            "g": ["a"] * 5 + ["b"] * 2 + ["c"] * 3 + ["d"],
+            "x": range(11), "y": [1., 4., 2., 3., 5., 20., 22., 40., 43., 42., 91.],
+        })
+        options = dict(target="y", group="g", baselines=("group_median",),
+                       outer_splits=2, inner_splits=2)
+        result = benchmark(frame, **options)
+        result.write(self.root, overwrite=True)
+        command = [sys.executable, "-m", "groupbench.cli", "validate-evaluation-bundle", str(self.root)]
+        env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1] / "src"),
+                   OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1", PYTHONDONTWRITEBYTECODE="1")
+
+        def replay():
+            return subprocess.run(command, env=env, text=True, capture_output=True, timeout=30)
+
+        self.assertEqual(replay().returncode, 0)
+        original = GroupBalancedMedianRegressor.fit
+
+        def wrong_constant(estimator, X, y, **kwargs):
+            original(estimator, X, y, **kwargs)
+            estimator.constant_ += 100.
+            return estimator
+
+        # The writer faithfully saves predictions, fit declarations, and
+        # computed metrics for the wrong constant. Replay needs the labels.
+        with patch.object(GroupBalancedMedianRegressor, "fit", wrong_constant):
+            wrong = benchmark(frame, **options)
+        wrong.write(self.root, overwrite=True)
+        self.assertEqual(verify_bundle(self.root).bundle_type, "evaluation")
+        before = {p.name: p.read_bytes() for p in self.root.iterdir()}
+        reply = replay()
+        self.assertEqual(reply.returncode, 2, reply.stderr)
+        self.assertIn("group-median constant differs from retained training labels", reply.stderr)
+        self.assertFalse(reply.stdout)
+        self.assertEqual({p.name: p.read_bytes() for p in self.root.iterdir()}, before)
+
     def test_count_bool_null_model_and_fold_corruption(self):
         mutations = [('summary.json', lambda d: d['models']['selected']['overall'].update(n_rows=True)),
                      ('summary.json', lambda d: d['models']['selected']['overall'].update(r2=None)),

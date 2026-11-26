@@ -8,6 +8,7 @@ import re
 
 import numpy as np
 
+from .baselines import _lower_group_median
 from .data import validate_groups
 from .domain_selection import domain_metadata
 from .evaluation import _evaluation_run_key
@@ -193,6 +194,9 @@ def _check(manifest, summary, raw):
     if not isinstance(audits, list) or len(audits) != nf:
         _fail("outer fold audit coverage differs.")
     sorted_groups = sorted(membership)
+    if "group_median" in baselines:
+        median_inputs = (np.asarray(observed, dtype=float), np.asarray(groups, dtype=object))
+        median_folds = np.asarray(folds, dtype=int)
     if version == "1.3":
         group_sizes = {group: len(rows) for group, rows in group_rows.items()}
         candidates = _domain_candidates(config)
@@ -261,6 +265,13 @@ def _check(manifest, summary, raw):
             constant = audit["family_fit_details"]["group_median"]["constant"]
             if any(predictions["group_median"][i] != constant for i in fold_rows[fold]):
                 _fail("held-out predictions differ from their declared group-median refit constant.")
+            # This exact statistic depends only on training labels and
+            # group sizes, both retained in the outer evaluation rows.
+            train = median_folds != fold
+            expected_constant, _ = _lower_group_median(
+                median_inputs[0][train], median_inputs[1][train])
+            if constant != expected_constant:
+                _fail("group-median constant differs from retained training labels.")
         # Older narrow artifacts can omit selection metadata. Whenever the
         # family is declared, the selected entry must equal that fold's
         # family refit, not a separate vector with matching scalar metrics.
