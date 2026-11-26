@@ -95,6 +95,34 @@ class EvaluationSchemaTests(unittest.TestCase):
         self.assertFalse(reply.stdout)
         self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
 
+    def test_cli_requires_group_median_predictions_to_match_refit_constant(self):
+        frame = pd.DataFrame({"g": ["a", "b", "c", "d"] * 2, "x": range(8), "y": range(8)})
+        result = benchmark(frame, target="y", group="g", baselines=("dummy", "group_median"),
+                           outer_splits=2, inner_splits=2)
+        result.write(self.root, overwrite=True)
+        self.assertEqual(result.manifest["schema_version"], "1.2")
+        command = [sys.executable, "-m", "groupbench.cli", "validate-evaluation-bundle", str(self.root)]
+        env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1] / "src"),
+                   OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1", PYTHONDONTWRITEBYTECODE="1")
+
+        def replay():
+            return subprocess.run(command, env=env, text=True, capture_output=True, timeout=30)
+
+        self.assertEqual(replay().returncode, 0)
+
+        def change_constant(data):
+            median = data["outer_folds"][0]["family_fit_details"]["group_median"]
+            median["constant"] += 1.0
+
+        self.mutate_json("manifest.json", change_constant)
+        self.assertEqual(verify_bundle(self.root).bundle_type, "evaluation")
+        before = {p.name: p.read_bytes() for p in self.root.iterdir()}
+        reply = replay()
+        self.assertEqual(reply.returncode, 2, reply.stderr)
+        self.assertIn("group-median refit constant", reply.stderr)
+        self.assertFalse(reply.stdout)
+        self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
+
     def test_count_bool_null_model_and_fold_corruption(self):
         mutations = [('summary.json', lambda d: d['models']['selected']['overall'].update(n_rows=True)),
                      ('summary.json', lambda d: d['models']['selected']['overall'].update(r2=None)),

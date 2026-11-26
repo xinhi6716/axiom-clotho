@@ -255,6 +255,12 @@ def _check(manifest, summary, raw):
                     _fail("domain family winner declaration is missing.")
                 _domain_selection(audit, n-test_rows, train_groups, mapping, inner, config,
                                   group_sizes=group_sizes)
+        if "group_median" in baselines:
+            # The extension audit already validated the finite constant.
+            # A group-median refit broadcasts that same scalar to the fold.
+            constant = audit["family_fit_details"]["group_median"]["constant"]
+            if any(predictions["group_median"][i] != constant for i in fold_rows[fold]):
+                _fail("held-out predictions differ from their declared group-median refit constant.")
         # Older narrow artifacts can omit selection metadata. Whenever the
         # family is declared, the selected entry must equal that fold's
         # family refit, not a separate vector with matching scalar metrics.
