@@ -23,7 +23,7 @@ and ambiguous groups rather than repairing or imputing them.
 Use signed nonzero voltage in volts for all roles, positive write width in
 seconds for write only, and positive measured conductance in siemens for reads
 only. Every transition must have one consistent declared protocol label. The two read
-voltages must match as parsed binary64 numbers. Explicit nonzero numbers are
+voltages must match exactly as declared decimal values. Explicit nonzero numbers are
 bounded to magnitudes between 1e-150 and 1e150. The write
 voltage is the recorded command; do not substitute a nominal sweep range or
 infer timings from plots. Do not use this audit alone to verify device identity,
@@ -32,10 +32,9 @@ Printed chip and cell counts reflect claimed identifiers, not verified
 independence, comparable conditions or cross-chip performance.
 
 The aggregate report separates shared read strata (protocol and read voltage)
-from exact action strata (also the signed write voltage and width). The read
-component uses the declared binary64 matching rule. The write settings are
-compared as exact decimal values: equivalent spellings match, but distinct
-settings that round to the same binary64 number do not. Each counts
+from exact action strata (also the signed write voltage and width). Both read
+and write settings use exact decimal matching: equivalent spellings match, but
+distinct settings that round to the same binary64 number do not. Each counts
 eligible transitions in strata with at least two distinct declared chip labels.
 Two labels with no shared strata mean there is no match under these keys,
 not necessarily no continuous overlap. Matching neither

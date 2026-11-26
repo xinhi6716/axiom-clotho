@@ -84,6 +84,42 @@ class WritePairAudit(unittest.TestCase):
         })
         self.assertEqual(report["declared_exact_action_coverage"]["multi_chip_strata"], 0)
 
+    def test_read_pair_does_not_match_distinct_decimal_biases_rounded_alike(self):
+        rows = triplet()
+        rows[2][6] = "0.200000000000000001"
+        result = self.run_rows(rows)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        report = json.loads(result.stdout)
+        self.assertEqual(report["eligible_transitions"], 0)
+        self.assertEqual(report["rejected_transitions_by_primary_reason"], {
+            "read_voltage_mismatch": 1,
+        })
+        self.assertNotIn(rows[2][6], result.stdout)
+        # Equivalent decimal spellings still match.
+        rows[2][6] = "0.2000E0"
+        self.assertEqual(self.run_rows(rows).returncode, 0)
+
+    def test_cross_chip_support_requires_exact_declared_read_bias(self):
+        a, b = triplet(), triplet("chipB")
+        b[0][6] = b[2][6] = "0.200000000000000001"
+        result = self.run_rows(a + b, extra=("--require-shared-action",))
+        self.assertEqual(result.returncode, 1, result.stderr)
+        report = json.loads(result.stdout)
+        self.assertEqual(report["eligible_transitions"], 2)
+        for key in ("declared_read_condition_coverage", "declared_exact_action_coverage"):
+            self.assertEqual(report[key], {
+                "declared_strata": 2,
+                "multi_chip_strata": 0,
+                "eligible_transitions_in_multi_chip_strata": 0,
+            })
+        b[0][6], b[2][6] = "200e-3", "0.2"
+        result = self.run_rows(a + b, extra=("--require-shared-action",))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            json.loads(result.stdout)["declared_exact_action_coverage"]["multi_chip_strata"],
+            1,
+        )
+
     def test_shared_protocol_does_not_imply_shared_action(self):
         a, b = triplet(), triplet("chipB")
         b[1][7] = "4e-7"

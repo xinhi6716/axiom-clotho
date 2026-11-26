@@ -115,15 +115,17 @@ def audit(path, *, expected_path=None):
             width = number(d["width_s"], True)
             valid = v is not None and width is not None and d["conductance_S"] == ""
             if valid:
-                # Preserve distinct declared write settings even if they
-                # share a binary64 representation. Admission is unchanged.
-                v = Decimal(d["voltage_V"])
                 width = Decimal(d["width_s"])
         else:
             width = None
             valid = role in ("pre_read", "post_read") and v is not None and (
                 d["width_s"] == "" and number(d["conductance_S"], True) is not None
             )
+        # The binary64 range guard bounds admission. Protocol matching and
+        # cross-chip support use the exact declared decimal voltage for both
+        # read and write events, even when neighboring decimals round alike.
+        if valid:
+            v = Decimal(d["voltage_V"])
         protocol = d["protocol"]
         transitions[key].append((role, v, valid and bool(IDENTIFIER.fullmatch(protocol)), protocol, width))
     reasons = Counter()
