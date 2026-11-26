@@ -386,6 +386,79 @@ def paired_mae_parent_bounds(rows, *, expected_roster, truth_bounds=None):
     }
 
 
+def paired_mae_shared_shift_bounds(rows, *, expected_roster, shift_bounds):
+    """Exact finite-roster B-minus-A MAE under one shared target shift.
+
+    Supply (row_id, observed_target, forecast_a, forecast_b, positive_weight)
+    tuples, the independently frozen row IDs, and finite closed shift endpoints.
+    For log targets the common shift can represent log gain. Predictions and
+    weights remain fixed. This is a sensitivity range, not a calibration
+    estimate or a confidence interval. Independent row bounds answer a
+    different question.
+
+    Each absolute loss is linear between residual breakpoints. An exact
+    slope sweep evaluates only the interval endpoints and internal knots
+    in O(n log n) time. Ties return the smallest attaining shift.
+    """
+    if not _bounded_paired_sequence(rows):
+        raise ValueError("Rows must be a nonempty bounded list or tuple.")
+    if (type(expected_roster) not in (list, tuple, set, frozenset)
+            or not 1 <= len(expected_roster) <= 20_000
+            or not all(_paired_roster_id(key) for key in expected_roster)):
+        raise ValueError("Expected roster must be a nonempty bounded collection of row IDs.")
+    expected = set(expected_roster)
+    if len(expected) != len(expected_roster):
+        raise ValueError("Expected row IDs must be unique.")
+    if type(shift_bounds) is not tuple or len(shift_bounds) != 2:
+        raise ValueError("Shift bounds must be a finite ordered pair.")
+    low, high = map(_paired_binary64_units, shift_bounds)
+    if low > high:
+        raise ValueError("Shift bounds must be a finite ordered pair.")
+
+    seen, jumps = set(), {}
+    gap = slope = weight_sum = 0
+    for row in rows:
+        if type(row) is not tuple or len(row) != 5 or not _paired_roster_id(row[0]):
+            raise ValueError("Rows must be (ID, target, A, B, weight) tuples.")
+        key, target, a, b, weight = row
+        if key not in expected or key in seen:
+            raise ValueError("Rows must match the expected roster exactly.")
+        seen.add(key)
+        y, pa, pb, w = map(_paired_binary64_units, (target, a, b, weight))
+        if w <= 0:
+            raise ValueError("Row weights must be positive.")
+        weight_sum += w
+        for knot, signed_w in ((pb - y, w), (pa - y, -w)):
+            gap += signed_w * abs(knot - low)
+            slope += signed_w if knot <= low else -signed_w
+            if low < knot < high:
+                jumps[knot] = jumps.get(knot, 0) + 2 * signed_w
+    if seen != expected:
+        raise ValueError("Rows must match the expected roster exactly.")
+
+    minimum = maximum = (gap, low)
+    initial, previous = gap, low
+    for x in sorted(jumps) + [high]:
+        gap += slope * (x - previous)
+        if gap < minimum[0]:
+            minimum = (gap, x)
+        if gap > maximum[0]:
+            maximum = (gap, x)
+        slope += jumps.get(x, 0)
+        previous = x
+    quantum = _BINARY64_QUANTUM_DENOMINATOR
+    divisor = weight_sum * quantum
+    return {
+        "n_rows": len(seen),
+        "at_lower_shift_mae_b_minus_a": Fraction(initial, divisor),
+        "at_upper_shift_mae_b_minus_a": Fraction(gap, divisor),
+        "min_mae_b_minus_a": Fraction(minimum[0], divisor),
+        "max_mae_b_minus_a": Fraction(maximum[0], divisor),
+        "min_attaining_shift": Fraction(minimum[1], quantum),
+        "max_attaining_shift": Fraction(maximum[1], quantum),
+    }
+
+
 def scheduled_phase_paired_mae(rows, *, expected_roster, expected_cells, phase_weights):
     """Compare aligned forecasts on a predeclared device × phase panel.
 
