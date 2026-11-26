@@ -684,6 +684,45 @@ class RetentionAnchorAudit(unittest.TestCase):
             self.assertFalse(result.stdout)
             self.assertIn(diagnostic, result.stderr)
 
+    def test_joint_aperture_distinguishes_conflicting_shared_origin_from_marginal_fit(self):
+        roster = [(*BASE[:4], f"E{i}") for i in range(4)]
+        first, last = 1_000_000, 100_000_000_000
+        rows = [episode(key, early=1_019_998, final=80_000_000_002) for key in roster]
+        for triplet in rows:
+            triplet[0][9] = 2  # Shared origin bound; both per-read residuals are fixed.
+        capture = [row for triple in rows for row in triple]
+        apertures = [
+            (*roster[0], first, 1, 3), (*roster[0], last, -3, -1),
+            (*roster[1], first, 1, 3), (*roster[1], last, 1, 3),
+            (*roster[2], first, -2, 0), (*roster[2], last, 0, 2),
+            (*roster[3], first, -2, 0), (*roster[3], last, "", ""),
+        ]
+        gate = ("--diagnose-joint-aperture",)
+        baseline = self.run_capture(roster, capture, apertures=apertures)
+        checked = self.run_capture(roster, capture, apertures=apertures, extra=gate)
+        self.assertEqual((baseline.returncode, checked.returncode), (0, 0))
+        report = json.loads(checked.stdout)
+        aggregate = {
+            "no_joint_fit_under_read_residual_box": 1,
+            "joint_fit_possible_under_read_residual_box": 1,
+            "joint_fit_for_all_errors_in_read_residual_box": 1,
+            "missing_or_unknown_aperture": 1,
+        }
+        self.assertEqual(report.pop("conditional_shared_origin_aperture_support"), {
+            "frozen_attempted_by_status": aggregate, "timing_eligible_by_status": aggregate,
+        })
+        self.assertEqual(report, json.loads(baseline.stdout))
+        self.assertEqual(report["eligible_episodes"], 4)
+        self.assertEqual(report["reported_read_aperture_support_by_us"][str(first)]
+                         ["timing_eligible_by_status"]["aperture_fit_depends_on_timestamp_error"], 2)
+        self.assertEqual(report["reported_read_aperture_support_by_us"][str(last)]
+                         ["timing_eligible_by_status"]["aperture_fit_depends_on_timestamp_error"], 1)
+
+        missing = self.run_capture(roster, capture, extra=gate)
+        self.assertEqual(missing.returncode, 2)
+        self.assertIn("requires a read aperture table", missing.stderr)
+        self.assertFalse(missing.stdout)
+
     def test_capture_cannot_supply_labels_or_change_frozen_identity_set(self):
         r = self.run_capture([BASE], [(*row, "sensitive-value") for row in episode()],
                              IDS + TIMES + ("conductance_S",))

@@ -187,3 +187,14 @@ timestamp error bounds. The report separates aperture fit for every admissible
 shift, fit for some but not all shifts, and impossible full fit. Missing
 metadata, unusable timestamps, and clock changes stay distinct. This diagnostic
 does not alter the scheduled timestamp eligibility or certify ADC calibration.
+
+Add `--diagnose-joint-aperture` with that table to check whether both full
+apertures can fit with one shared origin correction. This is conditional
+on an error box: one bounded origin correction and separate per-read
+bounded corrections whose values may be chosen independently. It is not
+an assumption of probabilistic independence. If read errors are coupled,
+possible fit under the box is only a necessary condition and not proof
+of feasibility under the actual constraints. Two possible marginal fits
+can disagree on the shared origin. The diagnostic distinguishes no fit,
+some fit, and all-error fit under the stated box on both denominators.
+It still does not change eligibility or certify the stated bounds.

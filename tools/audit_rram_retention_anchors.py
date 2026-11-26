@@ -314,6 +314,45 @@ def aperture_status(slots, nominal, offsets):
     return "aperture_fit_depends_on_timestamp_error"
 
 
+def joint_aperture_status(slots, metadata):
+    """Exact shared-origin test conditional on a box of separate read residuals."""
+    if any(len(slots.get(nominal, ())) != 1 for nominal in ANCHORS):
+        return "missing_or_ambiguous_capture"
+    if any(metadata.get(nominal) is None for nominal in ANCHORS[1:]):
+        return "missing_or_unknown_aperture"
+    origin, early, terminal = (slots[nominal][0] for nominal in ANCHORS)
+    if any(stamp is None for stamp in (origin, early, terminal)):
+        return "unusable_origin_or_read_timestamp"
+    if not origin[:2] == early[:2] == terminal[:2]:
+        return "different_clock_or_epoch"
+
+    lower, upper, upper_open = -origin[3], origin[3], False
+    for nominal, read in zip(ANCHORS[1:], (early, terminal)):
+        strict = nominal == ANCHORS[1]
+        win_lo, win_hi = (0, EARLY_UPPER) if strict else (TERMINAL_LOWER, TERMINAL_UPPER)
+        delta = read[2] - origin[2]
+        opened, closed = (delta + offset for offset in metadata[nominal])
+        if closed - opened > win_hi - win_lo or (strict and closed - opened == win_hi - win_lo):
+            return "no_joint_fit_under_read_residual_box"
+        # For actual elapsed endpoints [opened + x - o, closed + x - o],
+        # project the read residual x in [-read_error, read_error] onto
+        # allowed shared origin corrections o. The upper condition for an
+        # early anchor is strict because elapsed start must be positive.
+        lower = max(lower, closed - win_hi - read[3])
+        candidate_upper = opened - win_lo + read[3]
+        if candidate_upper < upper:
+            upper, upper_open = candidate_upper, strict
+        elif candidate_upper == upper:
+            upper_open |= strict
+        if lower > upper or (lower == upper and upper_open):
+            return "no_joint_fit_under_read_residual_box"
+
+    if all(aperture_status(slots, nominal, metadata[nominal]) == "full_aperture_within_window"
+           for nominal in ANCHORS[1:]):
+        return "joint_fit_for_all_errors_in_read_residual_box"
+    return "joint_fit_possible_under_read_residual_box"
+
+
 def validate_digest(digest, label):
     if digest is not None and (not isinstance(digest, str) or not SHA256.fullmatch(digest)):
         raise ValueError(f"{label} SHA-256 must be 64 lowercase hexadecimal digits")
@@ -323,7 +362,7 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
           diagnose_dies=False, block_map_path=None, block_map_sha256=None, stress_history_path=None,
           diagnose_die_stress=False, diagnose_duplicate_anchors=False,
           diagnose_terminal_alternatives=False, capture_sha256=None, readout_path_table=None,
-          read_bias_table=None, aperture_table=None):
+          read_bias_table=None, aperture_table=None, diagnose_joint_aperture=False):
     validate_digest(roster_sha256, "frozen roster")
     validate_digest(capture_sha256, "timestamp capture")
     validate_digest(block_map_sha256, "acquisition block map")
@@ -331,6 +370,8 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
         raise ValueError("acquisition block map SHA-256 requires an acquisition block map")
     if diagnose_die_stress and stress_history_path is None:
         raise ValueError("die stress diagnosis requires a stress history table")
+    if diagnose_joint_aperture and aperture_table is None:
+        raise ValueError("joint aperture diagnosis requires a read aperture table")
     expected = {}
     for key, _ in records(roster_path, IDENTITY, expected_sha256=roster_sha256):
         if key in expected:
@@ -372,6 +413,7 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
     apertures = captured_apertures(aperture_table, expected) if aperture_table is not None else None
     attempted_apertures = {nominal: Counter() for nominal in ANCHORS[1:]}
     eligible_apertures = {nominal: Counter() for nominal in ANCHORS[1:]}
+    attempted_joint, eligible_joint = Counter(), Counter()
     classifications = Counter()
     die_counts = defaultdict(lambda: [0, 0]) if diagnose_dies else None
     eligible_block_dies = defaultdict(set)
@@ -401,6 +443,11 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
                 attempted_apertures[nominal][status] += 1
                 if reason == "eligible":
                     eligible_apertures[nominal][status] += 1
+            if diagnose_joint_aperture:
+                status = joint_aperture_status(slots, apertures.get(key, {}))
+                attempted_joint[status] += 1
+                if reason == "eligible":
+                    eligible_joint[status] += 1
         if die_counts is not None:
             counts = die_counts[key[:3]]
             counts[0] += 1
@@ -532,6 +579,11 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
             }
             for nominal in ANCHORS[1:]
         }
+    if diagnose_joint_aperture:
+        report["conditional_shared_origin_aperture_support"] = {
+            "frozen_attempted_by_status": dict(sorted(attempted_joint.items())),
+            "timing_eligible_by_status": dict(sorted(eligible_joint.items())),
+        }
     return report
 
 
@@ -565,6 +617,8 @@ def main():
                         help="independent captured anchor to observed read-bias bounds")
     parser.add_argument("--read-apertures", type=Path,
                         help="optional observed early/terminal integration aperture offsets")
+    parser.add_argument("--diagnose-joint-aperture", action="store_true",
+                        help="conditional shared-origin aperture test under separate bounded residuals")
     args = parser.parse_args()
     try:
         report = audit(args.frozen_roster, args.capture, diagnose_anchors=args.diagnose_anchors,
@@ -575,7 +629,8 @@ def main():
                        diagnose_duplicate_anchors=args.diagnose_duplicate_anchors,
                        diagnose_terminal_alternatives=args.diagnose_terminal_alternatives,
                        capture_sha256=args.capture_sha256, readout_path_table=args.readout_paths,
-                       read_bias_table=args.read_bias, aperture_table=args.read_apertures)
+                       read_bias_table=args.read_bias, aperture_table=args.read_apertures,
+                       diagnose_joint_aperture=args.diagnose_joint_aperture)
     except (OSError, UnicodeError, csv.Error):
         parser.exit(2, "error: input could not be read as UTF-8 CSV\n")
     except ValueError as exc:
