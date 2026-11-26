@@ -150,20 +150,12 @@ impl KnnRegressor {
         mut visit: impl FnMut(usize, f64),
     ) -> Result<(), KnnError> {
         for (i, train) in self.training.iter().enumerate() {
-            let mut d = 0.0_f64;
-            for ((a, b), scale) in row.iter().zip(train).zip(&self.scales) {
-                let direct = a - b;
-                let delta = if direct.is_finite() {
-                    direct / scale
-                } else {
-                    // Opposite extreme values may overflow subtraction
-                    // while their scaled difference remains representable.
-                    a / scale - b / scale
-                };
-                if !delta.is_finite() || (a != b && delta == 0.0) {
-                    return Err(KnnError::NumericOverflow);
-                }
-                d = d.hypot(delta);
+            // For a finite first component, hypot(0, delta) is exactly
+            // abs(delta). Start there; remaining components retain hypot's
+            // scaling and evaluation order.
+            let mut d = distance_component(row[0], train[0], self.scales[0])?.abs();
+            for ((&a, &b), &scale) in row[1..].iter().zip(&train[1..]).zip(&self.scales[1..]) {
+                d = d.hypot(distance_component(a, b, scale)?);
             }
             if !d.is_finite() {
                 return Err(KnnError::NumericOverflow);
@@ -173,6 +165,21 @@ impl KnnRegressor {
         Ok(())
     }
 }
+fn distance_component(a: f64, b: f64, scale: f64) -> Result<f64, KnnError> {
+    let direct = a - b;
+    let delta = if direct.is_finite() {
+        direct / scale
+    } else {
+        // Opposite extreme values may overflow subtraction even though
+        // the scaled difference remains representable.
+        a / scale - b / scale
+    };
+    if !delta.is_finite() || (a != b && delta == 0.0) {
+        return Err(KnnError::NumericOverflow);
+    }
+    Ok(delta)
+}
+
 // Only membership matters: the exact mean and its normalization check
 // are independent of target order. Distances arrive in original row order.
 fn nearest_subset(distances: &mut [(f64, usize)], k: usize) -> &[(f64, usize)] {

@@ -41,3 +41,17 @@ fn nonzero_distance_lost_in_normalization_is_rejected_not_tied() {
         Err(KnnError::NumericOverflow),
     );
 }
+
+#[test]
+fn leading_absolute_component_preserves_selection_at_binary64_boundaries() {
+    let m = f64::from_bits(1);
+    let x = [vec![-0.0], vec![m], vec![2.0 * m], vec![f64::MIN_POSITIVE]];
+    let fitted = KnnRegressor::fit(&x, &[-1.0, 2.0, 4.0, 8.0], 1).unwrap();
+    assert_eq!(
+        fitted.predict(&[vec![0.0], vec![m], vec![3.0 * m], vec![f64::MIN_POSITIVE]]).unwrap(),
+        [-1.0, 2.0, 4.0, 8.0]
+    );
+    let x = [vec![-f64::MAX, 1.0], vec![f64::MAX, 2.0]];
+    let fitted = KnnRegressor::fit(&x, &[1.0, 2.0], 1).unwrap();
+    assert_eq!(fitted.predict(&[vec![f64::MAX, 2.0]]).unwrap(), [2.0]);
+}
