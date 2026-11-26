@@ -561,18 +561,7 @@ def scheduled_phase_paired_mae(rows, *, expected_roster, expected_cells, phase_w
     }
 
 
-def paired_parent_mae_influence(rows, *, expected_roster):
-    """Describe same-roster MAE and the effect of omitting one declared parent.
-
-    Supply (row_id, device, parent, target, forecast_a, forecast_b) tuples
-    and an independently frozen (row_id, device, parent) roster. IDs are exact
-    nonblank Unicode scalar strings; use source-qualified canonical IDs.
-    Rows, devices within parent, then parents each receive equal weight at
-    their own level. All bounds are descriptive, not intervals or resampling.
-    Parent labels do not verify independence or resolve aliases. The per_parent
-    records return supplied parent labels verbatim; use pseudonymous labels
-    when sharing the report.
-    """
+def _paired_parent_losses(rows, expected_roster):
     def identifier(value):
         return _paired_label(value) and not any(0xD800 <= ord(char) <= 0xDFFF for char in value)
 
@@ -615,6 +604,22 @@ def paired_parent_mae_influence(rows, *, expected_roster):
         pool[0] += 1
         pool[1] += loss_a / n
         pool[2] += loss_b / n
+    return devices, parents
+
+
+def paired_parent_mae_influence(rows, *, expected_roster):
+    """Describe same-roster MAE and the effect of omitting one declared parent.
+
+    Supply (row_id, device, parent, target, forecast_a, forecast_b) tuples
+    and an independently frozen (row_id, device, parent) roster. IDs are exact
+    nonblank Unicode scalar strings; use source-qualified canonical IDs.
+    Rows, devices within parent, then parents each receive equal weight at
+    their own level. All bounds are descriptive, not intervals or resampling.
+    Parent labels do not verify independence or resolve aliases. The per_parent
+    records return supplied parent labels verbatim; use pseudonymous labels
+    when sharing the report.
+    """
+    devices, parents = _paired_parent_losses(rows, expected_roster)
     k = len(parents)
     total_a, total_b, effects, details = Fraction(), Fraction(), [], []
     for parent, (n, loss_a, loss_b) in sorted(parents.items()):
@@ -632,3 +637,43 @@ def paired_parent_mae_influence(rows, *, expected_roster):
             "mae_a": contrast_float(total_a / k), "mae_b": contrast_float(total_b / k),
             "mae_b_minus_a": contrast_float(effect_sum / k), "per_parent": details,
             "leave_one_parent_out_mae_b_minus_a": loo}
+
+
+
+def paired_parent_mae_deletion_bounds(rows, *, expected_roster, max_deletions):
+    """Exact B-minus-A nested MAE sensitivity to whole-parent removal.
+
+    Use the same frozen row/device/parent roster and nested weighting as
+    paired_parent_mae_influence. Choose the deletion budget independently of
+    model outcomes. Every budget retains at least one parent; the full
+    comparison is included at budget zero. Each interval is the exact
+    descriptive range over all omissions of up to that many parents. These
+    ranges are not confidence intervals or a reason to discard sources.
+    """
+    if type(max_deletions) is not int or max_deletions < 0:
+        raise ValueError("The whole-parent deletion budget must be a nonnegative integer.")
+    devices, parents = _paired_parent_losses(rows, expected_roster)
+    k = len(parents)
+    if max_deletions >= k:
+        raise ValueError("The whole-parent deletion budget must retain at least one parent.")
+
+    # The smallest retained mean removes the largest effects, and vice
+    # versa, because each parent gets equal weight. The extrema are nested:
+    # deleting a largest (smallest) remaining value cannot raise (lower)
+    # the corresponding mean. Exactly d deletions therefore also bounds
+    # every subset with at most d deletions.
+    effects = sorted((loss_b - loss_a) / n for n, loss_a, loss_b in parents.values())
+    total = sum(effects, Fraction())
+    remaining_low, remaining_high = total, total
+    bounds = [(total / k, total / k)]
+    for d in range(1, max_deletions + 1):
+        remaining_low -= effects[-d]
+        remaining_high -= effects[d - 1]
+        bounds.append((remaining_low / (k - d), remaining_high / (k - d)))
+    return {
+        "n_rows": len(rows),
+        "n_devices": len(devices),
+        "n_declared_parents": k,
+        "max_deletions": max_deletions,
+        "mae_b_minus_a_bounds_by_budget": tuple(bounds),
+    }

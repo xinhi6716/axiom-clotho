@@ -1,8 +1,10 @@
 """Synthetic paired parent influence, not population uncertainty."""
 import json
+from fractions import Fraction
+from itertools import combinations, product
 import unittest
 
-from groupbench.metrics import paired_parent_mae_influence
+from groupbench.metrics import paired_parent_mae_deletion_bounds, paired_parent_mae_influence
 
 
 def fixture(count):
@@ -84,3 +86,56 @@ class ParentInfluenceTests(unittest.TestCase):
         ):
             with self.subTest(error=error), self.assertRaisesRegex(ValueError, error):
                 paired_parent_mae_influence(given, expected_roster=expected)
+
+
+class ParentDeletionBoundsTests(unittest.TestCase):
+    @staticmethod
+    def make(effects):
+        roster = [(f'r{i}', f'd{i}', f'p{i}') for i in range(len(effects))]
+        rows = [(*entry, 0, max(-effect, 0), max(effect, 0))
+                for entry, effect in zip(roster, effects)]
+        return rows, roster
+
+    def test_one_parent_omission_can_miss_the_two_parent_reversal(self):
+        rows, roster = self.make((-4, -4, 1, 1, 1))
+        report = paired_parent_mae_deletion_bounds(rows, expected_roster=roster, max_deletions=2)
+        bounds = report['mae_b_minus_a_bounds_by_budget']
+        self.assertEqual(bounds, ((-1, -1), (Fraction(-3, 2), Fraction(-1, 4)),
+                                  (Fraction(-7, 3), 1)))
+        before = paired_parent_mae_influence(rows, expected_roster=roster)
+        self.assertEqual(before['leave_one_parent_out_mae_b_minus_a'],
+                         dict(zip(('min', 'max'), bounds[1])))
+        swapped = [row[:-2] + row[-2:][::-1] for row in rows[::-1]]
+        reverse = paired_parent_mae_deletion_bounds(swapped, expected_roster=roster[::-1],
+                                                    max_deletions=2)
+        self.assertEqual(reverse['mae_b_minus_a_bounds_by_budget'],
+                         tuple((-high, -low) for low, high in bounds))
+
+    def test_every_subset_for_each_small_support_pattern(self):
+        for k in range(1, 6):
+            for effects in product((-2, 0, 1), repeat=k):
+                rows, roster = self.make(effects)
+                bounds = paired_parent_mae_deletion_bounds(
+                    rows, expected_roster=roster, max_deletions=k-1)['mae_b_minus_a_bounds_by_budget']
+                possible = []
+                for d in range(k):
+                    possible.extend(Fraction(sum(kept), k-d)
+                                    for kept in combinations(effects, k-d))
+                    self.assertEqual(bounds[d], (min(possible), max(possible)))
+
+    def test_nesting_weights_devices_and_parents_not_rows(self):
+        rows, roster = self.make((-4, 1, 1))
+        rows += [('x', 'd0', 'p0', 0, 0, 2), ('y', 'extra', 'p0', 0, 5, 0)]
+        roster += [row[:3] for row in rows[-2:]]
+        report = paired_parent_mae_deletion_bounds(rows, expected_roster=roster, max_deletions=2)
+        self.assertEqual(report['mae_b_minus_a_bounds_by_budget'],
+                         ((Fraction(-1, 3),) * 2, (-1, 1), (-3, 1)))
+
+    def test_budget_and_frozen_hierarchy_checks(self):
+        rows, roster = self.make((1, 0, -1))
+        for budget in (-1, 3, True, 2., None):
+            with self.subTest(budget=budget), self.assertRaisesRegex(ValueError, 'budget'):
+                paired_parent_mae_deletion_bounds(rows, expected_roster=roster, max_deletions=budget)
+        for bad in (rows[:-1], rows + [rows[0]], [(*rows[0][:2], 'p2', *rows[0][3:]), *rows[1:]]):
+            with self.assertRaises(ValueError):
+                paired_parent_mae_deletion_bounds(bad, expected_roster=roster, max_deletions=1)
