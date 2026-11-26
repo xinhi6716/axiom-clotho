@@ -1,7 +1,7 @@
 //! Observed interval coverage by exact declared group size.
 //! No pooling across sizes or inferential claims.
 use crate::group_interval_diagnostics::{
-    evaluate_group_intervals, GroupIntervalDiagnostic, IntervalDiagnosticError, IntervalObservation,
+    evaluate_group_intervals_by_group, GroupIntervalDiagnostic, IntervalDiagnosticError, IntervalObservation,
 };
 use crate::group_max_calibration::RowKey;
 use crate::group_max_intervals::GroupMaxIntervals;
@@ -29,34 +29,74 @@ pub fn stratify_group_interval_coverage(
     prediction: &GroupMaxIntervals<'_>,
     observations: &[IntervalObservation<'_>],
 ) -> Result<StratifiedIntervalCoverage, IntervalDiagnosticError> {
-    let overall = evaluate_group_intervals(roster, prediction, observations)?;
-    let GroupMaxIntervals::Finite { intervals, .. } = prediction else {
-        return Ok(StratifiedIntervalCoverage { overall, strata: None });
-    };
-    let values: BTreeMap<_, _> = observations.iter().map(|r| (r.key, r.value)).collect();
-    let mut groups: BTreeMap<_, (usize, usize)> = BTreeMap::new();
-    for row in intervals {
-        let value = values[&row.key];
-        let (len, covered) = groups.entry(row.key.group).or_default();
-        *len += 1;
-        *covered += usize::from(row.lower <= value && value <= row.upper);
-    }
     let mut strata = BTreeMap::new();
-    for (_, (len, covered)) in groups {
+    let overall = evaluate_group_intervals_by_group(roster, prediction, observations, |len, covered| {
         let stratum = strata.entry(len).or_insert(GroupSizeCoverage {
             rows_per_group: len, groups: 0, groups_fully_covered: 0, rows_covered: 0,
         });
         stratum.groups += 1;
         stratum.groups_fully_covered += usize::from(len == covered);
         stratum.rows_covered += covered;
-    }
-    Ok(StratifiedIntervalCoverage { overall, strata: Some(strata.into_values().collect()) })
+    })?;
+    let strata = match overall {
+        GroupIntervalDiagnostic::InsufficientFinite { .. } => None,
+        GroupIntervalDiagnostic::Scored { .. } => Some(strata.into_values().collect()),
+    };
+    Ok(StratifiedIntervalCoverage { overall, strata })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::group_max_intervals::QueryInterval;
+
+    #[test]
+    fn shared_scoring_keeps_sizes_sides_and_endpoints_on_permuted_rosters() {
+        let a = RowKey { group: "a:b", row: "c" };
+        let b = RowKey { group: "a", row: "b:c" };
+        let c = RowKey { group: "a", row: "d" };
+        let d = RowKey { group: "z", row: "one" };
+        let e = RowKey { group: "z", row: "two" };
+        let roster = [d, a, c, b, e];
+        let observations = [
+            IntervalObservation { key: e, value: 1.0 },
+            IntervalObservation { key: b, value: -1.0 },
+            IntervalObservation { key: a, value: -2.0 },
+            IntervalObservation { key: d, value: -1.0 },
+            IntervalObservation { key: c, value: 2.0 },
+        ];
+        let mut prediction = GroupMaxIntervals::Finite {
+            groups: 4,
+            rank: 4,
+            radius: 1.0,
+            intervals: [a, e, b, d, c].into_iter().map(|key| QueryInterval {
+                key, lower: -1.0, upper: 1.0,
+            }).collect(),
+        };
+        let result = stratify_group_interval_coverage(&roster, &prediction, &observations).unwrap();
+        assert_eq!(result.overall, GroupIntervalDiagnostic::Scored {
+            rows: 5, rows_covered: 3, groups: 3, groups_fully_covered: 1,
+            below_rows: 1, above_rows: 1,
+        });
+        assert_eq!(result.strata, Some(vec![
+            GroupSizeCoverage { rows_per_group: 1, groups: 1, groups_fully_covered: 0, rows_covered: 0 },
+            GroupSizeCoverage { rows_per_group: 2, groups: 2, groups_fully_covered: 1, rows_covered: 3 },
+        ]));
+        let GroupMaxIntervals::Finite { intervals, .. } = &mut prediction else {
+            unreachable!()
+        };
+        intervals[0].lower = f64::NAN;
+        let mut invalid = observations;
+        invalid[4].value = f64::INFINITY;
+        assert_eq!(
+            stratify_group_interval_coverage(&roster, &prediction, &invalid),
+            Err(IntervalDiagnosticError::NonfiniteObservation),
+        );
+        assert_eq!(
+            stratify_group_interval_coverage(&roster, &prediction, &observations),
+            Err(IntervalDiagnosticError::InvalidBounds),
+        );
+    }
 
     #[test]
     fn one_miss_in_large_group_preserves_size_and_denominators() {

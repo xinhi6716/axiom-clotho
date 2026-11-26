@@ -121,32 +121,74 @@ pub fn evaluate_group_intervals(
     prediction: &GroupMaxIntervals<'_>,
     observations: &[IntervalObservation<'_>],
 ) -> Result<GroupIntervalDiagnostic, IntervalDiagnosticError> {
+    evaluate_group_intervals_by_group(roster, prediction, observations, |_, _| {})
+}
+
+/// Visit each finite group's (declared rows, covered rows) once.
+pub(crate) fn evaluate_group_intervals_by_group(
+    roster: &[RowKey<'_>],
+    prediction: &GroupMaxIntervals<'_>,
+    observations: &[IntervalObservation<'_>],
+    mut visit_group: impl FnMut(usize, usize),
+) -> Result<GroupIntervalDiagnostic, IntervalDiagnosticError> {
     let matched = IntervalRoster::new(roster, observations)?;
-    let groups: BTreeSet<_> = roster.iter().map(|row| row.group).collect();
-    let count = groups.len();
     let predicted = match matched.bounds(prediction)? {
         ValidatedBounds::Finite(predicted) => predicted,
         ValidatedBounds::Insufficient { groups, rank } => {
+            let mut count = 0;
+            let mut previous_group = None;
+            for key in matched.observed.keys() {
+                if previous_group != Some(key.group) {
+                    count += 1;
+                    previous_group = Some(key.group);
+                }
+            }
             return Ok(GroupIntervalDiagnostic::InsufficientFinite {
                 calibration_groups: groups, rank, rows: roster.len(), groups: count,
             });
         }
     };
-    let mut missed_groups = BTreeSet::new();
+
+    // The two maps were independently matched to the exact same sorted
+    // roster. Therefore corresponding entries have identical row keys, and
+    // rows of each group are contiguous without another lookup or index.
+    let mut previous_group = None;
+    let (mut group_rows, mut group_covered) = (0, 0);
+    let (mut groups, mut groups_fully_covered) = (0, 0);
     let (mut below, mut above) = (0, 0);
-    for (key, (lower, upper)) in predicted {
-        let value = matched.observed[&key];
+    let mut finish_group = |rows, covered| {
+        groups += 1;
+        groups_fully_covered += usize::from(rows == covered);
+        visit_group(rows, covered);
+    };
+    for ((key, &(lower, upper)), (observed_key, &value)) in
+        predicted.iter().zip(matched.observed.iter())
+    {
+        debug_assert_eq!(key, observed_key);
+        if previous_group != Some(key.group) {
+            if group_rows > 0 {
+                finish_group(group_rows, group_covered);
+            }
+            previous_group = Some(key.group);
+            group_rows = 0;
+            group_covered = 0;
+        }
+        group_rows += 1;
         if value < lower {
             below += 1;
-            missed_groups.insert(key.group);
         } else if value > upper {
             above += 1;
-            missed_groups.insert(key.group);
+        } else {
+            group_covered += 1;
         }
     }
+    if group_rows > 0 {
+        finish_group(group_rows, group_covered);
+    }
+
     Ok(GroupIntervalDiagnostic::Scored {
         rows: roster.len(), rows_covered: roster.len() - below - above,
-        groups: count, groups_fully_covered: count - missed_groups.len(),
+        groups, groups_fully_covered,
         below_rows: below, above_rows: above,
     })
 }
