@@ -2,8 +2,11 @@
 from copy import deepcopy
 import hashlib
 import json
+import os
 from pathlib import Path
 import tempfile
+import subprocess
+import sys
 import unittest
 from unittest.mock import patch
 
@@ -74,6 +77,39 @@ class KernelIntegrationTests(unittest.TestCase):
         result.manifest['family_fit_details']['nystroem_ridge']['training_rows'] = 1
         self.assertEqual(result.estimator.family_fit_details_['nystroem_ridge']['training_rows'], 18)
         self.assertEqual(plan['schema_version'], '1.3')
+
+    def test_cli_binds_kernel_refit_alpha_to_declared_winner(self):
+        result = fit_predict(self.data, self.X.iloc[:2], target="y", group="g",
+                             baselines=("nystroem_ridge",), inner_splits=2)
+        self.assertEqual(result.manifest["schema_version"], "1.3")
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp)
+            command = [sys.executable, "-m", "groupbench.cli", "validate-prediction-bundle", str(path)]
+            env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1] / "src"),
+                       OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1", PYTHONDONTWRITEBYTECODE="1")
+
+            def replay():
+                return subprocess.run(command, env=env, capture_output=True, text=True, timeout=30)
+
+            result.write(path)
+            self.assertEqual(replay().returncode, 0)
+            manifest_path = path / "manifest.json"
+            manifest = json.loads(manifest_path.read_text())
+            final = manifest["family_fit_details"]["nystroem_ridge"]
+            self.assertEqual(manifest["selected_candidate"], f"nystroem_ridge_alpha_{final['alpha']:g}")
+            final["alpha"] = next(alpha for alpha in (0.1, 1.0, 10.0) if alpha != final["alpha"])
+            manifest_path.write_text(json.dumps(manifest))
+            receipt_path = path / "checksums.json"
+            receipt = json.loads(receipt_path.read_text())
+            receipt["files"]["manifest.json"] = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+            receipt_path.write_text(json.dumps(receipt))
+            self.assertEqual(verify_bundle(path).bundle_type, "prediction")
+            before = {p.name: p.read_bytes() for p in path.iterdir()}
+            reply = replay()
+            self.assertEqual(reply.returncode, 2, reply.stderr)
+            self.assertIn("kernel refit regularization", reply.stderr)
+            self.assertFalse(reply.stdout)
+            self.assertEqual({p.name: p.read_bytes() for p in path.iterdir()}, before)
 
     def test_kernel_state_is_atomic_and_successful_old_only_refit_clears_details(self):
         model = GroupBenchRegressor(baselines=('nystroem_ridge',), inner_splits=2).fit(self.X, self.y, self.g)

@@ -294,7 +294,16 @@ def _optional_selection_metadata(value, rows, groups, inner_splits, seed, option
         _fail("extended final-refit coverage differs.")
     for family in optional:
         if family == "nystroem_ridge":
-            _kernel_details(final[family], rows, seed)
+            kernel = _kernel_details(final[family], rows, seed)
+            candidate = f"nystroem_ridge_alpha_{kernel['alpha']:g}"
+            # Prediction v1.3 may lack family winners for nonselected
+            # families; only reconcile declarations that it retains.
+            family_winners = value.get("family_candidates")
+            if (("family_candidates" in value
+                 and _object(family_winners).get(family) != candidate)
+                    or (value.get("selected_family") == family
+                        and value.get("selected_candidate") != candidate)):
+                _fail("kernel refit regularization differs from the declared candidate.")
         elif family == "group_median":
             _median_details(final[family], rows, groups)
         else:
