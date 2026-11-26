@@ -110,3 +110,27 @@ class SplitEligibilityTests(unittest.TestCase):
                 audit_split_row_eligibility(fit, test, ids, eligibility=statuses)
         with self.assertRaisesRegex(ValueError, "overlap"):
             audit_split_row_eligibility([0], [1], ["same", "same", "unused"], eligibility=statuses)
+
+
+class SplitRosterIdentityTests(unittest.TestCase):
+    def test_rejects_rosters_the_splitter_would_not_admit(self):
+        for roster in (np.array([True, False]),
+                       np.array([1, "1"], dtype=object),
+                       np.array(["ok", "bad\x00id"], dtype=object),
+                       np.array(["fit", "test", ""], dtype=object),
+                       np.array(["fit", "test", "\ud800"], dtype=object),
+                       np.array(["2026-01-01", "2026-01-02"], dtype="datetime64[D]")):
+            with self.subTest(roster=roster), self.assertRaises(ValueError):
+                audit_split([0], [1], roster)
+
+    def test_exact_numeric_namespaces_preserve_display_and_alias_overlap(self):
+        roster = np.array([np.float64(2**53), 2**53 + 1, np.uint64(5)], dtype=object)
+        result = audit_split([0, 1], [2], roster)
+        self.assertEqual(result["train_group_count"], 2)
+        self.assertEqual(result["test_groups"], [5])
+        self.assertEqual(sorted(int(value) for value in result["train_groups"]),
+                         [2**53, 2**53 + 1])
+        self.assertEqual(result["overlap_count"], 0)
+        alias = np.array([np.float64(2**53), 2**53], dtype=object)
+        with self.assertRaisesRegex(ValueError, "overlap"):
+            audit_split([0], [1], alias)

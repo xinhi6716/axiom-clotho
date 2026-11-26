@@ -89,24 +89,30 @@ def _audit_positions(indices, n_rows: int, name: str):
 
 
 def audit_split(train: np.ndarray, test: np.ndarray, groups: np.ndarray) -> dict:
-    """Report disjoint positional subsets of a non-missing group roster; coverage may be partial."""
-    if np.ma.isMaskedArray(groups) and np.ma.getmaskarray(groups).any():
+    """Report disjoint positional subsets of a valid grouped roster; coverage may be partial."""
+    if not isinstance(groups, np.ndarray) or groups.ndim != 1:
         raise ValueError("Invalid split: provide one non-missing group identifier per row.")
-    # Keep the declared NumPy labels; coercing mixed identities can merge them.
-    if not isinstance(groups, np.ndarray) or groups.ndim != 1 or pd.isna(groups).any():
-        raise ValueError("Invalid split: provide one non-missing group identifier per row.")
+    # Validate the entire roster with the same exact identity contract as the
+    # splitter, including unused rows. Do not count raw object equality as
+    # model-admissible group identity.
+    keys = validate_groups(groups, len(groups))
     train, train_roster = _audit_positions(train, len(groups), "training")
     test, test_roster = _audit_positions(test, len(groups), "validation")
-    train_groups = set(groups[train])
-    test_groups = set(groups[test])
-    overlap = train_groups & test_groups
-    if overlap or train_roster & test_roster:
+    if train_roster & test_roster or set(keys[train]) & set(keys[test]):
         raise ValueError("Invalid split: training and validation observations overlap.")
+
+    def unique_display(positions):
+        by_key = {}
+        for i in positions:
+            by_key.setdefault(keys[i], groups[i])
+        return sorted(by_key.values())
+
+    train_groups, test_groups = unique_display(train), unique_display(test)
     return {
         "train_rows": len(train), "test_rows": len(test),
         "train_group_count": len(train_groups), "test_group_count": len(test_groups),
-        "overlap_count": len(overlap),
-        "train_groups": sorted(train_groups), "test_groups": sorted(test_groups),
+        "overlap_count": 0,
+        "train_groups": train_groups, "test_groups": test_groups,
     }
 
 
