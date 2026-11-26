@@ -222,3 +222,76 @@ def compare_affine_readouts(standards, reference, comparison, *,
     interior_pass = abs(er) <= e and abs(ec) <= e
     return AffineReadoutComparison(er, ec, low, high, maximum, interior_pass,
                                   interior_pass and maximum <= d)
+
+
+@dataclass(frozen=True)
+class AnchorChangeDisagreement:
+    """Exact finite-roster diagnostics; squared deviations are in squared units."""
+
+    signed_bias: Fraction
+    mean_absolute_disagreement: Fraction
+    centered_mean_square_disagreement: Fraction
+
+
+@dataclass(frozen=True)
+class AnchorChangeControlAudit:
+    """Agreement with two declared comparison paths, not a reliability estimate."""
+
+    n_blocks: int
+    candidate_minus_sham: AnchorChangeDisagreement
+    candidate_minus_reference: AnchorChangeDisagreement
+    sham_minus_reference: AnchorChangeDisagreement
+
+
+def audit_anchor_change_controls(records, *, expected_blocks) -> AnchorChangeControlAudit:
+    """Compare changes on the same declared 0/1 anchor blocks in common units.
+
+    Each record is (block_id, candidate_0, candidate_1, sham_0, sham_1,
+    reference_0, reference_1). Both controls must measure the matched condition
+    and slots. The sham may share the candidate's acquisition errors; the
+    reference is intended to have independent measurement errors. The caller
+    must establish these dependencies and the separate measurement paths.
+    This function checks a declared roster, not instrument or unit provenance.
+
+    Return signed bias, average absolute disagreement, and centered mean
+    squared disagreement of changes, equally weighted by block. Bias and
+    centered disagreement separate common offset from block-to-block
+    variability descriptively, not as physical drift or noise estimates.
+    No predictions or baselines are fit, selected or corrected.
+    """
+    if not all(type(x) in (list, tuple) and 1 <= len(x) <= MAX_VALUES
+               for x in (records, expected_blocks)):
+        raise ValueError("Anchor records and frozen blocks must be bounded nonempty sequences.")
+
+    def block_id(value):
+        if (type(value) is not str or not 1 <= len(value) <= 256 or value.strip() != value
+                or any(unicodedata.category(c) in ("Cc", "Cs") for c in value)):
+            raise ValueError("Anchor blocks require plain, nonblank string identifiers.")
+        return value
+
+    expected = {block_id(key) for key in expected_blocks}
+    if len(expected) != len(expected_blocks):
+        raise ValueError("Duplicate block in the frozen anchor roster.")
+    seen = set()
+    sums = [[Fraction(), Fraction(), Fraction()] for _ in range(3)]
+    for row in records:
+        if type(row) is not tuple or len(row) != 7:
+            raise ValueError("Anchor records require a block and six matched slot values.")
+        key = block_id(row[0])
+        if key not in expected or key in seen:
+            raise ValueError("Anchor records must match the frozen block roster exactly.")
+        seen.add(key)
+        a0, a1, s0, s1, r0, r1 = (_number(v, "Anchor measurement") for v in row[1:])
+        candidate, sham, reference = a1 - a0, s1 - s0, r1 - r0
+        for totals, gap in zip(sums, (candidate - sham, candidate - reference, sham - reference)):
+            totals[0] += gap
+            totals[1] += abs(gap)
+            totals[2] += gap * gap
+    if seen != expected:
+        raise ValueError("Anchor records must match the frozen block roster exactly.")
+
+    n = len(seen)
+    comparisons = tuple(AnchorChangeDisagreement(total / n, absolute / n,
+                                                   squares / n - (total / n) ** 2)
+                        for total, absolute, squares in sums)
+    return AnchorChangeControlAudit(n, *comparisons)

@@ -1,8 +1,11 @@
 """Invented decimal arithmetic only; no model construction or fitting."""
 from dataclasses import replace
 from decimal import Decimal, localcontext
+from fractions import Fraction
+from itertools import product
 import unittest
 from groupbench.quantity_contract import (QuantityDeclaration as Q,
+    AnchorChangeDisagreement, audit_anchor_change_controls,
     compare_declarations, normalize_decimal_tokens, decimal_to_float64,
     normalize_comparable_pair_to_float64)
 
@@ -144,5 +147,49 @@ class QuantityContractTests(unittest.TestCase):
         self.assertEqual(alone[0], combined[0])
         self.assertIsInstance(alone, tuple)
         self.assertFalse(hasattr(alone, "provenance"))
+
+class AnchorChangeControlTests(unittest.TestCase):
+    def test_shared_noise_can_make_sham_agreement_perfect(self):
+        offsets = [-2, -1, 0, 1, 2]
+        roster = [f"device.{i}" for i in range(len(offsets))]
+        rows = [(key, 10, 11 + noise, 30, 31 + noise, 100, 101)
+                for key, noise in zip(roster, offsets)]
+        got = audit_anchor_change_controls(rows[::-1], expected_blocks=roster)
+        self.assertEqual(got.n_blocks, 5)
+        self.assertEqual(got.candidate_minus_sham, AnchorChangeDisagreement(0, 0, 0))
+        self.assertEqual(got.candidate_minus_reference, AnchorChangeDisagreement(0, Fraction(6, 5), 2))
+        self.assertEqual(got.sham_minus_reference, got.candidate_minus_reference)
+        with_drift = [(*row[:2], row[2]+3, *row[3:]) for row in rows]
+        drift = audit_anchor_change_controls(with_drift, expected_blocks=roster)
+        self.assertEqual(drift.candidate_minus_reference, AnchorChangeDisagreement(3, 3, 2))
+        self.assertEqual(drift.candidate_minus_sham, AnchorChangeDisagreement(3, 3, 0))
+
+    def test_reference_control_changing_the_gap_is_not_ignored(self):
+        roster = ("x", "y", "z")
+        for noise in product(range(-2, 3), repeat=len(roster)):
+            rows = [(key, 0, 1+x, 0, 1+x, 0, 1) for key, x in zip(roster, noise)]
+            report = audit_anchor_change_controls(rows, expected_blocks=roster)
+            gaps = list(map(Fraction, noise))
+            center = sum(gaps) / len(gaps)
+            self.assertEqual(report.candidate_minus_reference, AnchorChangeDisagreement(
+                center, sum(map(abs, gaps)) / len(gaps),
+                sum((value - center) ** 2 for value in gaps) / len(gaps)))
+
+    def test_exact_decimals_and_rejects_changes_to_frozen_cohort(self):
+        base = 10**80
+        tiny = Decimal("1e-180")
+        rows = [("x", base, base + 1, 0, 1, 0, tiny),
+                ("y", base, base + 1, 0, 1, 0, tiny)]
+        report = audit_anchor_change_controls(rows, expected_blocks=["y", "x"])
+        exact = 1 - Fraction(tiny)
+        self.assertEqual(report.candidate_minus_reference, AnchorChangeDisagreement(exact, exact, 0))
+        for bad, expected in ((rows[:-1], ["x", "y"]), (rows, ["x", "x"]),
+                              ([rows[0], rows[0]], ["x", "y"]),
+                              ([rows[0], ("z", *rows[1][1:])], ["x", "y"]),
+                              ([rows[0], (*rows[1][:-1], False)], ["x", "y"]),
+                              ([rows[0], (*rows[1][:-1], float("nan"))], ["x", "y"])):
+            with self.assertRaises(ValueError):
+                audit_anchor_change_controls(bad, expected_blocks=expected)
+
 
 if __name__ == "__main__": unittest.main()
