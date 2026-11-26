@@ -152,6 +152,45 @@ class RetentionAnchorAudit(unittest.TestCase):
         self.assertNotIn("privateBlock", diag.stdout)
         self.assertNotIn("privateLot", diag.stdout)
 
+    def test_archived_block_map_digest_checks_exact_bytes_before_capture(self):
+        other = (*BASE[:4], "E2")
+        blocks = [(*BASE, "privateBlockA"), (*other, "privateBlockB")]
+        payload = (",".join(IDS + ("acquisition_block",)) + "\r\n"
+                   + "".join(",".join(row) + "\r\n" for row in blocks)).encode()
+        digest = hashlib.sha256(payload).hexdigest()
+        gate = ("--acquisition-block-map-sha256", digest)
+        capture = episode(BASE) + episode(other)
+        ordinary = self.run_capture([BASE, other], capture, block_map=blocks)
+        verified = self.run_capture([BASE, other], capture, block_map=blocks, extra=gate)
+        self.assertEqual((ordinary.returncode, verified.returncode), (0, 0))
+        report = json.loads(verified.stdout)
+        self.assertIs(report.pop("acquisition_block_map_byte_digest_verified"), True)
+        self.assertEqual(report, json.loads(ordinary.stdout))
+        self.assertNotIn(digest, verified.stdout)
+
+        for changed in (list(reversed(blocks)), [(*BASE, "differentBlock"), blocks[1]]):
+            # The roster join succeeds if the mapping is used without a receipt;
+            # with the receipt, the changed bytes fail before a malformed capture.
+            self.assertEqual(self.run_capture([BASE, other], capture, block_map=changed)
+                             .returncode, 0)
+            invalid = self.run_capture([BASE, other], [], capture_header=("broken",),
+                                       block_map=changed, extra=gate)
+            self.assertEqual(invalid.returncode, 2)
+            self.assertIn("acquisition block map SHA-256 mismatch", invalid.stderr)
+            self.assertFalse(invalid.stdout)
+            self.assertNotIn(digest, invalid.stderr)
+            self.assertNotIn("privateBlock", invalid.stderr)
+
+        missing = self.run_capture([BASE, other], capture, extra=gate)
+        self.assertEqual(missing.returncode, 2)
+        self.assertIn("requires an acquisition block map", missing.stderr)
+        self.assertFalse(missing.stdout)
+        malformed = self.run_capture([BASE, other], capture, block_map=blocks,
+                                     extra=(gate[0], digest.upper()))
+        self.assertEqual(malformed.returncode, 2)
+        self.assertIn("64 lowercase hexadecimal", malformed.stderr)
+        self.assertFalse(malformed.stdout)
+
     def test_block_map_cannot_omit_duplicate_or_add_an_episode(self):
         for mapping, diagnostic in [
             ([], "does not cover"),

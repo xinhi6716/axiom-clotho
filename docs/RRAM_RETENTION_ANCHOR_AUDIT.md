@@ -76,3 +76,11 @@ die labels substitute for independently documented block assignments. The
 report is descriptive support, not a claim of independent blocks or permission
 to count repeated dies as new physical units. Timing eligibility
 and the exit status for a valid mapping are unchanged.
+
+To replay an independently archived block assignment, also supply
+`--acquisition-block-map-sha256` with its 64-character lowercase SHA-256.
+This checks the exact map bytes before capture access; changed assignments or
+row order fail without a report even if the map still covers the roster. A
+successful check adds a boolean only, not the digest or any identities.
+This receipt is separate from the frozen-roster receipt and does not prove
+when the block assignments were made or establish independence.

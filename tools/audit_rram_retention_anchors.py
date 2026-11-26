@@ -22,7 +22,7 @@ INTEGER = re.compile(r"[0-9]{1,18}", re.ASCII)
 SHA256 = re.compile(r"[a-f0-9]{64}", re.ASCII)
 
 
-def records(path, fields, *, expected_sha256=None):
+def records(path, fields, *, expected_sha256=None, digest_label="frozen roster"):
     descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0)
                          | getattr(os, "O_BINARY", 0))
     with os.fdopen(descriptor, "rb") as stream:
@@ -32,7 +32,7 @@ def records(path, fields, *, expected_sha256=None):
     if len(raw) > MAX_BYTES:
         raise ValueError("input exceeds byte limit")
     if expected_sha256 is not None and hashlib.sha256(raw).hexdigest() != expected_sha256:
-        raise ValueError("frozen roster SHA-256 mismatch")
+        raise ValueError(f"{digest_label} SHA-256 mismatch")
     reader = csv.reader(io.StringIO(raw.decode("utf-8-sig"), newline=""), strict=True)
     header = next(reader, [])
     if len(header) != len(fields) or set(header) != set(fields):
@@ -117,10 +117,11 @@ def verdict(slots):
     return "eligible"
 
 
-def acquisition_blocks(path, expected):
+def acquisition_blocks(path, expected, *, expected_sha256=None):
     """Require a total, one-to-one assignment onto the exact frozen roster."""
     blocks = {}
-    for key, (block,) in records(path, IDENTITY + ("acquisition_block",)):
+    for key, (block,) in records(path, IDENTITY + ("acquisition_block",),
+                                 expected_sha256=expected_sha256, digest_label="acquisition block map"):
         if not KEY.fullmatch(block):
             raise ValueError("invalid acquisition block label")
         if key not in expected:
@@ -133,11 +134,17 @@ def acquisition_blocks(path, expected):
     return blocks
 
 
+def validate_digest(digest, label):
+    if digest is not None and (not isinstance(digest, str) or not SHA256.fullmatch(digest)):
+        raise ValueError(f"{label} SHA-256 must be 64 lowercase hexadecimal digits")
+
+
 def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=None,
-          diagnose_dies=False, block_map_path=None):
-    if roster_sha256 is not None and (
-            not isinstance(roster_sha256, str) or not SHA256.fullmatch(roster_sha256)):
-        raise ValueError("frozen roster SHA-256 must be 64 lowercase hexadecimal digits")
+          diagnose_dies=False, block_map_path=None, block_map_sha256=None):
+    validate_digest(roster_sha256, "frozen roster")
+    validate_digest(block_map_sha256, "acquisition block map")
+    if block_map_sha256 is not None and block_map_path is None:
+        raise ValueError("acquisition block map SHA-256 requires an acquisition block map")
     expected = {}
     for key, _ in records(roster_path, IDENTITY, expected_sha256=roster_sha256):
         if key in expected:
@@ -146,7 +153,8 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
     if not expected:
         raise ValueError("frozen acquisition roster must not be empty")
 
-    blocks = acquisition_blocks(block_map_path, expected) if block_map_path is not None else None
+    blocks = (acquisition_blocks(block_map_path, expected, expected_sha256=block_map_sha256)
+              if block_map_path is not None else None)
     present, unexpected = set(), set()
     off_anchor_rows = 0
     for key, (nominal, clock, epoch, tick, error) in records(capture_path, IDENTITY + TIMING):
@@ -191,6 +199,8 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
     }
     if roster_sha256 is not None:
         report["frozen_roster_byte_digest_verified"] = True
+    if block_map_sha256 is not None:
+        report["acquisition_block_map_byte_digest_verified"] = True
     if diagnose_anchors:
         by_anchor = {str(nominal): Counter() for nominal in ANCHORS}
         for slots in expected.values():
@@ -238,11 +248,14 @@ def main():
                         help="summarize frozen timing support by declared physical die")
     parser.add_argument("--acquisition-block-map", type=Path,
                         help="exact frozen episode-to-block metadata map for aggregate support")
+    parser.add_argument("--acquisition-block-map-sha256",
+                        help="verify exact block map bytes against a previously trusted SHA-256")
     args = parser.parse_args()
     try:
         report = audit(args.frozen_roster, args.capture, diagnose_anchors=args.diagnose_anchors,
                        roster_sha256=args.frozen_roster_sha256, diagnose_dies=args.diagnose_dies,
-                       block_map_path=args.acquisition_block_map)
+                       block_map_path=args.acquisition_block_map,
+                       block_map_sha256=args.acquisition_block_map_sha256)
     except (OSError, UnicodeError, csv.Error):
         parser.exit(2, "error: input could not be read as UTF-8 CSV\n")
     except ValueError as exc:
