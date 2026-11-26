@@ -453,3 +453,75 @@ def preview_evidence_quarantine(observations, *, unresolved_scopes):
             "No rows are repaired, removed, admitted to training, or linked as paired physical specimens.",
         ],
     }
+
+
+@dataclass(frozen=True)
+class BondedTrackAttempt:
+    """Disposition and height for one declared track, not an inferred outcome."""
+
+    attempt_id: str
+    bonding: str
+    height_mm: str | None = None
+
+
+@dataclass(frozen=True)
+class BondedTrackSummary:
+    attempted: int
+    bonded: int
+    failed_bond: int
+    unknown_bond: int
+    measured_bonded_height: int
+    mean_measured_bonded_height_mm: Fraction | None
+    bonding_fraction_bounds: tuple[Fraction, Fraction]
+    qualified_fraction_bounds: tuple[Fraction, Fraction]
+
+
+def summarize_bonded_track_attempts(attempt_ids, records, *, height_window_mm):
+    """Describe bonding and meeting a frozen height requirement over all attempts.
+
+    Only a bonded track with measured height can be confirmed to meet the closed window.
+    A confirmed lack of bond is a failure for this composite endpoint, not a
+    measured height of zero. Missing assessment contributes an unknown, and
+    omitted IDs fail rather than being silently treated as missing. Units,
+    metrology, and physical identities are caller declarations. The exact
+    finite-roster bounds are not confidence intervals.
+    """
+    if (type(attempt_ids) not in (tuple, list) or type(records) not in (tuple, list)
+            or not 1 <= len(attempt_ids) <= MAX_RECORDS or len(records) != len(attempt_ids)
+            or any(not _identity(i) for i in attempt_ids)
+            or len(set(attempt_ids)) != len(attempt_ids)):
+        raise ValueError("Provide the complete, unique declared track roster and one record per attempt.")
+    if type(height_window_mm) not in (list, tuple) or len(height_window_mm) != 2:
+        raise ValueError("Height window needs its ordered lower and upper limits in mm.")
+    lo, hi = map(_fraction, height_window_mm)
+    if lo < 0 or lo > hi:
+        raise ValueError("Height window must be ordered and nonnegative.")
+    pending = set(attempt_ids)
+    bonded = failed = unknown = measured = hits = 0
+    total_height = Fraction(0)
+    for record in records:
+        if (type(record) is not BondedTrackAttempt or not _identity(record.attempt_id)
+                or record.attempt_id not in pending or not _member(record.bonding, ("bonded", "failed", "unknown"))):
+            raise ValueError("Track records must match the exact declared attempts and supported dispositions.")
+        pending.remove(record.attempt_id)
+        if record.bonding != "bonded":
+            if record.height_mm is not None:
+                raise ValueError("An unbonded or unclassified attempt may not supply bonded-track height.")
+            if record.bonding == "failed":
+                failed += 1
+            else:
+                unknown += 1
+            continue
+        bonded += 1
+        if record.height_mm is not None:
+            height = _fraction(record.height_mm)
+            if height < 0:
+                raise ValueError("Measured bonded-track height must be nonnegative.")
+            measured += 1
+            total_height += height
+            hits += lo <= height <= hi
+    n = len(attempt_ids)
+    return BondedTrackSummary(n, bonded, failed, unknown, measured,
+                              total_height / measured if measured else None,
+                              (Fraction(bonded, n), Fraction(bonded + unknown, n)),
+                              (Fraction(hits, n), Fraction(hits + (bonded - measured) + unknown, n)))
