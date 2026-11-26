@@ -318,24 +318,34 @@ pub struct Fold {
 /// accepted to bound the `rows * folds` index storage. This is a Rust grouping
 /// protocol, not a reproduction of Python's random or encounter-order splits.
 pub fn grouped_kfold(groups: &[String], n_splits: usize) -> Result<Vec<Fold>, EvaluationError> {
-    if groups.is_empty() {
+    grouped_kfold_labels(groups.iter().map(String::as_str), n_splits)
+}
+
+// The iterator's enumeration defines the local row index. Nested splits
+// can traverse an outer training roster without cloning its group strings.
+pub(crate) fn grouped_kfold_labels<'a>(
+    groups: impl ExactSizeIterator<Item = &'a str>,
+    n_splits: usize,
+) -> Result<Vec<Fold>, EvaluationError> {
+    let row_count = groups.len();
+    if row_count == 0 {
         return Err(EvaluationError::Empty);
     }
     if n_splits < 2 {
         return Err(EvaluationError::InvalidSplits);
     }
-    if groups.len() > MAX_GROUPED_ROWS || n_splits > MAX_GROUPED_SPLITS {
+    if row_count > MAX_GROUPED_ROWS || n_splits > MAX_GROUPED_SPLITS {
         return Err(EvaluationError::Capacity);
     }
     // Keep one flat row-to-group table rather than allocating a membership
     // vector for every group. Map iteration order never determines a fold.
-    let mut group_ids = HashMap::with_capacity(groups.len().min(16));
+    let mut group_ids = HashMap::with_capacity(row_count.min(16));
     // Both ordinals and eventual fold indices fit under the configured caps.
     const _: () = assert!(MAX_GROUPED_ROWS <= u16::MAX as usize);
-    let mut assignment = Vec::with_capacity(groups.len());
+    let mut assignment = Vec::with_capacity(row_count);
     for label in groups {
         let next_id = group_ids.len() as u16;
-        let (id, count) = group_ids.entry(label.as_str()).or_insert((next_id, 0_u16));
+        let (id, count) = group_ids.entry(label).or_insert((next_id, 0_u16));
         *count += 1;
         assignment.push(*id);
     }
@@ -380,7 +390,7 @@ pub fn grouped_kfold(groups: &[String], n_splits: usize) -> Result<Vec<Fold>, Ev
     let mut folds: Vec<_> = loads
         .into_iter()
         .map(|test_size| Fold {
-            train_indices: Vec::with_capacity(groups.len() - test_size),
+            train_indices: Vec::with_capacity(row_count - test_size),
             test_indices: Vec::with_capacity(test_size),
         })
         .collect();
@@ -402,7 +412,23 @@ pub fn grouped_kfold(groups: &[String], n_splits: usize) -> Result<Vec<Fold>, Ev
             fold.train_indices.extend(start..held);
             start = held + 1;
         }
-        fold.train_indices.extend(start..groups.len());
+        fold.train_indices.extend(start..row_count);
     }
     Ok(folds)
+}
+
+#[cfg(test)]
+mod borrowed_fold_tests {
+    use super::*;
+
+    #[test]
+    fn indexed_labels_preserve_local_row_positions_and_group_identity() {
+        let labels = ["", "ignored", "A", "a", "", "ignored", "a", "A"].map(str::to_owned);
+        let roster = [7, 0, 3, 2, 4, 6];
+        let split = grouped_kfold_labels(roster.iter().map(|&i| labels[i].as_str()), 3).unwrap();
+        assert_eq!(split[0].test_indices, [1, 4]); // Empty label, lexical first.
+        assert_eq!(split[1].test_indices, [0, 3]); // Uppercase group.
+        assert_eq!(split[2].test_indices, [2, 5]); // Lowercase group.
+        assert_eq!(split[0].train_indices, [0, 2, 3, 5]);
+    }
 }

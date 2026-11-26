@@ -14,7 +14,8 @@
 //! of compatibility with Python model-selection results.
 
 use crate::evaluation::{
-    grouped_kfold, regression_metrics, regression_rmse, EvaluationError, RegressionMetrics,
+    grouped_kfold, grouped_kfold_labels, regression_metrics, regression_rmse, EvaluationError,
+    RegressionMetrics,
 };
 use crate::knn::{KnnError, KnnRegressor};
 use crate::regression::{MeanRegressor, RegressionError, RidgeRegressor};
@@ -201,12 +202,8 @@ pub fn nested_grouped_regression(
     let mut inner_plans = Vec::with_capacity(outer_splits);
     let mut smallest_training_count = usize::MAX;
     for (outer_fold_index, outer) in outer_plan.iter().enumerate() {
-        let training_groups: Vec<_> = outer
-            .train_indices
-            .iter()
-            .map(|&i| groups[i].clone())
-            .collect();
-        let folds = grouped_kfold(&training_groups, inner_splits)
+        let training_labels = outer.train_indices.iter().map(|&i| groups[i].as_str());
+        let folds = grouped_kfold_labels(training_labels, inner_splits)
             .map_err(|_| SelectionError::InsufficientInnerGroups { outer_fold_index })?;
         for fold in &folds {
             smallest_training_count = smallest_training_count.min(fold.train_indices.len());
