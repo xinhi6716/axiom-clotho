@@ -40,6 +40,28 @@ class SavedBinaryJsonCliTests(unittest.TestCase):
             self.assertEqual(loaded['rows'][0]['probability_1'], expected)
             self.assertIs(type(loaded['rows'][0]['probability_1']), float)
 
+    def test_cli_rejects_decimal_rounding_across_fixed_decision_threshold(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "input.json"
+            cli = [sys.executable, "-m", "groupbench.binary.saved_evaluation", str(path)]
+            for token, expected_label in (("0.49999999999999999999", None),
+                                          ("0.49999999999999994", 0), ("0.5", 1),
+                                          ("0.50000000000000000001", 1)):
+                with self.subTest(token=token):
+                    raw = source_with("probability_1", token)
+                    path.write_text(raw)
+                    result = subprocess.run(cli, text=True, capture_output=True, timeout=30)
+                    self.assertEqual(result.returncode, 0 if expected_label is not None else 2, result.stderr)
+                    if expected_label is not None:
+                        observations = json.loads(result.stdout)["observations"]
+                        row = next(r for r in observations if r["row_id"] == document()["rows"][0]["row_id"])
+                        self.assertEqual(row["predicted_label"], expected_label)
+                    else:
+                        self.assertFalse(result.stdout)
+                        self.assertIn("no scores were written", result.stderr)
+                        self.assertNotIn(token, result.stderr)
+                    self.assertEqual(path.read_text(), raw)
+
     def test_labels_checked_before_decimal_rounding(self):
         for token in ['0.0000000000000000000001', '0.9999999999999999999999', '1.0000000000000000000001']:
             with self.assertRaises(ValueError): load_saved_binary_document(source_with('observed_label', token))

@@ -178,13 +178,18 @@ def _json_decimal_to_native(value, field):
     if (not math.isfinite(result) or (value != 0 and result == 0)
             or (value != 1 and result == 1)):
         raise ValueError("JSON probability conversion loses a nonendpoint value at a float64 endpoint; supply supported precision")
+    # A value just below the inclusive positive-class threshold can
+    # round up to exactly 0.5. Do not change its saved classification.
+    if (value >= Decimal("0.5")) != (result >= 0.5):
+        raise ValueError("JSON probability conversion crosses the fixed 0.5 classification threshold")
     return result
 
 
 def load_saved_binary_document(text):
     """Parse bounded JSON with explicit binary64 conversion, without file I/O.
 
-    Duplicate keys and lossy group/label identities reject. This loader performs
+    Duplicate keys, lossy group/label identities and changed threshold classes reject.
+    This loader performs
     structural/numeric conversion; evaluate_saved_binary_probabilities applies
     the complete cohort contract. Numeric metrics are not exact-decimal scores.
     """
