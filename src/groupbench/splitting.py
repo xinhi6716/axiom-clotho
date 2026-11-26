@@ -88,8 +88,18 @@ def _audit_positions(indices, n_rows: int, name: str):
     return positions, roster
 
 
-def audit_split(train: np.ndarray, test: np.ndarray, groups: np.ndarray) -> dict:
-    """Report disjoint positional subsets of a valid grouped roster; coverage may be partial."""
+def audit_split(train: np.ndarray, test: np.ndarray, groups: np.ndarray, *,
+                require_whole_groups: bool = False) -> dict:
+    """Report disjoint positional subsets of a valid grouped roster.
+
+    By default coverage may be partial within each nominated group. Enable
+    `require_whole_groups` to require all roster rows of each train/test
+    group in its declared role, while permitting other groups to be wholly
+    unused. Supply the original, unfiltered group roster: rows absent from
+    that input cannot be detected. No row selection or fit is performed.
+    """
+    if type(require_whole_groups) is not bool:
+        raise ValueError("The whole-group coverage policy must be an explicit boolean.")
     if not isinstance(groups, np.ndarray) or groups.ndim != 1:
         raise ValueError("Invalid split: provide one non-missing group identifier per row.")
     # Validate the entire roster with the same exact identity contract as the
@@ -98,8 +108,15 @@ def audit_split(train: np.ndarray, test: np.ndarray, groups: np.ndarray) -> dict
     keys = validate_groups(groups, len(groups))
     train, train_roster = _audit_positions(train, len(groups), "training")
     test, test_roster = _audit_positions(test, len(groups), "validation")
-    if train_roster & test_roster or set(keys[train]) & set(keys[test]):
+    train_keys, test_keys = set(keys[train]), set(keys[test])
+    if train_roster & test_roster or train_keys & test_keys:
         raise ValueError("Invalid split: training and validation observations overlap.")
+    if require_whole_groups:
+        nominated_keys = train_keys | test_keys
+        assigned = train_roster | test_roster
+        omitted = sum(i not in assigned and key in nominated_keys for i, key in enumerate(keys))
+        if omitted:
+            raise ValueError(f"Whole-group split omits {omitted} roster row(s) of a nominated group.")
 
     def unique_display(positions):
         by_key = {}

@@ -134,3 +134,33 @@ class SplitRosterIdentityTests(unittest.TestCase):
         alias = np.array([np.float64(2**53), 2**53], dtype=object)
         with self.assertRaisesRegex(ValueError, "overlap"):
             audit_split([0], [1], alias)
+
+
+class SplitWholeGroupCoverageTests(unittest.TestCase):
+    def test_subset_of_held_group_is_not_whole_group_evaluation(self):
+        groups = np.array(["fit", "held", "held", "unused", "fit"])
+        ordinary = audit_split([0], [1], groups)
+        self.assertEqual(ordinary["overlap_count"], 0)
+        self.assertEqual(ordinary["test_group_count"], 1)
+        with self.assertRaisesRegex(ValueError, r"omits 2 roster row\(s\)"):
+            audit_split([0], [1], groups, require_whole_groups=True)
+        with self.assertRaisesRegex(ValueError, r"omits 1 roster row\(s\)"):
+            audit_split([4, 0], [1], groups, require_whole_groups=True)
+        self.assertEqual(audit_split([4, 0], [2, 1], groups, require_whole_groups=True),
+                         audit_split([4, 0], [2, 1], groups))
+
+    def test_numeric_alias_counts_as_same_nominated_group(self):
+        groups = np.array([np.float64(2**53), 2**53, 2**53 + 1, np.uint64(5)], dtype=object)
+        with self.assertRaisesRegex(ValueError, r"omits 1 roster row\(s\)"):
+            audit_split([0], [2], groups, require_whole_groups=True)
+        self.assertEqual(audit_split([0, 1], [2], groups, require_whole_groups=True)["train_group_count"], 1)
+
+    def test_policy_and_standard_leakage_guards_are_strict(self):
+        groups = np.array(["fit", "held", "held"])
+        for policy in (1, "true", None, np.bool_(True)):
+            with self.subTest(policy=policy), self.assertRaisesRegex(ValueError, "explicit boolean"):
+                audit_split([0], [1, 2], groups, require_whole_groups=policy)
+        with self.assertRaisesRegex(ValueError, "overlap"):
+            audit_split([0, 1], [2], groups, require_whole_groups=True)
+        with self.assertRaisesRegex(ValueError, "duplicate row"):
+            audit_split([0, 0], [1, 2], groups, require_whole_groups=True)
