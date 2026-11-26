@@ -273,6 +273,7 @@ def _optional_selection_metadata(value, rows, groups, inner_splits, seed, option
             _fail("unknown optional family in the v1 detail contract.")
         if len(family_records) != len(alphas):
             _fail("extended candidate coverage differs.")
+        fold_basis = {}
         for record, alpha in zip(family_records, alphas):
             expected = f"nystroem_ridge_alpha_{alpha:g}" if alpha is not None else "group_median_lower"
             if record.get("candidate") != expected:
@@ -286,7 +287,12 @@ def _optional_selection_metadata(value, rows, groups, inner_splits, seed, option
                     if type(item.get(key)) is not int or item[key] != expected:
                         _fail("extended per-fit row counts differ.")
                 if family == "nystroem_ridge":
-                    _kernel_details(item.get("details"), audit["train_rows"], seed, alpha)
+                    kernel = _kernel_details(item.get("details"), audit["train_rows"], seed, alpha)
+                    # Alpha changes only the ridge penalty. All candidates
+                    # for one split use the same preprocessing and landmarks.
+                    basis = (kernel["transformed_features"], kernel["basis_indices_sha256"])
+                    if fold_basis.setdefault(fold, basis) != basis:
+                        _fail("kernel basis differs across alpha candidates in one fold.")
                 elif family == "group_median":
                     _median_details(item.get("details"), audit["train_rows"], audit["train_group_count"])
     final = _object(value.get("family_fit_details"))

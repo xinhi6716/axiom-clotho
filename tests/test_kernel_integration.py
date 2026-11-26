@@ -111,6 +111,45 @@ class KernelIntegrationTests(unittest.TestCase):
             self.assertFalse(reply.stdout)
             self.assertEqual({p.name: p.read_bytes() for p in path.iterdir()}, before)
 
+    def test_cli_requires_shared_kernel_basis_within_alpha_grid(self):
+        result = fit_predict(self.data, self.X.iloc[:2], target="y", group="g",
+                             baselines=("nystroem_ridge",), inner_splits=2)
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp)
+            command = [sys.executable, "-m", "groupbench.cli", "validate-prediction-bundle", str(path)]
+            env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1] / "src"),
+                       OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1", PYTHONDONTWRITEBYTECODE="1")
+
+            def replay():
+                return subprocess.run(command, env=env, capture_output=True, text=True, timeout=30)
+
+            result.write(path)
+            self.assertEqual(replay().returncode, 0)
+            manifest_path = path / "manifest.json"
+            receipt_path = path / "checksums.json"
+            original = json.loads(manifest_path.read_text())
+            original_receipt = json.loads(receipt_path.read_text())
+            for variant in ("basis fingerprint", "transformed width"):
+                with self.subTest(variant=variant):
+                    manifest = deepcopy(original)
+                    detail = manifest["inner_selection"][1]["inner_fit_details"][0]["details"]
+                    if variant == "basis fingerprint":
+                        self.assertNotEqual(detail["basis_indices_sha256"], "0" * 64)
+                        detail["basis_indices_sha256"] = "0" * 64
+                    else:
+                        detail["transformed_features"] += 1
+                        detail["gamma"] = 1.0 / detail["transformed_features"]
+                    manifest_path.write_text(json.dumps(manifest))
+                    original_receipt["files"]["manifest.json"] = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+                    receipt_path.write_text(json.dumps(original_receipt))
+                    self.assertEqual(verify_bundle(path).bundle_type, "prediction")
+                    before = {p.name: p.read_bytes() for p in path.iterdir()}
+                    reply = replay()
+                    self.assertEqual(reply.returncode, 2, reply.stderr)
+                    self.assertIn("kernel basis differs across alpha candidates", reply.stderr)
+                    self.assertFalse(reply.stdout)
+                    self.assertEqual({p.name: p.read_bytes() for p in path.iterdir()}, before)
+
     def test_kernel_state_is_atomic_and_successful_old_only_refit_clears_details(self):
         model = GroupBenchRegressor(baselines=('nystroem_ridge',), inner_splits=2).fit(self.X, self.y, self.g)
         before = model.predict(self.X)
