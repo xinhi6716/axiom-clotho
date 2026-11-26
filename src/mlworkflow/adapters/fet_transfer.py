@@ -130,6 +130,25 @@ def _check_normalized_measurement_parameters(params, vth, logarithmic, rows):
             raise c.WorkflowError("saved FET unit normalization differs from the declared measurement parameters")
 
 
+def _check_crossing_support(extraction, max_span):
+    """Reject impossible saved crossing shapes without redoing extraction."""
+    method = extraction["method"]
+    span = extraction["bracket_span_V"]
+    source = extraction["source_rows"]
+    fraction = extraction["fraction_from_first_to_second_sample"]
+    exact = method == "measured_exact_criterion"
+    if (method not in ("measured_exact_criterion", "linear_current_interpolation")
+            or not isinstance(source, list) or len(source) != (1 if exact else 2)
+            or any(type(r) is not int or r < 2 for r in source)
+            or (not exact and source[0] >= source[1])
+            or type(span) not in (int, float) or not math.isfinite(span)
+            or (exact and (span != 0 or fraction is not None))
+            or (not exact and (not 0 < span <= max_span
+                               or type(fraction) not in (int, float) or not 0 <= fraction <= 1))):
+        raise c.WorkflowError("saved FET crossing support conflicts with its acquisition method or span bound")
+    # A valid exact interior fraction may round to 0 or 1 in the report.
+
+
 def _feature_rows(features, config):
     """Validate retained report identity and byte lineage, without rerunning extraction."""
     if set(features) != set(FET_FILES) or any(not isinstance(v, bytes) for v in features.values()):
@@ -208,6 +227,7 @@ def _feature_rows(features, config):
             key = _key(row, ACQUISITION)
             threshold_row, slope_row = threshold[key], slopes[key]
             extraction = threshold_row["extraction"]
+            _check_crossing_support(extraction, vth["parameters"]["max_bracket_span_V"])
             if (float(row[FET_FEATURES[0]]) != extraction["gate_source_voltage_at_criterion_V"]
                     or float(row[FET_FEATURES[1]]) != slope_row["fit"]["slope_decades_per_V"]):
                 raise c.WorkflowError("FET feature values differ from retained extractor reports")

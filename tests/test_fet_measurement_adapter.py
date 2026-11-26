@@ -356,6 +356,52 @@ class FetAdapterTests(unittest.TestCase):
                 self.assertFalse(failed.stdout)
                 self.assertEqual({p: p.read_bytes() for p in saved}, saved)
 
+    def test_cli_rejects_impossible_fet_crossing_support_even_after_rehash(self):
+        self.prepare()
+        directory = self.output / "features"
+        good = {p.name: p.read_bytes() for p in directory.iterdir()}
+        command = [sys.executable, "-m", "mlworkflow", "plan", "--prepared", str(self.output)]
+        env = dict(os.environ, PYTHONPATH=str(ROOT / "src"), PYTHONDONTWRITEBYTECODE="1",
+                   OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1")
+
+        def plan():
+            return subprocess.run(command, cwd=self.root, env=env, text=True,
+                                  capture_output=True, timeout=15)
+
+        self.assertEqual(plan().returncode, 0)
+        for case in ("unknown method", "over-bound span", "same source row", "exact with bracket"):
+            with self.subTest(case=case):
+                report = c.parse_json(good["vth_report.json"])
+                extraction = report["results"][0]["extraction"]
+                if case == "unknown method":
+                    extraction["method"] = "fabricated"
+                elif case == "over-bound span":
+                    extraction.update(method="linear_current_interpolation", bracket_span_V=77.)
+                elif case == "same source row":
+                    extraction.update(method="linear_current_interpolation", source_rows=[2, 2])
+                else:
+                    extraction.update(method="measured_exact_criterion", bracket_span_V=0.01)
+                rows = c.parse_csv(good["features.csv"], fet.FEATURE_COLUMNS)
+                key = fet._key(report["results"][0], fet.ACQUISITION)
+                row = next(r for r in rows if fet._key(r, fet.ACQUISITION) == key)
+                row["criterion_method"] = extraction["method"]
+                row["criterion_bracket_span_V"] = str(extraction["bracket_span_V"])
+                files = {"vth_report.json": c.json_bytes(report),
+                         "features.csv": c.csv_bytes(fet.FEATURE_COLUMNS, rows)}
+                provenance = c.parse_json(good["provenance.json"])
+                provenance["output_sha256"].update({n: c.sha(b) for n, b in files.items()})
+                files["provenance.json"] = c.json_bytes(provenance)
+                for n, raw in files.items():
+                    (directory / n).write_bytes(raw)
+                rehash(self.output)
+                load_bundle(self.output, "prepared")
+                before = {p: p.read_bytes() for p in self.output.rglob("*") if p.is_file()}
+                failure = plan()
+                self.assertEqual(failure.returncode, 2, failure.stderr)
+                self.assertIn("FET crossing support", failure.stderr)
+                self.assertFalse(failure.stdout)
+                self.assertEqual({p: p.read_bytes() for p in before}, before)
+
     def test_plan_rejects_noninteger_extraction_group_counts(self):
         self.prepare()
         report = self.output / "features/vth_report.json"
