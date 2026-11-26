@@ -153,29 +153,23 @@ pub fn run(opts: &HashMap<String, String>) -> Result<()> {
         .map(|c| headers.iter().position(|h| h == *c).unwrap())
         .collect();
     let mut branches: Vec<Branch> = Vec::new();
-    let mut lookup = HashMap::new();
+    let mut lookup = HashMap::<Vec<u8>, usize>::new();
+    let mut key = Vec::new();
+    let mut r = csv::StringRecord::new();
     let mut count = 0;
-    for record in reader.records() {
-        let r = record.map_err(|_| "Invalid RRAM CSV record")?;
+    while reader
+        .read_record(&mut r)
+        .map_err(|_| "Invalid RRAM CSV record")?
+    {
         count += 1;
         if count > 10000 {
             return Err("RRAM input exceeds 10000 records".into());
         }
         let cell = |i: usize| r.get(indices[i]).unwrap();
-        let a = Acquisition {
-            batch: cell(0).into(),
-            wafer: cell(1).into(),
-            device: cell(2).into(),
-            cycle: cell(3).into(),
-            replicate: cell(4).into(),
-            branch: cell(5).into(),
-            state: match cell(6) {
-                "HRS" => State::Hrs,
-                "LRS" => State::Lrs,
-                _ => return Err("RRAM state must be HRS or LRS".into()),
-            },
-            condition: cell(7).into(),
-            protocol: cell(8).into(),
+        let state = match cell(6) {
+            "HRS" => State::Hrs,
+            "LRS" => State::Lrs,
+            _ => return Err("RRAM state must be HRS or LRS".into()),
         };
         let conditions = Conditions {
             read_voltage_v: parse_si(cell(9))?,
@@ -187,26 +181,52 @@ pub fn run(opts: &HashMap<String, String>) -> Result<()> {
             voltage_v: parse_si(cell(12))?,
             current_a: parse_si(cell(13))?,
         };
-        let key = (a.device.clone(), a.cycle.clone(), a.branch.clone());
-        let index = if let Some(&i) = lookup.get(&key) {
-            i
+        // StringRecord has already validated UTF-8, so 0xff is an
+        // unambiguous component separator, even before ID validation.
+        key.clear();
+        key.extend_from_slice(cell(2).as_bytes());
+        key.push(0xff);
+        key.extend_from_slice(cell(3).as_bytes());
+        key.push(0xff);
+        key.extend_from_slice(cell(5).as_bytes());
+        if let Some(&index) = lookup.get(key.as_slice()) {
+            let branch = &mut branches[index];
+            if branch.samples.len() >= 1000 {
+                return Err("RRAM branch limit exceeded".into());
+            }
+            let a = &branch.acquisition;
+            if a.batch != cell(0)
+                || a.wafer != cell(1)
+                || a.replicate != cell(4)
+                || a.state != state
+                || a.condition != cell(7)
+                || a.protocol != cell(8)
+                || branch.conditions != conditions
+            {
+                return Err("RRAM branch declarations must remain fixed".into());
+            }
+            branch.samples.push(sample);
         } else {
-            let i = branches.len();
-            lookup.insert(key, i);
+            if branches.len() >= 1000 {
+                return Err("RRAM branch limit exceeded".into());
+            }
+            lookup.insert(key.clone(), branches.len());
             branches.push(Branch {
-                acquisition: a.clone(),
+                acquisition: Acquisition {
+                    batch: cell(0).into(),
+                    wafer: cell(1).into(),
+                    device: cell(2).into(),
+                    cycle: cell(3).into(),
+                    replicate: cell(4).into(),
+                    branch: cell(5).into(),
+                    state,
+                    condition: cell(7).into(),
+                    protocol: cell(8).into(),
+                },
                 conditions,
-                samples: Vec::new(),
+                samples: vec![sample],
             });
-            i
-        };
-        if branches.len() > 1000 || branches[index].samples.len() >= 1000 {
-            return Err("RRAM branch limit exceeded".into());
         }
-        if branches[index].acquisition != a || branches[index].conditions != conditions {
-            return Err("RRAM branch declarations must remain fixed".into());
-        }
-        branches[index].samples.push(sample);
     }
     let features = extract_cohort(&branches, settings)?;
     if require_sampled

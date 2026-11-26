@@ -557,3 +557,41 @@ fn source_locations_map_logical_lineage_to_exact_input_byte_offsets() {
     assert_eq!(r.status.code(), Some(2));
     assert!(!invalid.0.join("out").exists());
 }
+
+#[test]
+fn interleaved_record_reuse_preserves_unicode_key_boundaries_and_fixed_metadata() {
+    let header = DATA.lines().next().unwrap();
+    let raw = format!(
+        "{header}\nB,W,器甲,次,R,H,HRS,C,P,1,300,0,0.5,0.005\nB,W,器,甲次,R,H,HRS,C,P,1,300,0,0.5,0.002\nB,W,器甲,次,R,L,LRS,C,P,1,300,0,1,0.1\nB,W,器,甲次,R,L,LRS,C,P,1,300,0,1,0.2\nB,W,器甲,次,R,H,HRS,C,P,1,300,0,1.5,0.015\nB,W,器,甲次,R,H,HRS,C,P,1,300,0,1.5,0.008\n"
+    );
+    let good = Workspace::new();
+    good.write(&raw);
+    let r = good.run(&[]);
+    assert!(r.status.success(), "{}", String::from_utf8_lossy(&r.stderr));
+    let report: serde_json::Value =
+        serde_json::from_slice(&fs::read(good.0.join("out/extraction.json")).unwrap()).unwrap();
+    let lineage = report["lineage"].as_array().unwrap();
+    assert_eq!(lineage.len(), 2);
+    assert_eq!(lineage[0]["identity"][2], "器");
+    assert_eq!(
+        lineage[0]["pairs"][0]["HRS"]["selected_source_rows"],
+        serde_json::json!([3, 7])
+    );
+    assert_eq!(lineage[1]["identity"][2], "器甲");
+    assert_eq!(
+        lineage[1]["pairs"][0]["HRS"]["selected_source_rows"],
+        serde_json::json!([2, 6])
+    );
+
+    let changed = Workspace::new();
+    changed.write(&raw.replace(
+        "R,H,HRS,C,P,1,300,0,1.5,0.015",
+        "R,H,HRS,C,Q,1,300,0,1.5,0.015",
+    ));
+    let r = changed.run(&[]);
+    assert_eq!(r.status.code(), Some(2));
+    assert!(
+        String::from_utf8_lossy(&r.stderr).contains("RRAM branch declarations must remain fixed")
+    );
+    assert!(!changed.0.join("out").exists());
+}
