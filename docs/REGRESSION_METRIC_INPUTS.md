@@ -110,3 +110,23 @@ independence, imputation or a certification that an instrument establishes
 the limits. Verify that units and row linkage match the frozen comparison
 before supplying bounds; keep attempts lacking either forecast in a separate
 accounting. Only equal-row weighting is implemented here.
+
+### Equal-parent rather than equal-row weighting
+
+Use `paired_mae_parent_bounds(rows, expected_roster=..., truth_bounds=...)`
+when the declared estimand gives each parent the same weight regardless of
+its number of rows. Here the separate expected roster is a list or tuple of
+`(row_id, parent_id)` tuples; the paired scoring rows and optional truth
+bounds are unchanged. A row cannot appear under two parents. The complete
+paired roster is still required, and declared parents are not inferred or
+validated as physical units. Per-parent details are sorted by the literal
+parent ID, and the full-roster endpoints are the exact arithmetic means of
+their lower and upper bounds. A parent with no observed outcomes still
+contributes its full sensitivity bounds. The equal-parent observed-only
+contrast is reported only if every parent has an observation; it otherwise
+returns `None` rather than averaging over a smaller parent population.
+
+For example, if three rows of one parent each give B-minus-A = −1, and
+one row of a second parent gives +2, the equal-row mean is −1/4 while
+the equal-parent mean is +1/2. Choose and record the estimand before
+evaluation; do not switch weightings based on the apparent winner.

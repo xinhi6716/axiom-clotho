@@ -207,6 +207,10 @@ def _paired_binary64_units(value):
     return numerator << (_BINARY64_QUANTUM_EXP + 1 - denominator.bit_length())
 
 
+def _paired_roster_id(value):
+    return _paired_label(value) and not any(0xD800 <= ord(c) <= 0xDFFF for c in value)
+
+
 def paired_mae_missing_bounds(rows, *, expected_roster, truth_bounds=None):
     """Bound the full equal-row B-minus-A MAE on a frozen paired roster.
 
@@ -237,12 +241,9 @@ def paired_mae_missing_bounds(rows, *, expected_roster, truth_bounds=None):
             or not 1 <= len(expected_roster) <= 20_000):
         raise ValueError("Expected roster must be a nonempty bounded collection of row IDs.")
 
-    def valid_id(value):
-        return _paired_label(value) and not any(0xD800 <= ord(c) <= 0xDFFF for c in value)
-
     expected = set()
     for row_id in expected_roster:
-        if not valid_id(row_id):
+        if not _paired_roster_id(row_id):
             raise ValueError("Invalid expected roster row ID.")
         if row_id in expected:
             raise ValueError("Duplicate expected roster row ID.")
@@ -253,7 +254,7 @@ def paired_mae_missing_bounds(rows, *, expected_roster, truth_bounds=None):
         if type(truth_bounds) is not dict or len(truth_bounds) > len(expected):
             raise ValueError("Truth bounds must be a bounded dict keyed by roster row ID.")
         for row_id, limits in truth_bounds.items():
-            if not valid_id(row_id) or row_id not in expected:
+            if not _paired_roster_id(row_id) or row_id not in expected:
                 raise ValueError("Truth bounds must identify only expected roster rows.")
             if type(limits) is not tuple or len(limits) != 2:
                 raise ValueError("Each truth bound must be a (lower, upper) tuple.")
@@ -269,7 +270,7 @@ def paired_mae_missing_bounds(rows, *, expected_roster, truth_bounds=None):
     # the final ratios rather than repeatedly reducing row-level Fractions.
     observed_sum = unrestricted_radius = missing_lower = missing_upper = 0
     for row in rows:
-        if type(row) is not tuple or len(row) != 4 or not valid_id(row[0]):
+        if type(row) is not tuple or len(row) != 4 or not _paired_roster_id(row[0]):
             raise ValueError("Each row must provide a row ID, target or None, and both forecasts.")
         row_id, target, pred_a, pred_b = row
         if row_id in ids:
@@ -307,6 +308,81 @@ def paired_mae_missing_bounds(rows, *, expected_roster, truth_bounds=None):
         "available_mae_b_minus_a": mean(observed_sum, observed_count) if observed_count else None,
         "full_mae_b_minus_a_lower": mean(observed_sum + missing_lower - unrestricted_radius, total),
         "full_mae_b_minus_a_upper": mean(observed_sum + missing_upper + unrestricted_radius, total),
+    }
+
+
+def paired_mae_parent_bounds(rows, *, expected_roster, truth_bounds=None):
+    """Bound paired B-minus-A MAE with one equal weight per declared parent.
+
+    Supply row tuples as in paired_mae_missing_bounds and an independent
+    roster of (row_id, parent_id) tuples. Every row ID must occur once in
+    both inputs; membership is not inferred from scoring rows or labels.
+    Bounds use the same closed or unbounded interval contract. The output
+    keeps every parent, including ones with no observed targets. The equal-
+    parent observed-only result is None unless every parent is represented.
+    This is a descriptive sensitivity analysis, not a test of independence
+    or a claim that declared parents are physically disjoint.
+    """
+    if not _bounded_paired_sequence(rows) or not _bounded_paired_sequence(expected_roster):
+        raise ValueError("Rows and parent roster must be nonempty bounded lists or tuples.")
+
+    parent_by_row, roster_by_parent = {}, {}
+    for entry in expected_roster:
+        if type(entry) is not tuple or len(entry) != 2 or not all(map(_paired_roster_id, entry)):
+            raise ValueError("Parent roster entries must be (row ID, parent ID) tuples with valid IDs.")
+        row_id, parent_id = entry
+        if row_id in parent_by_row:
+            raise ValueError("Duplicate row ID in the parent roster.")
+        parent_by_row[row_id] = parent_id
+        roster_by_parent.setdefault(parent_id, []).append(row_id)
+
+    rows_by_parent, seen = {}, set()
+    for row in rows:
+        if type(row) is not tuple or len(row) != 4 or not _paired_roster_id(row[0]):
+            raise ValueError("Each row must provide a row ID, target or None, and both forecasts.")
+        row_id = row[0]
+        if row_id in seen:
+            raise ValueError("Duplicate paired row ID.")
+        if row_id not in parent_by_row:
+            raise ValueError("Unexpected paired row ID outside the parent roster.")
+        seen.add(row_id)
+        rows_by_parent.setdefault(parent_by_row[row_id], []).append(row)
+    if len(seen) != len(parent_by_row):
+        raise ValueError("Incomplete parent roster: missing paired rows.")
+
+    bounds_by_parent = {}
+    if truth_bounds is not None:
+        if type(truth_bounds) is not dict or len(truth_bounds) > len(parent_by_row):
+            raise ValueError("Truth bounds must be a bounded dict keyed by roster row ID.")
+        for row_id, limits in truth_bounds.items():
+            if not _paired_roster_id(row_id) or row_id not in parent_by_row:
+                raise ValueError("Truth bounds must identify only expected roster rows.")
+            bounds_by_parent.setdefault(parent_by_row[row_id], {})[row_id] = limits
+
+    per_parent = []
+    n_observed = n_with_observed = 0
+    available = lower = upper = Fraction()
+    for parent_id in sorted(roster_by_parent):
+        score = paired_mae_missing_bounds(
+            rows_by_parent[parent_id], expected_roster=roster_by_parent[parent_id],
+            truth_bounds=bounds_by_parent.get(parent_id),
+        )
+        per_parent.append({"parent": parent_id, **score})
+        lower += score["full_mae_b_minus_a_lower"]
+        upper += score["full_mae_b_minus_a_upper"]
+        n_observed += score["n_observed"]
+        if score["n_observed"]:
+            n_with_observed += 1
+            available += score["available_mae_b_minus_a"]
+
+    n_parents = len(per_parent)
+    return {
+        "n_rows": len(rows), "n_observed": n_observed, "n_missing": len(rows) - n_observed,
+        "n_parents": n_parents, "n_parents_with_observations": n_with_observed,
+        "available_equal_parent_mae_b_minus_a": available / n_parents if n_with_observed == n_parents else None,
+        "full_equal_parent_mae_b_minus_a_lower": lower / n_parents,
+        "full_equal_parent_mae_b_minus_a_upper": upper / n_parents,
+        "per_parent": per_parent,
     }
 
 
