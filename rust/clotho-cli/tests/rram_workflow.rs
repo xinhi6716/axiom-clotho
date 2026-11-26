@@ -24,6 +24,9 @@ impl Workspace {
         fs::write(self.0.join("data.csv"), data).unwrap();
     }
     fn run(&self, extra: &[&str]) -> Output {
+        self.run_with_limit("1", extra)
+    }
+    fn run_with_limit(&self, bracket_limit: &str, extra: &[&str]) -> Output {
         let mut args = vec![
             "extract-rram",
             "--csv",
@@ -31,7 +34,7 @@ impl Workspace {
             "--out",
             "out",
             "--max-bracket-v",
-            "1",
+            bracket_limit,
             "--accept-assumptions",
             "true",
         ];
@@ -448,4 +451,33 @@ fn rounded_bracket_tie_checks_exact_binary64_width() {
             hrs.reverse();
         }
     }
+}
+
+
+#[test]
+fn extract_rram_preserves_read_current_when_the_weight_is_subnormal() {
+    let header = DATA.lines().next().unwrap();
+    let edge = 1e-150_f64;
+    let read = f64::from_bits(edge.to_bits() + 1);
+    let expected = read - edge;
+    let w = Workspace::new();
+    w.write(&format!(
+        "{header}\nB,W,D,1,R1,H,HRS,C,P,{read:e},300,0,1e-150,0\nB,W,D,1,R1,L,LRS,C,P,{read:e},300,0,{read:e},1e-150\nB,W,D,1,R1,H,HRS,C,P,{read:e},300,0,1e150,1e150\n"
+    ));
+    let result = w.run_with_limit("1e150", &[]);
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let report: serde_json::Value =
+        serde_json::from_slice(&fs::read(w.0.join("out/extraction.json")).unwrap()).unwrap();
+    let cycle = &report["lineage"][0]["pairs"][0];
+    assert_eq!(
+        cycle["HRS"]["selected_source_rows"],
+        serde_json::json!([2, 4])
+    );
+    let exported = cycle["HRS"]["current_A"].as_f64().unwrap();
+    assert!((exported / expected - 1.0).abs() <= 4.0 * f64::EPSILON);
+    assert!(w.0.join("out/COMPLETE").is_file());
 }

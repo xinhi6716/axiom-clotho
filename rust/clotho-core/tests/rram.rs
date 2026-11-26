@@ -126,6 +126,35 @@ fn the_smaller_endpoint_weight_survives_a_wide_valid_bracket() {
 }
 
 #[test]
+fn subnormal_weight_does_not_discard_precision_from_a_normal_read_current() {
+    let edge = 1e-150_f64;
+    let read = f64::from_bits(edge.to_bits() + 1);
+    let expected = read - edge;
+    let p = Settings {
+        max_bracket_span_v: 1e150,
+        ..settings()
+    };
+    for sign in [1.0, -1.0] {
+        let mut b = branch(State::Hrs, "1", 0.0, 2);
+        b.conditions.read_voltage_v = sign * read;
+        b.samples[0].voltage_v = sign * edge;
+        b.samples.push(Sample {
+            source_row: 3,
+            voltage_v: sign * 1e150,
+            current_a: sign * 1e150,
+        });
+        for rows in [[2, 3], [3, 2]] {
+            let point = extract_branch(&b, p).unwrap();
+            // Exact represented-input interpolation rounds to read - edge.
+            assert_eq!(point.current_a, sign * expected);
+            assert_eq!(point.resistance_ohm, read / expected);
+            assert_eq!(point.selected_source_rows, rows);
+            b.samples.reverse();
+        }
+    }
+}
+
+#[test]
 fn midpoint_that_interpolates_to_zero_current_remains_invalid() {
     let mut b = branch(State::Hrs, "1", -0.25, 2);
     b.samples[0].voltage_v = 0.5;

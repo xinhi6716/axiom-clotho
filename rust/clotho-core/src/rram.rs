@@ -212,7 +212,17 @@ pub fn extract_branch(b: &Branch, p: Settings) -> Result<Readpoint, RramError> {
             let current = if near.current_a == far.current_a {
                 near.current_a
             } else {
-                let estimate = near.current_a * (1.0 - t) + far.current_a * t;
+                // When offset/span is subnormal, rounding that ratio first
+                // loses precision that multiplying by a large current would
+                // otherwise retain. In this branch span is necessarily large
+                // (bounded nonzero input voltages are normal), so current/span
+                // is normal for nonzero current and cannot overflow.
+                let far_term = if t < f64::MIN_POSITIVE {
+                    (far.current_a / span) * offset
+                } else {
+                    far.current_a * t
+                };
+                let estimate = near.current_a * (1.0 - t) + far_term;
                 // Rounding the weighted terms separately can extrapolate
                 // even between distinct, adjacent measured currents.
                 estimate.clamp(
