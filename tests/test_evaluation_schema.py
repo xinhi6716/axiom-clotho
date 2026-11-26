@@ -3,8 +3,11 @@ import hashlib
 import io
 import json
 import math
+import os
 from pathlib import Path
 import tempfile
+import subprocess
+import sys
 import unittest
 from contextlib import redirect_stdout
 from unittest.mock import patch
@@ -57,6 +60,40 @@ class EvaluationSchemaTests(unittest.TestCase):
         self.mutate_json('summary.json', lambda d: d['models']['selected']['overall'].update(mae=123456.))
         self.assertEqual(verify_bundle(self.root).bundle_type, 'evaluation')
         with self.assertRaises(ValueError): validate_evaluation_bundle(self.root)
+
+    def test_cli_requires_selected_predictions_to_match_declared_family_refit(self):
+        from groupbench.model import GroupBenchRegressor
+
+        command = [sys.executable, "-m", "groupbench.cli", "validate-evaluation-bundle", str(self.root)]
+        env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1] / "src"),
+                   OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1", PYTHONDONTWRITEBYTECODE="1")
+
+        def cli():
+            return subprocess.run(command, env=env, text=True, capture_output=True, timeout=30)
+
+        self.assertEqual(cli().returncode, 0)
+        frame = pd.DataFrame({"g": ["a", "b", "c", "d"] * 2, "x": range(8), "y": range(8)})
+        original = GroupBenchRegressor.predict_baselines
+
+        def mismatched_selected(estimator, features):
+            predictions = original(estimator, features)
+            return {**predictions, "selected": predictions["dummy"] + 1.}
+
+        with patch.object(GroupBenchRegressor, "predict_baselines", mismatched_selected):
+            result = benchmark(frame, target="y", group="g", baselines=("dummy",),
+                               outer_splits=2, inner_splits=2)
+        result.write(self.root, overwrite=True)
+        self.assertEqual(verify_bundle(self.root).bundle_type, "evaluation")
+        self.assertTrue(all(fold["selected_family"] == "dummy" for fold in result.manifest["outer_folds"]))
+        self.assertTrue((result.predictions["prediction_selected"] != result.predictions["prediction_dummy"]).all())
+        # The writer scored the changed selected column normally, so all
+        # reported metrics agree with the changed retained rows.
+        before = {p.name: p.read_bytes() for p in self.root.iterdir()}
+        reply = cli()
+        self.assertEqual(reply.returncode, 2, reply.stderr)
+        self.assertIn("selected predictions differ from their declared family refit", reply.stderr)
+        self.assertFalse(reply.stdout)
+        self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
 
     def test_count_bool_null_model_and_fold_corruption(self):
         mutations = [('summary.json', lambda d: d['models']['selected']['overall'].update(n_rows=True)),

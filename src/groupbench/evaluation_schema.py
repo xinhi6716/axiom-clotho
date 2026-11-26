@@ -229,17 +229,21 @@ def _check(manifest, summary, raw):
                     _fail("extended-families-v2 inner seed differs from the scheduled fold.")
                 _extended_selection_v2(audit, n-test_rows, len(train_groups), inner, expected_seed,
                                        config, group_sizes={g: len(group_rows[g]) for g in train_groups})
-                # The selected column is exactly the selected family refit's
-                # predictions, not another fit selected on the outer fold.
-                if any(predictions["selected"][i] != predictions[audit["selected_family"]][i]
-                       for i in fold_rows[fold]):
-                    _fail("selected predictions differ from their declared family refit.")
             elif optional:
                 _optional_selection_metadata(audit, n-test_rows, len(train_groups), inner, audit.get("inner_seed"), optional)
             if version == "1.3":
                 if not isinstance(audit.get("family_candidates"), dict):
                     _fail("domain family winner declaration is missing.")
                 _domain_selection(audit, n-test_rows, train_groups, mapping, inner, config)
+        # Older narrow artifacts can omit selection metadata. Whenever the
+        # family is declared, the selected entry must equal that fold's
+        # family refit, not a separate vector with matching scalar metrics.
+        if "selected_family" in audit:
+            family = audit["selected_family"]
+            if type(family) is not str or family not in baselines:
+                _fail("selected family is not a declared baseline.")
+            if any(predictions["selected"][i] != predictions[family][i] for i in fold_rows[fold]):
+                _fail("selected predictions differ from their declared family refit.")
     for name in names:
         _compare(summary["models"][name], _partitioned_metrics(
             observed, predictions[name], group_rows, fold_rows, fold_groups))
