@@ -103,8 +103,9 @@ pub struct BinaryMetrics {
 /// zero predicts every row positive, while threshold one predicts positive
 /// only for probabilities exactly one.
 ///
-/// The function uses `O(n log n)` time and `O(n)` additional storage for
-/// average-rank ROC AUC. Metric sums use compensated addition. No inputs are
+/// Average-rank ROC AUC uses `O(n)` time and constant additional storage when
+/// the probabilities are monotone, and otherwise `O(n log n)` time and `O(n)`
+/// additional storage. Metric sums use compensated addition. No inputs are
 /// changed, and errors do not include raw row values or indices. A Brier score
 /// that rounds to zero despite a nonzero error returns
 /// [`ClassificationMetricsError::BrierUnderflow`]. Preliminary Brier results
@@ -290,36 +291,58 @@ fn ranked_auc(
     // A validated probability can have its sign bit set only for -0.0.
     // Shifting drops that sign (so both zeros tie), preserves all 63 score
     // bits in their numeric order, and leaves a low bit for the binary label.
-    let mut ranked: Vec<u64> = probability
+    let encoded = probability
         .iter()
         .zip(y_true)
-        .map(|(&score, &label)| (score.to_bits() << 1) | u64::from(label == 1.0))
-        .collect();
-    // Compare only score bits to retain the sort's fast path for an
-    // already ordered sequence that includes ties with differing labels.
-    ranked.sort_unstable_by(|left, right| (left >> 1).cmp(&(right >> 1)));
+        .map(|(&score, &label)| (score.to_bits() << 1) | u64::from(label == 1.0));
 
-    let mut start = 0;
+    // Already ranked inputs need neither a copy nor a sort. Process both
+    // directions in ascending score order so the sequence of floating-point
+    // concordance increments matches the general sorting path.
+    let descending = probability[0] > probability[probability.len() - 1];
+    let concordance = if descending && probability.windows(2).all(|w| w[0] >= w[1]) {
+        ordered_concordance(encoded.rev())
+    } else if !descending && probability.windows(2).all(|w| w[0] <= w[1]) {
+        ordered_concordance(encoded)
+    } else {
+        let mut ranked: Vec<u64> = encoded.collect();
+        ranked.sort_unstable_by(|left, right| (left >> 1).cmp(&(right >> 1)));
+        ordered_concordance(ranked.into_iter())
+    };
+    let pairs = n_positive as f64 * n_negative as f64;
+    Some((concordance / pairs).clamp(0.0, 1.0))
+}
+
+fn ordered_concordance(mut ranked: impl Iterator<Item = u64>) -> f64 {
+    let first = match ranked.next() {
+        Some(row) => row,
+        None => return 0.0,
+    };
+    let mut key = first >> 1;
+    let mut positives = (first & 1) as usize;
+    let mut negatives = 1 - positives;
     let mut negatives_before = 0_usize;
     let mut concordance = CompensatedSum::default();
-    while start < ranked.len() {
-        let mut end = start;
-        let mut positives = 0_usize;
-        let score_key = ranked[start] >> 1;
-        while end < ranked.len() && ranked[end] >> 1 == score_key {
-            positives += (ranked[end] & 1) as usize;
-            end += 1;
+    let add_tie_group = |sum: &mut CompensatedSum, p: usize, n: usize, before: usize| {
+        // Each positive wins against earlier negatives and receives half
+        // credit for a same-score negative, or equivalently an average rank.
+        sum.add(p as f64 * (before as f64 + 0.5 * n as f64));
+    };
+    for row in ranked {
+        let next_key = row >> 1;
+        if next_key != key {
+            add_tie_group(&mut concordance, positives, negatives, negatives_before);
+            negatives_before += negatives;
+            positives = 0;
+            negatives = 0;
+            key = next_key;
         }
-        let negatives = end - start - positives;
-        // Equivalent to assigning each tied observation its average rank and
-        // subtracting the positive-class rank baseline. Counting concordant
-        // pairs directly avoids subtracting nearly equal large rank sums.
-        concordance.add(positives as f64 * (negatives_before as f64 + 0.5 * negatives as f64));
-        negatives_before += negatives;
-        start = end;
+        let positive = (row & 1) as usize;
+        positives += positive;
+        negatives += 1 - positive;
     }
-    let pairs = n_positive as f64 * n_negative as f64;
-    Some((concordance.total() / pairs).clamp(0.0, 1.0))
+    add_tie_group(&mut concordance, positives, negatives, negatives_before);
+    concordance.total()
 }
 
 #[derive(Default)]
@@ -347,6 +370,26 @@ impl CompensatedSum {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn auc_preserves_ties_and_adjacent_scores_across_all_input_orders() {
+        let just_above_half = f64::from_bits(0.5_f64.to_bits() + 1);
+        let probabilities = [-0.0, 0.0, 0.5, 0.5, just_above_half, 1.0, 1.0];
+        let labels = [1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 1.0];
+        // 2 * concordance against three negatives for each positive:
+        // 1 (zero), 3 (half), 4 (above half), and 5 (one).
+        let expected = (13.0_f64 / 24.0).to_bits();
+        for order in [[0, 1, 2, 3, 4, 5, 6], [6, 5, 4, 3, 2, 1, 0], [2, 1, 6, 4, 5, 0, 3]] {
+            let y = order.map(|i| labels[i]);
+            let p = order.map(|i| probabilities[i]);
+            assert_eq!(binary_metrics(&y, &p, 0.5).unwrap().roc_auc.unwrap().to_bits(), expected);
+        }
+
+        // Matching endpoints do not imply monotonicity.
+        let y = [1.0, 0.0, 0.0, 1.0];
+        assert_eq!(binary_metrics(&y, &[0.5, 0.0, 0.0, 0.5], 0.5).unwrap().roc_auc, Some(1.0));
+        assert_eq!(binary_metrics(&y, &[0.5; 4], 0.5).unwrap().roc_auc, Some(0.5));
+    }
 
     #[test]
     fn brier_tiny_mean_rounds_once_instead_of_rounding_squares_first() {
