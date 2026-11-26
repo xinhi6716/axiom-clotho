@@ -443,3 +443,22 @@ fn grouped_split_complements_preserve_input_order_at_run_boundaries() {
     assert_eq!(folds[2].test_indices, [0, 4, 5, 7]);
     assert_eq!(folds[2].train_indices, [1, 2, 3, 6, 8, 9, 10, 11]);
 }
+
+#[test]
+fn streaming_regression_keeps_shifted_target_halving_and_loss_detection() {
+    // The target shift MAX - (-MAX) overflows directly; forecast errors
+    // remain finite at their original scale.
+    let maximum = f64::MAX;
+    let target = [-maximum, maximum];
+    let metrics = regression_metrics(&target, &[-maximum * 0.5, maximum * 0.5]).unwrap();
+    assert_eq!(metrics.mae.to_bits(), (maximum * 0.5).to_bits());
+    assert_eq!(metrics.rmse.to_bits(), (maximum * 0.5).to_bits());
+    assert_eq!(metrics.r2, Some(0.75));
+
+    // Common halving forced by one row may not silently erase the smallest
+    // represented residual of a different row.
+    assert_eq!(
+        regression_metrics(&[maximum, 0.0], &[-maximum, f64::from_bits(1)]),
+        Err(EvaluationError::NumericOverflow)
+    );
+}

@@ -77,16 +77,7 @@ pub fn regression_rmse(y_true: &[f64], y_pred: &[f64]) -> Result<f64, Evaluation
     // The usual path discovers the maximum finite difference in one pass,
     // then reduces normalized errors without a row-sized scratch vector.
     let pairs = || y_true.iter().copied().zip(y_pred.iter().copied());
-    let direct_scale = pairs().map(|(a, b)| (a - b).abs()).fold(0.0, f64::max);
-    let (scale, factor) = if direct_scale.is_finite() {
-        (direct_scale, 1.0)
-    } else {
-        let mut scale = 0.0_f64;
-        for (a, b) in pairs() {
-            scale = scale.max(scaled_error(a, b, 0.5)?.abs());
-        }
-        (scale, 0.5)
-    };
+    let (scale, factor) = difference_scale(pairs)?;
     if scale == 0.0 {
         return Ok(0.0);
     }
@@ -160,7 +151,8 @@ pub(crate) fn mse_skill_from_checked_rmse(
 /// Calculate finite, unweighted MAE, RMSE, and R² without squaring raw values.
 ///
 /// Inputs must be nonempty, equally sized, and finite. Scaled, compensated sums
-/// avoid overflow for large finite errors. Targets are centered relative to an
+/// avoid overflow for large finite errors and use constant additional storage.
+/// Targets are centered relative to an
 /// observed value before scaling to preserve small variation on a large offset.
 /// Unrepresentable outputs or loss of nonzero differences during normalization
 /// return [`EvaluationError::NumericOverflow`] instead of misleading metrics.
@@ -178,10 +170,20 @@ pub fn regression_metrics(
         return Err(EvaluationError::NonFinite);
     }
 
-    let (errors, error_scale, error_factor) = differences(y_true, y_pred)?;
+    let pairs = || y_true.iter().copied().zip(y_pred.iter().copied());
+    let (error_scale, error_factor) = difference_scale(pairs)?;
     let count = y_true.len() as f64;
-    let abs_sum = compensated_sum(errors.iter().map(|value| value.abs()));
-    let square_sum = compensated_sum(errors.iter().map(|value| value * value));
+    let mut abs_sum = CompensatedSum::default();
+    let mut square_sum = CompensatedSum::default();
+    if error_scale > 0.0 {
+        for (a, b) in pairs() {
+            let value = normalize_error(scaled_error(a, b, error_factor)?, error_scale)?;
+            abs_sum.add(value.abs());
+            square_sum.add(value * value);
+        }
+    }
+    let abs_sum = abs_sum.total();
+    let square_sum = square_sum.total();
     let mae = restore_scale(abs_sum / count, error_scale, error_factor)?;
     let rmse = restore_scale((square_sum / count).sqrt(), error_scale, error_factor)?;
 
@@ -190,14 +192,25 @@ pub fn regression_metrics(
     } else if error_scale == 0.0 {
         Some(1.0)
     } else {
-        let origin = vec![y_true[0]; y_true.len()];
-        let (shifted, target_scale, target_factor) = differences(y_true, &origin)?;
-        let mean = compensated_sum(shifted.iter().copied()) / count;
-        let target_square_sum = compensated_sum(shifted.iter().map(|value| {
+        let origin = y_true[0];
+        let target_pairs = || y_true.iter().copied().map(|value| (value, origin));
+        let (target_scale, target_factor) = difference_scale(target_pairs)?;
+        if target_scale == 0.0 {
+            return Err(EvaluationError::NumericOverflow);
+        }
+        let mut shifted_sum = CompensatedSum::default();
+        for (a, b) in target_pairs() {
+            shifted_sum.add(normalize_error(scaled_error(a, b, target_factor)?, target_scale)?);
+        }
+        let mean = shifted_sum.total() / count;
+        let mut target_square_sum = CompensatedSum::default();
+        for (a, b) in target_pairs() {
+            let value = normalize_error(scaled_error(a, b, target_factor)?, target_scale)?;
             let deviation = value - mean;
-            deviation * deviation
-        }));
-        if target_scale == 0.0 || target_square_sum <= 0.0 {
+            target_square_sum.add(deviation * deviation);
+        }
+        let target_square_sum = target_square_sum.total();
+        if target_square_sum <= 0.0 {
             return Err(EvaluationError::NumericOverflow);
         }
         // The factors are one or one half. Taking the square root before
@@ -215,28 +228,20 @@ pub fn regression_metrics(
     Ok(RegressionMetrics { mae, rmse, r2 })
 }
 
-// Return normalized differences, their scale, and a factor applied before
-// normalization. Halving only when necessary handles MAX - (-MAX), while direct
-// subtraction preserves small differences between large, nearby target values.
-fn differences(a: &[f64], b: &[f64]) -> Result<(Vec<f64>, f64, f64), EvaluationError> {
-    let factor = if a.iter().zip(b).any(|(a, b)| !(a - b).is_finite()) {
-        0.5
-    } else {
-        1.0
-    };
-    let mut values = Vec::with_capacity(a.len());
+// Halve only when necessary to handle MAX - (-MAX). On the usual direct
+// path, retaining the original subtraction preserves nearby large differences.
+fn difference_scale<I: Iterator<Item = (f64, f64)>>(
+    pairs: impl Fn() -> I,
+) -> Result<(f64, f64), EvaluationError> {
+    let direct = pairs().map(|(a, b)| (a - b).abs()).fold(0.0, f64::max);
+    if direct.is_finite() {
+        return Ok((direct, 1.0));
+    }
     let mut scale = 0.0_f64;
-    for (&a, &b) in a.iter().zip(b) {
-        let difference = scaled_error(a, b, factor)?;
-        scale = scale.max(difference.abs());
-        values.push(difference);
+    for (a, b) in pairs() {
+        scale = scale.max(scaled_error(a, b, 0.5)?.abs());
     }
-    if scale > 0.0 {
-        for value in &mut values {
-            *value = normalize_error(*value, scale)?;
-        }
-    }
-    Ok((values, scale, factor))
+    Ok((scale, 0.5))
 }
 
 fn scaled_error(a: f64, b: f64, factor: f64) -> Result<f64, EvaluationError> {
@@ -288,14 +293,6 @@ impl CompensatedSum {
     fn total(self) -> f64 {
         self.sum + self.correction
     }
-}
-
-fn compensated_sum(values: impl Iterator<Item = f64>) -> f64 {
-    let mut sum = CompensatedSum::default();
-    for value in values {
-        sum.add(value);
-    }
-    sum.total()
 }
 
 /// Row indices for one group-disjoint cross-validation partition.
