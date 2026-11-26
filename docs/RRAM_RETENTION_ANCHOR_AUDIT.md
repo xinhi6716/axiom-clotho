@@ -110,3 +110,13 @@ per-interval counts can conceal different whole-episode support: two episodes
 with opposite extra-bias intervals have no fully documented unbiased episode,
 even though the marginals match a plan with one clean and one biased episode.
 These are declared stress histories, not instrument validation.
+
+With a stress history table, `--diagnose-die-stress` also reports how many
+distinct declared `(lot,wafer,die)` keys have at least one episode in each
+whole-episode stress category. It reports the frozen die denominator and
+the die denominator with at least one timing-eligible episode, separately.
+Categories can overlap: one die can have both a documented extra-bias
+episode and a documented no-extra-bias episode, so do not sum the category
+counts. Matching episode marginals can hide concentration of the clean
+episodes on one die. Reported counts do not establish independence or
+comparability between dies. This option changes no eligibility or exit rule.

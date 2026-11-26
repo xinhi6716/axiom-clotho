@@ -166,11 +166,14 @@ def validate_digest(digest, label):
 
 
 def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=None,
-          diagnose_dies=False, block_map_path=None, block_map_sha256=None, stress_history_path=None):
+          diagnose_dies=False, block_map_path=None, block_map_sha256=None, stress_history_path=None,
+          diagnose_die_stress=False):
     validate_digest(roster_sha256, "frozen roster")
     validate_digest(block_map_sha256, "acquisition block map")
     if block_map_sha256 is not None and block_map_path is None:
         raise ValueError("acquisition block map SHA-256 requires an acquisition block map")
+    if diagnose_die_stress and stress_history_path is None:
+        raise ValueError("die stress diagnosis requires a stress history table")
     expected = {}
     for key, _ in records(roster_path, IDENTITY, expected_sha256=roster_sha256):
         if key in expected:
@@ -207,6 +210,9 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
     stress_attempted = [Counter(), Counter()]
     stress_eligible = [Counter(), Counter()]
     whole_stress_attempted, whole_stress_eligible = Counter(), Counter()
+    die_stress_attempted = defaultdict(set) if diagnose_die_stress else None
+    die_stress_eligible = defaultdict(set) if diagnose_die_stress else None
+    eligible_stress_dies = set() if diagnose_die_stress else None
     for key, slots in expected.items():
         reason = verdict(slots) if key in present else "missing_capture"
         classifications[reason] += 1
@@ -224,6 +230,12 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
             whole_stress_attempted[overall] += 1
             if reason == "eligible":
                 whole_stress_eligible[overall] += 1
+            if die_stress_attempted is not None:
+                die = key[:3]
+                die_stress_attempted[overall].add(die)
+                if reason == "eligible":
+                    die_stress_eligible[overall].add(die)
+                    eligible_stress_dies.add(die)
             for i, state in enumerate(history or ("missing_declaration",) * len(STRESS_INTERVALS)):
                 stress_attempted[i][state] += 1
                 if reason == "eligible":
@@ -285,6 +297,17 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
             "frozen_attempted_by_status": dict(sorted(whole_stress_attempted.items())),
             "timing_eligible_by_status": dict(sorted(whole_stress_eligible.items())),
         }
+    if die_stress_attempted is not None:
+        report["declared_die_stress_history_support"] = {
+            "frozen_die_denominator": report["frozen_attempted_dies"],
+            "timing_eligible_die_denominator": len(eligible_stress_dies),
+            "frozen_dies_with_status": {
+                status: len(dies) for status, dies in sorted(die_stress_attempted.items())
+            },
+            "timing_eligible_dies_with_status": {
+                status: len(dies) for status, dies in sorted(die_stress_eligible.items())
+            },
+        }
     return report
 
 
@@ -304,13 +327,15 @@ def main():
                         help="verify exact block map bytes against a previously trusted SHA-256")
     parser.add_argument("--stress-history", type=Path,
                         help="optional episode-keyed off-schedule electrical stress declarations")
+    parser.add_argument("--diagnose-die-stress", action="store_true",
+                        help="count declared dice by whole-episode stress status; requires --stress-history")
     args = parser.parse_args()
     try:
         report = audit(args.frozen_roster, args.capture, diagnose_anchors=args.diagnose_anchors,
                        roster_sha256=args.frozen_roster_sha256, diagnose_dies=args.diagnose_dies,
                        block_map_path=args.acquisition_block_map,
                        block_map_sha256=args.acquisition_block_map_sha256,
-                       stress_history_path=args.stress_history)
+                       stress_history_path=args.stress_history, diagnose_die_stress=args.diagnose_die_stress)
     except (OSError, UnicodeError, csv.Error):
         parser.exit(2, "error: input could not be read as UTF-8 CSV\n")
     except ValueError as exc:

@@ -278,6 +278,55 @@ class RetentionAnchorAudit(unittest.TestCase):
             })
             self.assertEqual(joint_b[field], {"off_schedule_bias_observed_in_any_interval": 2})
 
+    def test_preserved_episode_marginals_can_hide_die_stress_concentration(self):
+        a2 = (*BASE[:4], "E2")
+        b1 = (BASE[0], "W2", *BASE[2:])
+        b2 = (*b1[:4], "E2")
+        absent = (BASE[0], "W3", *BASE[2:])
+        roster = [BASE, a2, b1, b2, absent]
+        capture = [r for key in roster[:4] for r in episode(key)]
+        clear = "no_off_schedule_bias_documented"
+        biased = "off_schedule_bias_observed"
+        no_bias_status = "no_off_schedule_bias_documented_in_both_intervals"
+        extra_bias_status = "off_schedule_bias_observed_in_any_interval"
+        flags = ("--diagnose-dies", "--diagnose-die-stress")
+
+        def report(states, options):
+            result = self.run_capture(
+                roster, capture, extra=options,
+                stress=[(*key, state, state) for key, state in zip(roster[:4], states)],
+            )
+            self.assertEqual(result.returncode, 1, result.stderr)
+            self.assertNotIn("privateLot", result.stdout)
+            return json.loads(result.stdout)
+
+        split = (clear, biased, clear, biased)
+        concentrated = (clear, clear, biased, biased)
+        diag_key = "declared_die_stress_history_support"
+        left, right = report(concentrated, flags), report(split, flags)
+        left_diag, right_diag = left.pop(diag_key), right.pop(diag_key)
+        self.assertEqual(left, right)
+        self.assertEqual(right, report(split, ("--diagnose-dies",)))
+        self.assertEqual(left_diag, {
+            "frozen_die_denominator": 3, "timing_eligible_die_denominator": 2,
+            "frozen_dies_with_status": {
+                "missing_declaration": 1, no_bias_status: 1, extra_bias_status: 1,
+            },
+            "timing_eligible_dies_with_status": {no_bias_status: 1, extra_bias_status: 1},
+        })
+        self.assertEqual(right_diag, {
+            "frozen_die_denominator": 3, "timing_eligible_die_denominator": 2,
+            "frozen_dies_with_status": {
+                "missing_declaration": 1, no_bias_status: 2, extra_bias_status: 2,
+            },
+            "timing_eligible_dies_with_status": {no_bias_status: 2, extra_bias_status: 2},
+        })
+
+        missing = self.run_capture([BASE], episode(), extra=("--diagnose-die-stress",))
+        self.assertEqual(missing.returncode, 2)
+        self.assertIn("requires a stress history", missing.stderr)
+        self.assertFalse(missing.stdout)
+
     def test_stress_history_checks_membership_duplicates_and_explicit_status(self):
         valid = (*BASE, "unknown", "unknown")
         for rows, diagnostic in (
