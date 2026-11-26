@@ -504,3 +504,31 @@ fn median_selection_preserves_signed_zero_and_the_observed_parity() {
         expected
     );
 }
+
+#[test]
+fn mixed_transform_aligns_records_across_tile_boundaries() {
+    let prep = Preprocessor::fit(&[
+        numeric("n", &[Some(2.0), Some(4.0)]),
+        categorical("c", &[Some("a"), Some("b")]),
+        categorical("all_missing_at_query", &[None, None]),
+    ])
+    .unwrap();
+    let rows = 259;
+    let nums = (0..rows).map(|i| if i % 5 == 0 { None } else { Some(i as f64) }).collect::<Vec<_>>();
+    let cats = (0..rows).map(|i| [Some("b"), None, Some("new"), Some("a")][i % 4]).collect::<Vec<_>>();
+    let out = prep.transform(&[
+        numeric("all_missing_at_query", &vec![None; rows]),
+        categorical("c", &cats),
+        numeric("n", &nums),
+    ]).unwrap();
+    for i in 0..rows {
+        let mut expected = [nums[i].unwrap_or(3.0), 0.0, 0.0, 0.0, 1.0];
+        match cats[i] {
+            None => expected[1] = 1.0,
+            Some("a") => expected[2] = 1.0,
+            Some("b") => expected[3] = 1.0,
+            _ => (),
+        }
+        assert_eq!(out[i], expected);
+    }
+}

@@ -199,6 +199,7 @@ impl Preprocessor {
             return Err(PreprocessingError::SchemaMismatch);
         }
         // Validate every type before allocating a potentially large dense table.
+        let mut matched = Vec::with_capacity(self.columns.len());
         for column in &self.columns {
             let query = query_by_name[column.name.as_str()];
             let same_type = matches!(
@@ -212,40 +213,49 @@ impl Preprocessor {
             if !same_type && !all_missing(query) {
                 return Err(PreprocessingError::TypeMismatch);
             }
+            matched.push((column, query));
         }
-        let mut output = vec![vec![0.0; self.feature_names.len()]; rows];
-        for column in &self.columns {
-            let query = query_by_name[column.name.as_str()];
-            let start = column.output_start;
-            match (&column.values, query) {
-                (FittedValues::Numeric { fill }, FeatureValues::Numeric(values)) => {
-                    for (row, value) in output.iter_mut().zip(values) {
-                        row[start] = value.unwrap_or(*fill);
+
+        // Keep just-initialized rows near the processor while writing the
+        // column-oriented input. Schema and name binding run only once.
+        const TILE_ROWS: usize = 128;
+        let mut output = Vec::with_capacity(rows);
+        for start_row in (0..rows).step_by(TILE_ROWS) {
+            let end_row = (start_row + TILE_ROWS).min(rows);
+            output.resize_with(end_row, || vec![0.0; self.feature_names.len()]);
+            let tile = &mut output[start_row..end_row];
+            for &(column, query) in &matched {
+                let start = column.output_start;
+                match (&column.values, query) {
+                    (FittedValues::Numeric { fill }, FeatureValues::Numeric(values)) => {
+                        for (row, value) in tile.iter_mut().zip(&values[start_row..end_row]) {
+                            row[start] = value.unwrap_or(*fill);
+                        }
                     }
-                }
-                (FittedValues::Numeric { fill }, FeatureValues::Categorical(_)) => {
-                    // The mismatched variant was verified to be entirely missing.
-                    for row in &mut output {
-                        row[start] = *fill;
+                    (FittedValues::Numeric { fill }, FeatureValues::Categorical(_)) => {
+                        // The mismatched variant was verified to be entirely missing.
+                        for row in &mut *tile {
+                            row[start] = *fill;
+                        }
                     }
-                }
-                (FittedValues::Categorical { vocabulary }, FeatureValues::Categorical(values)) => {
-                    for (row, value) in output.iter_mut().zip(values) {
-                        match value {
-                            None => row[start] = 1.0,
-                            Some(value) => {
-                                if let Ok(index) = vocabulary.binary_search(value) {
-                                    row[start + index + 1] = 1.0;
+                    (FittedValues::Categorical { vocabulary }, FeatureValues::Categorical(values)) => {
+                        for (row, value) in tile.iter_mut().zip(&values[start_row..end_row]) {
+                            match value {
+                                None => row[start] = 1.0,
+                                Some(value) => {
+                                    if let Ok(index) = vocabulary.binary_search(value) {
+                                        row[start + index + 1] = 1.0;
+                                    }
+                                    // Query-only strings intentionally remain all zero.
                                 }
-                                // Query-only strings intentionally remain all zero.
                             }
                         }
                     }
-                }
-                (FittedValues::Categorical { .. }, FeatureValues::Numeric(_)) => {
-                    // The mismatched variant was verified to be entirely missing.
-                    for row in &mut output {
-                        row[start] = 1.0;
+                    (FittedValues::Categorical { .. }, FeatureValues::Numeric(_)) => {
+                        // The mismatched variant was verified to be entirely missing.
+                        for row in &mut *tile {
+                            row[start] = 1.0;
+                        }
                     }
                 }
             }
