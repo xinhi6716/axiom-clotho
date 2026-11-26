@@ -165,16 +165,7 @@ def _device_partition(indices, size, name):
     return _audit_positions(indices, size, name)
 
 
-def audit_physical_device_split(train, test, row_aliases, *, bindings) -> dict[str, int]:
-    """Reject alias-mediated device overlap in one declared positional split.
-
-    Supply a metadata-only roster in table order and one binding per distinct
-    alias across the entire roster. Many source aliases can map to one physical
-    device. Only train vs test are compared; unused positions do not count.
-    Namespaces are nonblank unpadded built-in strings, and IDs are such strings
-    or signed-64-bit built-in integers (1 and "1" differ). No data access, fit,
-    device identity verification or wafer-level inference is performed.
-    """
+def _resolve_device_split(train, test, row_aliases, bindings):
     if type(row_aliases) not in (list, tuple) or not 1 <= len(row_aliases) <= MAX_ROWS:
         raise ValueError(f"Device roster requires an explicit list or tuple of 1 to {MAX_ROWS} rows.")
     row_aliases = tuple(row_aliases)
@@ -203,6 +194,22 @@ def audit_physical_device_split(train, test, row_aliases, *, bindings) -> dict[s
     train_aliases, test_aliases = ({row_aliases[i] for i in positions} for positions in (train, test))
     train_devices = {by_alias[alias] for alias in train_aliases}
     test_devices = {by_alias[alias] for alias in test_aliases}
+    return (train, test, train_aliases, test_aliases, train_devices, test_devices,
+            by_alias.values(), len(row_aliases))
+
+
+def audit_physical_device_split(train, test, row_aliases, *, bindings) -> dict[str, int]:
+    """Reject alias-mediated device overlap in one declared positional split.
+
+    Supply a metadata-only roster in table order and one binding per distinct
+    alias across the entire roster. Many source aliases can map to one physical
+    device. Only train vs test are compared; unused positions do not count.
+    Namespaces are nonblank unpadded built-in strings, and IDs are such strings
+    or signed-64-bit built-in integers (1 and "1" differ). No data access, fit,
+    device identity verification or wafer-level inference is performed.
+    """
+    (train, test, train_aliases, test_aliases, train_devices, test_devices,
+     _, n_rows) = _resolve_device_split(train, test, row_aliases, bindings)
     overlap = len(train_devices & test_devices)
     if overlap:
         raise ValueError(f"Invalid split: {overlap} declared physical device(s) overlap training and validation.")
@@ -210,8 +217,70 @@ def audit_physical_device_split(train, test, row_aliases, *, bindings) -> dict[s
         "train_rows": len(train), "test_rows": len(test),
         "train_alias_count": len(train_aliases), "test_alias_count": len(test_aliases),
         "train_physical_device_count": len(train_devices), "test_physical_device_count": len(test_devices),
-        "unused_rows": len(row_aliases) - len(train) - len(test),
+        "unused_rows": n_rows - len(train) - len(test),
         "physical_device_overlap_count": overlap,
+    }
+
+
+@dataclass(frozen=True, slots=True)
+class PhysicalParent:
+    """Parent identity in one declared namespace, e.g. a named lot or wafer."""
+
+    namespace: str
+    parent: str | int
+
+
+@dataclass(frozen=True, slots=True)
+class DeviceParentBinding:
+    physical: PhysicalDevice
+    parent: PhysicalParent
+
+
+def audit_physical_parent_split(train, test, row_aliases, *, bindings, parent_bindings,
+                                parent_level: str) -> dict[str, int]:
+    """Audit disjointness at a predeclared physical-parent level.
+
+    Resolve every source alias, then require one parent for every distinct
+    physical device in the full roster, including unused rows. Use the same
+    declared parent level and canonical namespace semantics throughout
+    (for example, a wafer identity qualified by its fabrication lot).
+    Apart from checking the level declaration and rejecting common unresolved
+    parent identifiers, this audit does not infer or authenticate physical genealogy.
+    Only counts are returned. Unused rows do not create train/test overlap.
+    """
+    if not _crossed_key(parent_level) or parent_level.casefold() in _UNRESOLVED_DEVICE_IDS:
+        raise ValueError("Physical parent level must be explicit and resolved.")
+    (train, test, _, _, train_devices, test_devices, devices, n_rows) = _resolve_device_split(
+        train, test, row_aliases, bindings)
+    if type(parent_bindings) not in (list, tuple) or not 1 <= len(parent_bindings) <= MAX_ROWS:
+        raise ValueError("Physical parent bindings require an explicit bounded list or tuple.")
+    by_device = {}
+    for record in parent_bindings:
+        if type(record) is not DeviceParentBinding or type(record.parent) is not PhysicalParent:
+            raise ValueError("Physical parent bindings require DeviceParentBinding records.")
+        _check_physical_device(record.physical)
+        parent = record.parent
+        if (not _crossed_key(parent.namespace) or not _resolved_identifier(parent.namespace)
+                or not _resolved_identifier(parent.parent)):
+            raise ValueError("Physical parent identifiers must be exact and resolved.")
+        if record.physical in by_device:
+            raise ValueError("Physical parent bindings repeat a declared physical device.")
+        by_device[record.physical] = parent
+    if by_device.keys() != set(devices):
+        raise ValueError("Physical parent bindings must cover every roster device exactly, with no extras.")
+    train_parents, test_parents = ({by_device[device] for device in subset}
+                                  for subset in (train_devices, test_devices))
+    overlap = len(train_parents & test_parents)
+    if overlap:
+        raise ValueError(f"Invalid split: {overlap} declared physical parent(s) overlap training and validation.")
+    return {
+        "train_rows": len(train), "test_rows": len(test),
+        "train_physical_device_count": len(train_devices),
+        "test_physical_device_count": len(test_devices),
+        "train_physical_parent_count": len(train_parents),
+        "test_physical_parent_count": len(test_parents),
+        "unused_rows": n_rows - len(train) - len(test),
+        "physical_parent_overlap_count": overlap,
     }
 
 

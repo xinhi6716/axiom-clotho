@@ -6,6 +6,7 @@ import numpy as np
 
 from groupbench.splitting import (
     DeviceAlias, DeviceAliasBinding, PhysicalDevice, audit_physical_device_split, audit_split,
+    DeviceParentBinding, PhysicalParent, audit_physical_parent_split,
 )
 
 
@@ -111,3 +112,51 @@ class PhysicalDeviceSplitTests(TestCase):
         ):
             with self.subTest(train=train), self.assertRaisesRegex(ValueError, diagnostic):
                 self.audit(train=train)
+
+
+class PhysicalParentSplitTests(TestCase):
+    def setUp(self):
+        self.aliases = [DeviceAlias("lab", i) for i in range(4)]
+        self.devices = [PhysicalDevice("devices", i) for i in range(3)]
+        self.bindings = [DeviceAliasBinding(a, self.devices[i])
+                         for a, i in zip(self.aliases, [0, 1, 0, 2])]
+        self.parents = [DeviceParentBinding(d, PhysicalParent("lot-9", p))
+                        for d, p in zip(self.devices, [1, 1, '1'])]
+
+    def audit(self, train=(0, 2), test=(3,), parent_bindings=None, parent_level="wafer"):
+        return audit_physical_parent_split(
+            train, test, self.aliases, bindings=self.bindings, parent_level=parent_level,
+            parent_bindings=self.parents if parent_bindings is None else parent_bindings)
+
+    def test_distinct_devices_can_share_a_parent_and_leak(self):
+        old = audit_physical_device_split((0, 2), (1,), self.aliases, bindings=self.bindings)
+        self.assertEqual(old["physical_device_overlap_count"], 0)
+        with self.assertRaisesRegex(ValueError, '1 declared physical parent'):
+            self.audit(test=(1,))
+        with self.assertRaisesRegex(ValueError, '1 declared physical parent'):
+            self.audit(train=(0,), test=(2,))
+
+    def test_typed_scoped_parent_ids_and_unused_rows(self):
+        self.assertEqual(self.audit(), {
+            'train_rows': 2, 'test_rows': 1, 'train_physical_device_count': 1,
+            'test_physical_device_count': 1, 'train_physical_parent_count': 1,
+            'test_physical_parent_count': 1, 'unused_rows': 1,
+            'physical_parent_overlap_count': 0,
+        })
+        other = DeviceParentBinding(self.devices[1], PhysicalParent("lot-10", 1))
+        self.assertEqual(self.audit(test=(1,), parent_bindings=[*self.parents[:1], other, self.parents[2]])
+                         ['test_physical_parent_count'], 1)
+
+    def test_full_exact_bindings_and_explicit_parent_level(self):
+        for bindings in (self.parents[1:], [self.parents[0], self.parents[2]], [*self.parents, self.parents[0]],
+                         [*self.parents, DeviceParentBinding(PhysicalDevice("other", 2),
+                                                            PhysicalParent("lot-9", 1))],
+                         [DeviceParentBinding(self.devices[0], PhysicalParent("lot-9", "unknown")),
+                          *self.parents[1:]],
+                         [DeviceParentBinding(self.devices[0], PhysicalParent(42, 1)),
+                          *self.parents[1:]]):
+            with self.subTest(bindings=bindings), self.assertRaises(ValueError):
+                self.audit(parent_bindings=bindings)
+        for level in (None, "", "unknown", "wafer "):
+            with self.assertRaisesRegex(ValueError, 'level'):
+                self.audit(parent_level=level)
