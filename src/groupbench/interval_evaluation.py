@@ -371,6 +371,71 @@ def compare_saved_interval_scores(document_a, document_b):
     }
 
 
+def bound_paired_interval_scores(rows, *, expected_roster, alpha):
+    """Sharp B-minus-A interval-score bounds for independently bounded truths.
+
+    Rows are (row_id, truth_lower, truth_upper, a_lower, a_upper, b_lower,
+    b_upper) tuples, one per frozen expected (row_id, group) tuple. Group
+    assignments come only from that independent roster. The exact interval
+    limits may coincide for known truths. Predictions, bounds and common
+    alpha must be fixed outside this audit. No rows are dropped or imputed.
+
+    The exact finite-roster extrema allow each truth to vary independently
+    within its supplied range; a shared calibration error is a different
+    model. These sensitivity bounds establish neither coverage nor inference.
+    """
+    if not all(type(value) in (list, tuple) and 1 <= len(value) <= MAX_ROWS
+               for value in (rows, expected_roster)):
+        raise ValueError("Rows and the expected roster must be bounded nonempty sequences.")
+    alpha = _number(alpha)
+    if not 0 < alpha < 1:
+        raise ValueError("Paired interval bounds require one fixed miscoverage in (0, 1).")
+    ids, groups = [], []
+    for entry in expected_roster:
+        if type(entry) is not tuple or len(entry) != 2:
+            raise ValueError("Expected roster entries must be (row_id, group) tuples.")
+        ids.append(_label(entry[0]))
+        groups.append(entry[1])
+    if len(set(ids)) != len(ids):
+        raise ValueError("Expected row identifiers must be unique.")
+    expected = dict(zip(ids, _groups(groups)))
+
+    slope = 2 / alpha
+
+    def score(y, lo, hi):
+        return hi - lo + slope * max(lo - y, y - hi, 0)
+
+    seen, group_totals = set(), {}
+    for row in rows:
+        if type(row) is not tuple or len(row) != 7:
+            raise ValueError("Each row must supply one ID and six closed endpoints.")
+        key = _label(row[0])
+        if key not in expected or key in seen:
+            raise ValueError("Rows must match the expected roster exactly.")
+        seen.add(key)
+        lo, hi, al, ah, bl, bh = map(_number, row[1:])
+        if lo > hi or al > ah or bl > bh:
+            raise ValueError("Truth and forecast endpoints must be ordered.")
+        # The difference is linear between any successive forecast endpoints.
+        # Include internal knots, not just truth-range endpoints.
+        candidates = {lo, hi} | {point for point in (al, ah, bl, bh) if lo < point < hi}
+        gaps = [score(y, bl, bh) - score(y, al, ah) for y in candidates]
+        count, lower, upper = group_totals.get(expected[key], (0, Fraction(), Fraction()))
+        group_totals[expected[key]] = count + 1, lower + min(gaps), upper + max(gaps)
+    if len(seen) != len(expected):
+        raise ValueError("Rows must match the expected roster exactly.")
+
+    return {
+        "n_rows": len(seen),
+        "n_declared_groups": len(group_totals),
+        "alpha_exact": alpha,
+        "row_weighted_b_minus_a_bounds": tuple(
+            sum(stats[i] for stats in group_totals.values()) / len(seen) for i in (1, 2)),
+        "equal_group_b_minus_a_bounds": tuple(
+            _mean([stats[i] / stats[0] for stats in group_totals.values()]) for i in (1, 2)),
+    }
+
+
 def diagnose_saved_interval_reference(document):
     """Return an opt-in descriptive sidecar, without changing normal evaluation.
 
