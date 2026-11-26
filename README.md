@@ -42,7 +42,7 @@ clotho --version
 clotho tabular demo --out runs/demo
 ```
 
-Open `runs/demo/report.html`. The demo fits models on invented data. Use a fresh output directory for each run. The distribution is `ml-super-calculator`; the compatible CLI names are `clotho`, `mlcalc`, `groupbench` and `mlcalc-workflow`. Dependency installation may need network access; the modelling workflow runs locally.
+Open `runs/demo/report.html`. The demo fits models on invented data. Use a fresh output directory for each run. The distribution is `ml-super-calculator`; use `clotho` or `mlcalc-workflow` for measurement workflows, and `mlcalc`, `groupbench` or `clotho tabular` for grouped tables. Dependency installation may need network access; the modelling workflow runs locally.
 
 **Release wheel:** verify the matching wheel against the release's `SHA256SUMS.txt`. The [installation guide](docs/RELEASE_NOTES_0.3.0b7.md#installation-and-reproducible-example) explains offline installation when compatible dependencies are already present. The example CSVs are in the source archive, not the wheel.
 
@@ -71,7 +71,7 @@ mlcalc run examples/synthetic_materials.csv --target response --group batch \
 | --- | --- |
 | Numeric outcome | `mlcalc run`: default comparison includes Dummy mean, Ridge and Extra Trees. |
 | Binary outcome | `mlcalc binary`: explicit 0/1 workflow with Dummy, Logistic and Extra Trees. [Binary guide](docs/BINARY_PROTOCOL.md) |
-| Predict new rows | `mlcalc predict`: select and refit on labelled training data, then predict from a feature-only CSV. This step does not return a new test score. [Prediction guide](docs/USAGE_REFERENCE.md#predict-new-rows) |
+| Predict new rows | `mlcalc predict`: select and refit on labelled training data, then predict from a feature-only CSV. This step does not return a new test score. [Prediction guide for b7](https://github.com/xinhi6716/axiom-clotho/blob/v0.3.0b7/docs/USAGE_REFERENCE.md#predict-new-rows) |
 
 <a id="thread"></a>
 <a id="what-this-beta-completes"></a>

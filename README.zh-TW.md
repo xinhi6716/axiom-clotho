@@ -42,7 +42,7 @@ clotho --version
 clotho tabular demo --out runs/demo
 ```
 
-開啟 `runs/demo/report.html`。Demo 使用合成資料擬合模型；每次執行請指定新的輸出目錄。套件名稱為 `ml-super-calculator`，保留 `clotho`、`mlcalc`、`groupbench` 和 `mlcalc-workflow` 這四個相容指令。安裝相依套件可能需要網路；建模在本機進行。
+開啟 `runs/demo/report.html`。Demo 使用合成資料擬合模型；每次執行請指定新的輸出目錄。套件名稱為 `ml-super-calculator`，量測流程使用 `clotho` 或 `mlcalc-workflow`；分組表格使用 `mlcalc`、`groupbench` 或 `clotho tabular`。安裝相依套件可能需要網路；建模在本機進行。
 
 **用 release wheel 安裝：** 先以同一版的 `SHA256SUMS.txt` 驗證 wheel。[安裝指南](docs/RELEASE_NOTES_0.3.0b7.md#installation-and-reproducible-example) 說明如何在已備妥相依套件的環境離線安裝。範例 CSV 在原始碼封包內，不在 wheel 裡。
 
@@ -67,7 +67,7 @@ mlcalc run examples/synthetic_materials.csv --target response --group batch \
 | --- | --- |
 | 數值結果 | `mlcalc run`：預設比較平均值基準、Ridge 和 Extra Trees。 |
 | 二元結果 | `mlcalc binary`：明確以 0/1 為目標，比較 Dummy、Logistic 和 Extra Trees。[二元工作流程](docs/BINARY_PROTOCOL.md) |
-| 預測新資料 | `mlcalc predict`：在有標籤的訓練資料上選模與重擬合，再用僅有特徵的 CSV 預測。這一步不產生新的測試分數。[預測指南](docs/USAGE_REFERENCE.md#predict-new-rows) |
+| 預測新資料 | `mlcalc predict`：在有標籤的訓練資料上選模與重擬合，再用僅有特徵的 CSV 預測。這一步不產生新的測試分數。[b7 預測指南](https://github.com/xinhi6716/axiom-clotho/blob/v0.3.0b7/docs/USAGE_REFERENCE.md#predict-new-rows) |
 
 <a id="thread"></a>
 <a id="what-this-beta-completes"></a>
