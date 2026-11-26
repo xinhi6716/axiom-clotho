@@ -93,6 +93,14 @@ A new output directory contains:
   into both states sampled, HRS only interpolated, LRS only interpolated,
   and both interpolated. These are support counts, not error bounds or counts
   of independent devices.
+  For raw-file review, `--include-source-locations true` adds a
+  `source_locations` lookup for every logical measurement row. Entry 0
+  corresponds to logical source row 2, immediately after the header. Each
+  entry gives the one-based physical line and zero-based byte offset of
+  the record in the exact retained `measurement_input.csv`. Empty lines
+  are counted in physical lines, CRLF is one physical break, and any UTF-8
+  BOM is included in byte offsets. This does not alter any feature or
+  existing source-row identifier.
 - `COMPLETE`: written last; absent on an interrupted/incomplete write.
 
 No existing path is overwritten, including symlinks. Unix directories/files request

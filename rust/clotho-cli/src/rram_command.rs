@@ -40,14 +40,47 @@ fn lineage(p: &Readpoint) -> serde_json::Value {
     let a = &p.acquisition;
     serde_json::json!({"branch":a.branch,"replicate":a.replicate,"all_source_rows":p.all_source_rows,"selected_source_rows":p.selected_source_rows,"current_A":p.current_a,"resistance_ohm":p.resistance_ohm,"bracket_span_V":p.bracket_span_v})
 }
+// Successful extraction admits no control characters in any field, so each
+// logical record occupies one physical line. Keep offsets tied to the exact
+// retained bytes, including UTF-8 BOM, blank lines and mixed CSV terminators.
+fn source_record_locations(raw: &[u8], count: usize) -> Result<Vec<[usize; 2]>> {
+    let bom = if raw.starts_with(b"\xef\xbb\xbf") { 3 } else { 0 };
+    let mut locations = Vec::with_capacity(count + 1);
+    let mut start = bom;
+    let mut line = 1;
+    while start < raw.len() {
+        let end = raw[start..]
+            .iter()
+            .position(|&b| b == b'\r' || b == b'\n')
+            .map_or(raw.len(), |n| start + n);
+        if start < end {
+            locations.push([line, start]);
+        }
+        if end == raw.len() {
+            break;
+        }
+        start = end + 1;
+        if raw[end] == b'\r' && raw.get(start) == Some(&b'\n') {
+            start += 1;
+        }
+        line += 1;
+    }
+    if locations.len() != count + 1 {
+        return Err("RRAM physical source locations do not match admitted CSV records".into());
+    }
+    // The first nonempty record is the header, not a measurement.
+    locations.remove(0);
+    Ok(locations)
+}
 pub fn run(opts: &HashMap<String, String>) -> Result<()> {
-    const ALLOWED: [&str; 6] = [
+    const ALLOWED: [&str; 7] = [
         "--csv",
         "--out",
         "--max-bracket-v",
         "--accept-assumptions",
         "--feature-row-unit",
         "--require-sampled-readpoints",
+        "--include-source-locations",
     ];
     if opts.keys().any(|k| !ALLOWED.contains(&k.as_str())) {
         return Err("Unknown RRAM extraction option".into());
@@ -59,6 +92,11 @@ pub fn run(opts: &HashMap<String, String>) -> Result<()> {
         None | Some("false") => false,
         Some("true") => true,
         Some(_) => return Err("--require-sampled-readpoints must be true or false".into()),
+    };
+    let include_locations = match opts.get("--include-source-locations").map(String::as_str) {
+        None | Some("false") => false,
+        Some("true") => true,
+        Some(_) => return Err("--include-source-locations must be true or false".into()),
     };
     let by_condition = match opts
         .get("--feature-row-unit")
@@ -243,6 +281,13 @@ pub fn run(opts: &HashMap<String, String>) -> Result<()> {
     let mut report = serde_json::json!({"schema_version":"clotho.rram_si_binary64.v1","status":"complete","input_sha256":input_sha256,"features_sha256":features_sha256,"measurement_rows":count,"feature_rows":features.len(),"ml_fits":0,"feature_row_unit":if by_condition {"device-condition"} else {"device"},"source_row_convention":"logical CSV data record index plus header; not physical lines","input_units":"explicit SI binary64; no conversion","settings":{"max_bracket_span_V":settings.max_bracket_span_v,"assumptions_accepted":true},"feature_allowlist":["hrs_resistance_median_ohm","lrs_resistance_median_ohm","resistance_ratio_median"],"limitations":["Not legacy exact-decimal numerical or bundle compatibility","Declared states and conditions are not independently verified","Linear interpolation assumes local linearity; static V/I is not differential resistance","Cycles and condition rows are repeated observations, not independent devices; group downstream by physical_device_group or broader split_group","Ratio is derived from HRS/LRS observations; do not predict it from those resistances","No target joins, model training, confidence intervals or physical independence validation","Input and feature hashes identify exact bytes, not authenticated provenance"],"lineage":records});
     if require_sampled {
         report["settings"]["require_sampled_readpoints"] = true.into();
+    }
+    if include_locations {
+        report["source_locations"] = serde_json::json!({
+            "format": "[one-based physical line, zero-based byte offset in measurement_input.csv]",
+            "first_logical_source_row": 2,
+            "locations": source_record_locations(&raw, count)?,
+        });
     }
     let report = serde_json::to_vec_pretty(&report)?;
     let mut builder = std::fs::DirBuilder::new();

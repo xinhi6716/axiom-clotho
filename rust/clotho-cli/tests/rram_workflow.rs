@@ -495,3 +495,65 @@ fn extract_rram_rejects_roundoff_that_would_create_a_finite_resistance() {
     assert!(String::from_utf8_lossy(&result.stderr).contains("NumericalRange"));
     assert!(!w.0.join("out").exists());
 }
+
+#[test]
+fn source_locations_map_logical_lineage_to_exact_input_byte_offsets() {
+    let header = DATA.lines().next().unwrap();
+    let hrs0 = "B,W,D,1,R1,H,HRS,C,P,1,300,0,0.5,0.005";
+    let lrs = "B,W,D,1,R1,L,LRS,C,P,1,300,0,1,0.1";
+    let hrs1 = "B,W,D,1,R1,H,HRS,C,P,1,300,0,1.5,0.015";
+    let raw = format!("\u{feff}{header}\r\n\r\n{hrs0}\r{lrs}\n\n{hrs1}");
+    let omitted = Workspace::new();
+    let disabled = Workspace::new();
+    let enabled = Workspace::new();
+    for w in [&omitted, &disabled, &enabled] {
+        w.write(&raw);
+    }
+    assert!(omitted.run(&[]).status.success());
+    assert!(disabled
+        .run(&["--include-source-locations", "false"])
+        .status
+        .success());
+    let r = enabled.run(&["--include-source-locations", "true"]);
+    assert!(r.status.success(), "{}", String::from_utf8_lossy(&r.stderr));
+    let report = |w: &Workspace| fs::read(w.0.join("out/extraction.json")).unwrap();
+    let baseline = report(&omitted);
+    assert_eq!(baseline, report(&disabled));
+    let mut mapped: serde_json::Value = serde_json::from_slice(&report(&enabled)).unwrap();
+    let locations = mapped
+        .as_object_mut()
+        .unwrap()
+        .remove("source_locations")
+        .unwrap();
+    let expected: serde_json::Value = serde_json::from_slice(&baseline).unwrap();
+    assert_eq!(mapped, expected);
+    let lineage = &mapped["lineage"][0]["pairs"][0];
+    assert_eq!(
+        lineage["HRS"]["selected_source_rows"],
+        serde_json::json!([2, 4])
+    );
+    assert_eq!(
+        lineage["LRS"]["selected_source_rows"],
+        serde_json::json!([3])
+    );
+    assert_eq!(locations["first_logical_source_row"], 2);
+    assert_eq!(
+        locations["locations"],
+        serde_json::json!([
+            [3, raw.find(hrs0).unwrap()],
+            [4, raw.find(lrs).unwrap()],
+            [6, raw.find(hrs1).unwrap()],
+        ])
+    );
+    for name in ["features.csv", "measurement_input.csv", "COMPLETE"] {
+        assert_eq!(
+            fs::read(omitted.0.join("out").join(name)).unwrap(),
+            fs::read(enabled.0.join("out").join(name)).unwrap(),
+        );
+    }
+    let invalid = Workspace::new();
+    invalid.write(&raw);
+    let r = invalid.run(&["--include-source-locations", "yes"]);
+    assert_eq!(r.status.code(), Some(2));
+    assert!(!invalid.0.join("out").exists());
+}
