@@ -5,6 +5,7 @@ unit cannot detect secretly mixed-unit rows. No raw-value provenance is retained
 """
 from dataclasses import dataclass
 from decimal import Decimal
+from fractions import Fraction
 import math
 import re
 import unicodedata
@@ -161,3 +162,63 @@ def normalize_comparable_pair_to_float64(expected, expected_tokens, supplied, su
     b = normalize_decimal_tokens(supplied_tokens, supplied)
     converted = decimal_to_float64(a + b)
     return canonical, converted[:n], converted[n:]
+
+
+def _number(value, role):
+    if type(value) is int and value.bit_length() <= 512:
+        return Fraction(value)
+    if type(value) is float and math.isfinite(value):
+        return Fraction(value)
+    if type(value) is Decimal and value.is_finite():
+        _, digits, exponent = value.as_tuple()
+        if len(digits) <= 64 and -200 <= exponent <= 200:
+            return Fraction(value)
+    raise ValueError(f"{role} needs a bounded finite real number; booleans are not measurements.")
+
+
+def _three(values, role):
+    if type(values) not in (list, tuple) or len(values) != 3:
+        raise ValueError(f"{role} must contain low, interior and high values, in that order.")
+    return tuple(_number(v, role) for v in values)
+
+
+@dataclass(frozen=True)
+class AffineReadoutComparison:
+    """Descriptive checks in readout units, not a calibration certificate."""
+
+    reference_interior_error: Fraction
+    comparison_interior_error: Fraction
+    low_path_difference: Fraction
+    high_path_difference: Fraction
+    max_affine_path_difference: Fraction
+    interior_pass: bool
+    shared_affine_pass: bool
+
+
+def compare_affine_readouts(standards, reference, comparison, *,
+                            max_interior_error, max_path_difference):
+    """Fit two endpoint lines, each with a reserved interior check.
+
+    Each arm must measure the same three known, ordered standards in the same
+    units. Caller establishes physical path matching, reference accuracy,
+    repeats, drift and tolerances. Thresholds are nonnegative, inclusive,
+    fixed before comparison, and expressed in response units. A bounded
+    model-vs-model difference does not exclude unsampled nonlinearity.
+    """
+    x0, x1, x2 = _three(standards, "standards")
+    r0, r1, r2 = _three(reference, "reference")
+    c0, c1, c2 = _three(comparison, "comparison")
+    e = _number(max_interior_error, "max_interior_error")
+    d = _number(max_path_difference, "max_path_difference")
+    if not x0 < x1 < x2 or e < 0 or d < 0:
+        raise ValueError("Standards must strictly increase and tolerances must be nonnegative.")
+    if not r0 < r2 or not c0 < c2:
+        raise ValueError("Each path needs a positive endpoint response slope.")
+    t = (x1 - x0) / (x2 - x0)
+    er = r1 - (r0 + t * (r2 - r0))
+    ec = c1 - (c0 + t * (c2 - c0))
+    low, high = c0 - r0, c2 - r2
+    maximum = max(abs(low), abs(high))
+    interior_pass = abs(er) <= e and abs(ec) <= e
+    return AffineReadoutComparison(er, ec, low, high, maximum, interior_pass,
+                                  interior_pass and maximum <= d)
