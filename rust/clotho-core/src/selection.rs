@@ -231,11 +231,11 @@ pub fn nested_grouped_regression(
         let start_fit_count = fit_count;
         let mut scores = Vec::with_capacity(candidates.len());
         let mut best: Option<(usize, f64)> = None;
-        // Estimators take owned-row tables, but only borrow them while fitting
-        // or predicting. Refill the same scratch from each fold's row indices.
-        let mut train_x = Vec::new();
+        // The training and test complements always total outer_x.len().
+        // Move their slice boundary rather than dropping row allocations
+        // whenever inner fold sizes change.
+        let mut row_workspace = vec![Vec::new(); outer_x.len()];
         let mut train_y = Vec::new();
-        let mut test_x = Vec::new();
         for (candidate_index, candidate) in candidates.iter().enumerate() {
             let mut score = InnerCandidateScore {
                 candidate_index,
@@ -245,13 +245,14 @@ pub fn nested_grouped_regression(
             };
             let mut inner_predictions = vec![0.0; outer_x.len()];
             for (inner_fold_index, inner) in inner_folds.iter().enumerate() {
-                refill_feature_rows(&mut train_x, &outer_x, &inner.train_indices);
+                let (train_x, test_x) = row_workspace.split_at_mut(inner.train_indices.len());
+                refill_feature_rows(train_x, &outer_x, &inner.train_indices);
                 train_y.clear();
                 train_y.extend(inner.train_indices.iter().map(|&row| outer_y[row]));
-                refill_feature_rows(&mut test_x, &outer_x, &inner.test_indices);
+                refill_feature_rows(test_x, &outer_x, &inner.test_indices);
                 fit_count += 1;
                 score.fit_count += 1;
-                match fit_predict(*candidate, &train_x, &train_y, &test_x) {
+                match fit_predict(*candidate, train_x, &train_y, test_x) {
                     Ok(predictions) => {
                         for (&row, prediction) in inner.test_indices.iter().zip(predictions) {
                             inner_predictions[row] = prediction;
@@ -289,7 +290,7 @@ pub fn nested_grouped_regression(
             scores.push(score);
         }
         // Release inner scratch before allocating rows for the outer refit.
-        drop((train_x, train_y, test_x));
+        drop((row_workspace, train_y));
         let selected_candidate_index = match best {
             Some((index, _)) => index,
             None => {
@@ -395,8 +396,8 @@ fn feature_rows(x: &[Vec<f64>], indices: &[usize]) -> Vec<Vec<f64>> {
     indices.iter().map(|&i| x[i].clone()).collect()
 }
 
-fn refill_feature_rows(out: &mut Vec<Vec<f64>>, x: &[Vec<f64>], indices: &[usize]) {
-    out.resize_with(indices.len(), Vec::new);
+fn refill_feature_rows(out: &mut [Vec<f64>], x: &[Vec<f64>], indices: &[usize]) {
+    debug_assert_eq!(out.len(), indices.len());
     for (row, &index) in out.iter_mut().zip(indices) {
         row.clone_from(&x[index]);
     }
@@ -438,11 +439,17 @@ mod scratch_tests {
     #[test]
     fn refilling_on_fold_size_changes_replaces_rows_without_stale_values() {
         let x = [[0.0, -0.0], [1.0, 2.0], [3.0, 4.0], [5.0, 6.0]].map(Vec::from);
-        let mut scratch = Vec::new();
-        for indices in [&[1, 2, 3][..], &[0][..], &[0, 2][..], &[1][..]] {
-            refill_feature_rows(&mut scratch, &x, indices);
-            assert_eq!(scratch.len(), indices.len());
-            for (row, &index) in scratch.iter().zip(indices) {
+        let mut scratch = vec![Vec::new(); x.len()];
+        for (train, test) in [
+            (&[1, 2, 3][..], &[0][..]),
+            (&[0][..], &[1, 2, 3][..]),
+            (&[0, 2][..], &[1, 3][..]),
+            (&[1][..], &[0, 2, 3][..]),
+        ] {
+            let (train_x, test_x) = scratch.split_at_mut(train.len());
+            refill_feature_rows(train_x, &x, train);
+            refill_feature_rows(test_x, &x, test);
+            for (row, &index) in scratch.iter().zip(train.iter().chain(test)) {
                 assert_eq!(
                     row.iter().map(|v| v.to_bits()).collect::<Vec<_>>(),
                     x[index].iter().map(|v| v.to_bits()).collect::<Vec<_>>(),
