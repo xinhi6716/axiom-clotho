@@ -532,3 +532,21 @@ fn mixed_transform_aligns_records_across_tile_boundaries() {
         assert_eq!(out[i], expected);
     }
 }
+
+#[test]
+fn reused_median_scratch_never_mixes_interleaved_numeric_columns() {
+    let prep = Preprocessor::fit(&[
+        numeric("wide", &[Some(6.0), Some(2.0), Some(4.0), Some(8.0)]),
+        categorical("status", &[Some("x"), None, Some("y"), Some("x")]),
+        numeric("empty", &[None; 4]),
+        numeric("sparse", &[None, Some(-0.0), None, None]),
+        numeric("odd", &[Some(9.0), Some(13.0), Some(11.0), None]),
+    ])
+    .unwrap();
+    let fills: Vec<_> = prep
+        .metadata()
+        .into_iter()
+        .filter_map(|m| m.numeric_imputation_value.map(f64::to_bits))
+        .collect();
+    assert_eq!(fills, [5.0_f64.to_bits(), 0, (-0.0_f64).to_bits(), 11.0_f64.to_bits()]);
+}

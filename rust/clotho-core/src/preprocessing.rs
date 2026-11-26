@@ -122,13 +122,17 @@ impl Preprocessor {
         let training_row_count = validate_table(training)?;
         let mut columns = Vec::with_capacity(training.len());
         let mut feature_names = Vec::new();
+        // Selection mutates its input; reuse a scratch copy but never
+        // carry observations from one training column into another.
+        let mut observed_numeric = Vec::new();
         for (source_index, column) in training.iter().enumerate() {
             let output_start = feature_names.len();
             let (values, training_missing_count) = match &column.values {
                 FeatureValues::Numeric(values) => {
-                    let mut observed: Vec<_> = values.iter().flatten().copied().collect();
-                    let training_missing_count = values.len() - observed.len();
-                    let fill = median(&mut observed);
+                    observed_numeric.clear();
+                    observed_numeric.extend(values.iter().flatten().copied());
+                    let training_missing_count = values.len() - observed_numeric.len();
+                    let fill = median(&mut observed_numeric);
                     feature_names.push(format!("feature_{}__numeric", source_index));
                     (FittedValues::Numeric { fill }, training_missing_count)
                 }
