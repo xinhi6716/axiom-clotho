@@ -47,6 +47,15 @@ aggregate report records that verification passed, without printing the digest
 or roster. A hash calculated from the current roster is not evidence of when
 that roster was created or whether it was changed before archiving.
 
+Use `--capture-sha256` with an independently retained SHA-256 receipt to
+replay exactly the same metadata-only timestamp capture. The roster and
+acquisition-block receipts do not pin these actual timestamps. The command
+checks the precise bytes it parses; altered timestamps, row order, or
+encoding fail even when they would describe a syntactically valid capture.
+It prints a verification boolean, not the digest or any timestamps. This
+verifies a supplied reference, not the instrument source, lineage, or when
+the referenced capture was archived. Omit the option to audit a new export.
+
 For troubleshooting, add `--diagnose-anchors`. It reports a disjoint set
 of status counts for each nominal slot on the same frozen-episode denominator,
 including absent captures. A terminal clock or boundary problem remains visible

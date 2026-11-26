@@ -209,8 +209,9 @@ def validate_digest(digest, label):
 def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=None,
           diagnose_dies=False, block_map_path=None, block_map_sha256=None, stress_history_path=None,
           diagnose_die_stress=False, diagnose_duplicate_anchors=False,
-          diagnose_terminal_alternatives=False):
+          diagnose_terminal_alternatives=False, capture_sha256=None):
     validate_digest(roster_sha256, "frozen roster")
+    validate_digest(capture_sha256, "timestamp capture")
     validate_digest(block_map_sha256, "acquisition block map")
     if block_map_sha256 is not None and block_map_path is None:
         raise ValueError("acquisition block map SHA-256 requires an acquisition block map")
@@ -230,7 +231,9 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
     present, unexpected = set(), set()
     off_anchor_rows = 0
     off_anchor_stamps = defaultdict(list) if diagnose_terminal_alternatives else None
-    for key, (nominal, clock, epoch, tick, error) in records(capture_path, IDENTITY + TIMING):
+    observations = records(capture_path, IDENTITY + TIMING, expected_sha256=capture_sha256,
+                           digest_label="timestamp capture")
+    for key, (nominal, clock, epoch, tick, error) in observations:
         nominal = integer(nominal)
         if any(value and not KEY.fullmatch(value) for value in (clock, epoch)):
             raise ValueError("invalid clock identity")
@@ -294,6 +297,8 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
         "nonscheduled_rows_in_frozen_episodes": off_anchor_rows,
         "frozen_episodes_by_primary_reason": dict(sorted(classifications.items())),
     }
+    if capture_sha256 is not None:
+        report["timestamp_capture_byte_digest_verified"] = True
     if roster_sha256 is not None:
         report["frozen_roster_byte_digest_verified"] = True
     if block_map_sha256 is not None:
@@ -397,6 +402,8 @@ def main():
                         help="describe repeated scheduled timestamp metadata without repairing it")
     parser.add_argument("--diagnose-terminal-alternatives", action="store_true",
                         help="report off-slot timing for absent terminal rows without substituting")
+    parser.add_argument("--capture-sha256",
+                        help="verify exact outcome-free timestamp capture against a trusted SHA-256")
     args = parser.parse_args()
     try:
         report = audit(args.frozen_roster, args.capture, diagnose_anchors=args.diagnose_anchors,
@@ -405,7 +412,8 @@ def main():
                        block_map_sha256=args.acquisition_block_map_sha256,
                        stress_history_path=args.stress_history, diagnose_die_stress=args.diagnose_die_stress,
                        diagnose_duplicate_anchors=args.diagnose_duplicate_anchors,
-                       diagnose_terminal_alternatives=args.diagnose_terminal_alternatives)
+                       diagnose_terminal_alternatives=args.diagnose_terminal_alternatives,
+                       capture_sha256=args.capture_sha256)
     except (OSError, UnicodeError, csv.Error):
         parser.exit(2, "error: input could not be read as UTF-8 CSV\n")
     except ValueError as exc:

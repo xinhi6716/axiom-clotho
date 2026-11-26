@@ -97,6 +97,42 @@ class RetentionAnchorAudit(unittest.TestCase):
             self.assertIn("64 lowercase", r.stderr)
             self.assertFalse(r.stdout)
 
+    def test_capture_receipt_binds_timestamp_admission_and_exact_source_bytes(self):
+        rows = episode()
+        capture_text = ",".join(IDS + TIMES) + "\r\n" + "".join(
+            ",".join(map(str, row)) + "\r\n" for row in rows
+        )
+        digest = hashlib.sha256(capture_text.encode()).hexdigest()
+        receipt = ("--capture-sha256", digest)
+        baseline = self.run_capture([BASE], rows)
+        verified = self.run_capture([BASE], rows, extra=receipt)
+        self.assertEqual((baseline.returncode, verified.returncode), (0, 0))
+        report = json.loads(verified.stdout)
+        self.assertIs(report.pop("timestamp_capture_byte_digest_verified"), True)
+        self.assertEqual(report, json.loads(baseline.stdout))
+        self.assertNotIn(digest, verified.stdout)
+
+        revised = episode(final=79_999_999_999)
+        unpinned = self.run_capture([BASE], revised)
+        self.assertEqual(unpinned.returncode, 1)
+        self.assertEqual(json.loads(unpinned.stdout)["frozen_episodes_by_primary_reason"],
+                         {"terminal_outside_window": 1})
+        for changed, header in (
+            (revised, IDS + TIMES),
+            (list(reversed(rows)), IDS + TIMES),
+            ([], ("wrong_header",)),  # Fail on digest before interpreting the CSV.
+        ):
+            result = self.run_capture([BASE], changed, capture_header=header, extra=receipt)
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("timestamp capture SHA-256 mismatch", result.stderr)
+            self.assertFalse(result.stdout)
+            self.assertNotIn(digest, result.stderr)
+            self.assertNotIn("privateLot", result.stderr)
+        invalid = self.run_capture([BASE], rows, extra=(receipt[0], digest.upper()))
+        self.assertEqual(invalid.returncode, 2)
+        self.assertIn("timestamp capture SHA-256 must be 64 lowercase", invalid.stderr)
+        self.assertFalse(invalid.stdout)
+
     def test_complete_interleaved_episodes_use_physical_die_keys(self):
         other = ("privateLot", "W2", "D1", "C1", "E1")
         rows = [row for pair in zip(episode(), episode(other)) for row in pair]
