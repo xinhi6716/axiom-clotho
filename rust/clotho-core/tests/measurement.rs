@@ -388,3 +388,40 @@ fn named_join_checks_declared_schema_measurements_and_endpoint_scope() {
         JoinError::EndpointMismatch
     );
 }
+
+#[test]
+fn interleaved_partitions_and_exact_prefixes_keep_targets_bound_to_training_keys() {
+    let identities = [
+        vec!["a".into(), "b:c".into(), "3".into()],
+        vec!["a:b".into(), "c".into(), "2".into()],
+        vec!["b".into(), "c".into(), "1".into()],
+        vec!["a:b".into(), "c".into(), "0".into()],
+        vec!["b".into(), "c".into(), "9".into()],
+    ];
+    let features: Vec<_> = identities.iter().enumerate().map(|(i, identity)| DeviceFeatures {
+        identity: identity.clone(),
+        values: vec![i as f64],
+    }).collect();
+    let mut partitions: Vec<_> = [2, 4, 0, 1, 3].into_iter().map(|i| DevicePartition {
+        identity: identities[i].clone(),
+        partition: if i == 1 || i == 3 { Partition::Predict } else { Partition::Train },
+    }).collect();
+    let mut endpoints: Vec<_> = [4, 0, 2].into_iter().map(|i| TrainingEndpoint {
+        identity: identities[i].clone(), target: i as f64 * 2.0,
+    }).collect();
+    let prepared = prepare_measurements(&features, &partitions, &endpoints, 2).unwrap();
+    assert_eq!(prepared.training.iter().map(|r| r.target).collect::<Vec<_>>(), [
+        Some(0.0), Some(4.0), Some(8.0),
+    ]);
+    assert_eq!(prepared.prediction.iter().map(|r| (r.values[0],r.target)).collect::<Vec<_>>(), [
+        (3.0, None), (1.0, None),
+    ]);
+    // Any transition within one prefix is a group overlap, and it is checked
+    // before endpoints (including a deliberately nonfinite one).
+    partitions[3].partition = Partition::Train;
+    endpoints[0].target = f64::INFINITY;
+    assert_eq!(
+        prepare_measurements(&features, &partitions, &endpoints, 2),
+        Err(JoinError::GroupOverlap),
+    );
+}

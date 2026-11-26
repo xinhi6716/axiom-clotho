@@ -1,6 +1,6 @@
 //! Exact composite-identity joins for measurement features and separately
 //! supplied training endpoints. No model fitting or inferred/missing labels.
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::fmt;
 #[derive(Clone, Debug, PartialEq)]
 pub struct DeviceFeatures {
@@ -125,11 +125,17 @@ pub fn prepare_measurements(
     if train_count == 0 || train_count == by_partition.len() {
         return Err(JoinError::EmptyPartition);
     }
-    let train_groups: BTreeSet<_> = training_keys().map(|key| &key[..group_prefix]).collect();
-    if by_partition.iter().any(|(&key, &partition)| {
-        partition == Partition::Predict && train_groups.contains(&key[..group_prefix])
-    }) {
-        return Err(JoinError::GroupOverlap);
+    // Lexicographic tuple order keeps every exact prefix contiguous. A
+    // mixed group must contain an adjacent Train/Predict transition.
+    let mut previous = None;
+    for (&key, &partition) in &by_partition {
+        let prefix = &key[..group_prefix];
+        if let Some((last_prefix, last_partition)) = previous {
+            if last_partition != partition && last_prefix == prefix {
+                return Err(JoinError::GroupOverlap);
+            }
+        }
+        previous = Some((prefix, partition));
     }
     let mut targets = BTreeMap::new();
     for row in endpoints {
@@ -148,18 +154,31 @@ pub fn prepare_measurements(
     }
     let mut training = Vec::with_capacity(train_count);
     let mut prediction = Vec::with_capacity(by_partition.len() - train_count);
-    for (key, row) in by_feature {
+    // Validate before consuming the sorted maps in lockstep. Targets contain
+    // exactly the train subsequence, so prediction rows never take a label.
+    let mut targets = targets.into_iter();
+    for ((key, row), (partition_key, partition)) in by_feature.into_iter().zip(by_partition) {
+        debug_assert_eq!(key, partition_key);
+        let target = match partition {
+            Partition::Train => {
+                let (target_key, target) = targets.next().ok_or(JoinError::EndpointMismatch)?;
+                debug_assert_eq!(key, target_key);
+                Some(target)
+            }
+            Partition::Predict => None,
+        };
         let prepared = PreparedRow {
             group: key[..group_prefix].to_vec(),
             values: row.values.clone(),
-            target: targets.get(key).copied(),
+            target,
             identity: key.to_vec(),
         };
-        match by_partition[key] {
+        match partition {
             Partition::Train => training.push(prepared),
             Partition::Predict => prediction.push(prepared),
         }
     }
+    debug_assert!(targets.next().is_none());
     Ok(PreparedMeasurements {
         training,
         prediction,
