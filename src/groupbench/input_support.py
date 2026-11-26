@@ -283,6 +283,12 @@ def audit_complete_feature_support_by_group(features: pd.DataFrame, row_groups) 
     }
 
 
+def _valid_categorical_support_level(value):
+    return (type(value) is str and 1 <= len(value) <= 1024 and bool(value.strip())
+            and "\x00" not in value
+            and not any(0xd800 <= ord(c) <= 0xdfff for c in value))
+
+
 def audit_categorical_pair_group_support(training, query, *, training_groups,
                                          minimum_training_groups: int) -> dict:
     """Count declared training groups supporting each preselected category pair.
@@ -306,10 +312,8 @@ def audit_categorical_pair_group_support(training, query, *, training_groups,
         # Keep each literal, including meaningful spaces or case. Reject
         # malformed text rather than stringify numeric IDs or missing values.
         for pair in values:
-            if (type(pair) is not tuple or len(pair) != 2 or any(
-                type(v) is not str or not v.strip() or len(v) > 1024 or "\x00" in v
-                or any(0xd800 <= ord(c) <= 0xdfff for c in v) for v in pair
-            )):
+            if (type(pair) is not tuple or len(pair) != 2
+                    or not all(_valid_categorical_support_level(value) for value in pair)):
                 raise ValueError("Categorical pairs require two bounded, nonblank string values.")
         return values
 
@@ -342,4 +346,90 @@ def audit_categorical_pair_group_support(training, query, *, training_groups,
         "n_query_rows_with_unseen_pair_of_known_levels": novel_pair,
         "n_query_rows_with_pair_below_group_threshold": below_minimum,
         "n_query_rows_with_pair_at_group_threshold_or_above": supported,
+    }
+
+
+def audit_categorical_tuple_group_support(training, query, *, training_groups,
+                                          minimum_training_groups: int) -> dict:
+    """Audit full tuples against their pair projections on frozen feature order.
+
+    Supply tuples of 3–8 complete literal strings in common feature order
+    and training group IDs aligned by position. A row meets the full threshold
+    only when the same complete tuple appears in that many distinct declared
+    groups. A group meets the all-pairs condition when every positional pair
+    occurs somewhere in its training rows, potentially on different rows.
+    Counts only; no fit, imputation, physical independence or accuracy claim.
+    """
+    from itertools import combinations
+
+    from .data import MAX_ROWS, validate_groups
+
+    if any(type(rows) not in (list, tuple) or not 1 <= len(rows) <= MAX_ROWS
+           for rows in (training, query)):
+        raise ValueError("Training and query tuples require bounded nonempty sequences.")
+    if type(minimum_training_groups) is not int or not 1 <= minimum_training_groups <= MAX_ROWS:
+        raise ValueError("The minimum training group count must be a bounded positive integer.")
+    if type(training[0]) is not tuple or not 3 <= len(training[0]) <= 8:
+        raise ValueError("Categorical tuple support requires three to eight declared fields.")
+    width = len(training[0])
+    positions = tuple(combinations(range(width), 2))
+    if (len(training) + len(query)) * len(positions) > 500_000:
+        raise ValueError("Categorical projection work exceeds the audit bound.")
+    for rows in (training, query):
+        for row in rows:
+            if (type(row) is not tuple or len(row) != width
+                    or not all(_valid_categorical_support_level(value) for value in row)):
+                raise ValueError("Categorical tuples require a common width and bounded nonblank strings.")
+    groups = validate_groups(training_groups, len(training))
+
+    def projections(row):
+        return ((i, j, row[i], row[j]) for i, j in positions)
+
+    full, pairs, query_counts = {}, {}, {}
+    for row in query:
+        query_counts[row] = query_counts.get(row, 0) + 1
+        for pair in projections(row):
+            if pair not in pairs:
+                pairs[pair] = set()
+    for row, group in zip(training, groups):
+        if row in query_counts:
+            full.setdefault(row, set()).add(group)
+        for pair in projections(row):
+            match = pairs.get(pair)
+            if match is not None:
+                match.add(group)
+
+    full_supported = marginal_supported = common_group_supported = 0
+    work = 0
+    for row, multiplicity in query_counts.items():
+        if row in full and len(full[row]) >= minimum_training_groups:
+            full_supported += multiplicity
+            marginal_supported += multiplicity
+            common_group_supported += multiplicity
+            continue
+        if not all(len(pairs[pair]) >= minimum_training_groups for pair in projections(row)):
+            continue
+        marginal_supported += multiplicity
+        support_sets = sorted((pairs[pair] for pair in projections(row)), key=len)
+        # Bound all membership work even for large overlapping categories.
+        work += len(support_sets[0]) * (len(support_sets) - 1)
+        if work > 4_000_000:
+            raise ValueError("Categorical common-group intersection work exceeds the audit bound.")
+        count = 0
+        seed, *others = support_sets
+        for group in seed:
+            if all(group in other for other in others):
+                count += 1
+                if count >= minimum_training_groups:
+                    common_group_supported += multiplicity
+                    break
+
+    return {
+        "n_training_rows": len(training), "n_query_rows": len(query),
+        "n_declared_training_groups": len(set(groups)), "n_fields": width,
+        "minimum_training_groups": minimum_training_groups,
+        "n_query_rows_meeting_threshold_in_each_pair": marginal_supported,
+        "n_query_rows_meeting_threshold_in_common_pair_groups": common_group_supported,
+        "n_query_rows_meeting_threshold_for_full_tuple": full_supported,
+        "n_query_rows_with_common_pair_support_but_not_full_support": common_group_supported - full_supported,
     }

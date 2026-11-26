@@ -17,6 +17,7 @@ from groupbench.cli import main
 from groupbench.data import validate_features
 from groupbench.input_support import (audit_categorical_pair_group_support,
                                       audit_complete_feature_support_by_group,
+                                      audit_categorical_tuple_group_support,
                                       audit_numeric_pair_hull, prediction_input_support)
 from groupbench.model import make_pipeline
 from groupbench.verification import _SAFE_OPEN_SUPPORTED, verify_bundle
@@ -417,6 +418,66 @@ class CategoricalPairGroupSupportTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             audit_categorical_pair_group_support(train, train, training_groups=[],
                                                  minimum_training_groups=1)
+
+
+class ExactCategoricalTupleTests(unittest.TestCase):
+    def test_parity_changes_full_support_but_no_pair_support(self):
+        all_tuples = list(product("01", repeat=3))
+        even = [row for row in all_tuples if row.count("1") % 2 == 0] * 3
+        odd = [row for row in all_tuples if row.count("1") % 2 == 1] * 3
+        groups = [i // 4 for i in range(12)]
+        query = [("1", "1", "1")] * 2
+        one, two = [audit_categorical_tuple_group_support(
+            train, query, training_groups=groups, minimum_training_groups=3) for train in (even, odd)]
+        pair_key = "n_query_rows_meeting_threshold_in_common_pair_groups"
+        marginal_key = "n_query_rows_meeting_threshold_in_each_pair"
+        full_key = "n_query_rows_meeting_threshold_for_full_tuple"
+        self.assertEqual((one[marginal_key], two[marginal_key]), (2, 2))
+        self.assertEqual((one[pair_key], two[pair_key]), (2, 2))
+        self.assertEqual((one[full_key], two[full_key]), (0, 2))
+        self.assertEqual(one["n_query_rows_with_common_pair_support_but_not_full_support"], 2)
+
+    def test_pair_groups_can_be_disjoint_even_when_each_pair_meets_threshold(self):
+        training = [("1", "1", "0"), ("1", "0", "1"), ("0", "1", "1")] * 2
+        groups = [0, 1, 2, 3, 4, 5]
+        result = audit_categorical_tuple_group_support(
+            training, [("1", "1", "1")], training_groups=groups, minimum_training_groups=2)
+        self.assertEqual(result["n_query_rows_meeting_threshold_in_each_pair"], 1)
+        self.assertEqual(result["n_query_rows_meeting_threshold_in_common_pair_groups"], 0)
+        self.assertEqual(result["n_query_rows_meeting_threshold_for_full_tuple"], 0)
+
+    def test_256_support_masks_against_direct_group_by_group_projection(self):
+        from itertools import combinations
+        atoms = list(product("01", repeat=3))
+        for mask in range(256):
+            train = [("0", "0", "0")] + [row for i, row in enumerate(atoms) if mask & (1 << i)]
+            groups = [0] + [row.count("1") % 2 for row in train[1:]]
+            distinct = set(groups)
+            got = audit_categorical_tuple_group_support(
+                train, atoms, training_groups=groups, minimum_training_groups=1)
+            summaries = [0, 0, 0]
+            for q in atoms:
+                pair_groups = []
+                for i, j in combinations(range(3), 2):
+                    pair_groups.append({g for g in distinct if any(
+                        q[i] == row[i] and q[j] == row[j] and identifier == g
+                        for row, identifier in zip(train, groups))})
+                summaries[0] += all(pair_groups)
+                summaries[1] += bool(set.intersection(*pair_groups))
+                summaries[2] += any(row == q for row in train)
+            self.assertEqual([got["n_query_rows_meeting_threshold_" + suffix] for suffix in (
+                "in_each_pair", "in_common_pair_groups", "for_full_tuple")], summaries)
+
+    def test_shape_group_and_projection_work_are_checked(self):
+        train = [("1", "1", "1")]
+        for query in ([], [("1", "1")], [("1", "1", 1)], [("1", "1", "")]):
+            with self.assertRaises(ValueError):
+                audit_categorical_tuple_group_support(train, query, training_groups=[0],
+                                                       minimum_training_groups=1)
+        with self.assertRaisesRegex(ValueError, 'projection work'):
+            wide = [("x",) * 8] * 10_000
+            audit_categorical_tuple_group_support(wide, wide, training_groups=[0] * len(wide),
+                                                   minimum_training_groups=1)
 
 
 if __name__ == "__main__":
