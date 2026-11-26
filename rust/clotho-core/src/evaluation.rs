@@ -324,7 +324,7 @@ pub fn grouped_kfold(groups: &[String], n_splits: usize) -> Result<Vec<Fold>, Ev
 // The iterator's enumeration defines the local row index. Nested splits
 // can traverse an outer training roster without cloning its group strings.
 pub(crate) fn grouped_kfold_labels<'a>(
-    groups: impl ExactSizeIterator<Item = &'a str>,
+    mut groups: impl ExactSizeIterator<Item = &'a str> + Clone,
     n_splits: usize,
 ) -> Result<Vec<Fold>, EvaluationError> {
     let row_count = groups.len();
@@ -343,11 +343,45 @@ pub(crate) fn grouped_kfold_labels<'a>(
     // Both ordinals and eventual fold indices fit under the configured caps.
     const _: () = assert!(MAX_GROUPED_ROWS <= u16::MAX as usize);
     let mut assignment = Vec::with_capacity(row_count);
-    for label in groups {
-        let next_id = group_ids.len() as u16;
-        let (id, count) = group_ids.entry(label).or_insert((next_id, 0_u16));
-        *count += 1;
-        assignment.push(*id);
+    // Recognize runs from a short prefix without a full second pass.
+    // Uniformly interleaved labels still use ordinary row-wise hashing.
+    let use_runs = if row_count >= 128 {
+        let mut probe = groups.clone().take(64);
+        let mut previous = probe.next();
+        let mut repeats = 0;
+        for label in probe {
+            if previous == Some(label) {
+                repeats += 1;
+                if repeats == 4 {
+                    break;
+                }
+            }
+            previous = Some(label);
+        }
+        repeats == 4
+    } else {
+        false
+    };
+    if use_runs {
+        let mut current_label = groups.next().ok_or(EvaluationError::Empty)?;
+        let mut run_length = 1_u16;
+        for label in groups {
+            if label == current_label {
+                run_length += 1;
+            } else {
+                add_group_run(&mut group_ids, &mut assignment, current_label, run_length);
+                current_label = label;
+                run_length = 1;
+            }
+        }
+        add_group_run(&mut group_ids, &mut assignment, current_label, run_length);
+    } else {
+        for label in groups {
+            let next_id = group_ids.len() as u16;
+            let (id, count) = group_ids.entry(label).or_insert((next_id, 0_u16));
+            *count += 1;
+            assignment.push(*id);
+        }
     }
     if n_splits > group_ids.len() {
         return Err(EvaluationError::InsufficientGroups);
@@ -415,6 +449,22 @@ pub(crate) fn grouped_kfold_labels<'a>(
         fold.train_indices.extend(start..row_count);
     }
     Ok(folds)
+}
+
+fn add_group_run<'a>(
+    groups: &mut HashMap<&'a str, (u16, u16)>,
+    assignment: &mut Vec<u16>,
+    label: &'a str,
+    run_length: u16,
+) {
+    let next_id = groups.len() as u16;
+    let (id, count) = groups.entry(label).or_insert((next_id, 0));
+    *count += run_length;
+    if run_length == 1 {
+        assignment.push(*id);
+    } else {
+        assignment.resize(assignment.len() + usize::from(run_length), *id);
+    }
 }
 
 #[cfg(test)]

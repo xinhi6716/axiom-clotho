@@ -462,3 +462,22 @@ fn streaming_regression_keeps_shifted_target_halving_and_loss_detection() {
         Err(EvaluationError::NumericOverflow)
     );
 }
+
+#[test]
+fn split_groups_merge_noncontiguous_runs_with_lexical_and_row_order_intact() {
+    let block = ["b", "b", "", "", "A", "A", "b", "", "a", "a", "", "A"];
+    let groups = labels(&block.repeat(12));
+    let folds = grouped_kfold(&groups, 3).unwrap();
+    assert_partition(&groups, &folds);
+    // Loads are assigned for "", "A", "b", then "a"; the first lightest
+    // fold among the tied loads of 36 is fold 1.
+    for (fold, expected) in folds
+        .iter()
+        .zip([&[2, 3, 7, 10][..], &[4, 5, 8, 9, 11], &[0, 1, 6]])
+    {
+        let rows: Vec<_> = (0..12)
+            .flat_map(|i| expected.iter().map(move |j| i * block.len() + j))
+            .collect();
+        assert_eq!(fold.test_indices, rows);
+    }
+}
