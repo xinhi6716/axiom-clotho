@@ -180,6 +180,43 @@ class DomainSchemaContractTests(unittest.TestCase):
             self.assertFalse(reply.stdout)
             self.assertEqual({p.name: p.read_bytes() for p in root.iterdir()}, before)
 
+    def test_cli_rebuilds_domain_vector_fingerprint_from_outer_rows(self):
+        frame = fixture().iloc[[0, 3, 1, 5, 2, 4]].reset_index(drop=True)
+        frame["d"] = frame["d"].map({"A": "甲", "B": "乙", "C": "丙"})
+        result = benchmark(frame, outer_splits=3, **(ARGS | {"baselines": ("dummy",)}))
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1] / "src"),
+                       OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1", PYTHONDONTWRITEBYTECODE="1")
+            command = [sys.executable, "-m", "groupbench.cli", "validate-evaluation-bundle", str(root)]
+
+            def replay():
+                return subprocess.run(command, env=env, capture_output=True, text=True, timeout=30)
+
+            result.write(root)
+            self.assertEqual(replay().returncode, 0)
+            path = root / "manifest.json"
+            manifest = json.loads(path.read_text())
+            config = manifest["config"]
+            # Same domain names/counts and exact hashes, but a sorted
+            # domain vector does not describe the original retained order.
+            encoded = json.dumps(sorted(frame["d"]), ensure_ascii=False, separators=(",", ":")).encode()
+            alternate = hashlib.sha256(encoded).hexdigest()
+            self.assertNotEqual(config["domain_values_sha256"], alternate)
+            config["domain_values_sha256"] = alternate
+            path.write_text(json.dumps(manifest))
+            receipt_path = root / "checksums.json"
+            receipt = json.loads(receipt_path.read_text())
+            receipt["files"]["manifest.json"] = hashlib.sha256(path.read_bytes()).hexdigest()
+            receipt_path.write_text(json.dumps(receipt))
+            self.assertEqual(verify_bundle(root).bundle_type, "evaluation")
+            frozen = {p.name: p.read_bytes() for p in root.iterdir()}
+            reply = replay()
+            self.assertEqual(reply.returncode, 2, reply.stderr)
+            self.assertIn("domain-vector fingerprint", reply.stderr)
+            self.assertFalse(reply.stdout)
+            self.assertEqual({p.name: p.read_bytes() for p in root.iterdir()}, frozen)
+
     def test_saved_selection_tie_does_not_hide_nonzero_decimal_underflow(self):
         m = deepcopy(self.pred)
         for record in m["inner_selection"]:

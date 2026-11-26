@@ -8,6 +8,7 @@ import os
 import numpy as np
 
 from .data import validate_groups
+from .domain_selection import domain_metadata
 from .metrics import regression_metrics, _checked_arithmetic
 from .prediction_schema import (_manifest, _DECIMAL, _optional_selection_metadata, _extension_families,
     _DOMAIN_FIELDS, _domain_config, _domain_selection, _reject_domain_audits, _domain_candidates,
@@ -200,6 +201,15 @@ def _check(manifest, summary, raw):
         mapping = _domain_config(config, ng)
         if set(mapping) != set(sorted_groups) or config.get("inner_splits") is not None:
             _fail("domain group coverage or inner_splits declaration differs.")
+        # Retained outer rows have canonical original positions and group
+        # IDs, so the declared group map determines a unique domain vector.
+        # This checks agreement within the bundle, not original source data.
+        try:
+            derived = domain_metadata([mapping[group] for group in groups], groups)
+        except UnicodeError:
+            _fail("domain-vector fingerprint requires Unicode scalar domain names.")
+        if derived["domain_values_sha256"] != config["domain_values_sha256"]:
+            _fail("domain-vector fingerprint differs from retained outer row order.")
         inner_counts = config.get("inner_splits_per_outer")
         if not isinstance(inner_counts, list) or len(inner_counts) != nf:
             _fail("domain inner fold schedule coverage differs.")
