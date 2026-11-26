@@ -297,3 +297,42 @@ fn fet_rejects_truncated_quote_but_accepts_complete_capture_without_eol() {
         );
     }
 }
+
+#[test]
+fn rounded_criterion_bracket_cannot_admit_exactly_overwide_fet_input() {
+    for (left, fits) in [("-5.551115123125783e-17", false), ("0", true)] {
+        let w = Workspace::new();
+        w.write(
+            "data.csv",
+            &DATA.replacen(",1,0,0,1e-9", &format!(",1,0,{left},1e-9"), 1),
+        );
+        let r = w.run(&[
+            "extract-fet",
+            "--csv",
+            "data.csv",
+            "--out",
+            "out",
+            "--criterion-a",
+            "5.5e-9",
+            "--polarity",
+            "positive",
+            "--max-bracket-v",
+            "1",
+            "--window-min-v",
+            "-1",
+            "--window-max-v",
+            "3",
+            "--accept-assumptions",
+            "true",
+        ]);
+        if fits {
+            assert!(r.status.success(), "{}", String::from_utf8_lossy(&r.stderr));
+            assert!(w.0.join("out/COMPLETE").is_file());
+        } else {
+            assert_eq!(r.status.code(), Some(2));
+            assert!(r.stdout.is_empty());
+            assert!(String::from_utf8_lossy(&r.stderr).contains("BracketTooWide"));
+            assert!(!w.0.join("out").exists());
+        }
+    }
+}

@@ -422,3 +422,29 @@ fn interior_current_crossing_cannot_round_outside_adjacent_gate_bracket() {
         }
     }
 }
+
+#[test]
+fn criterion_bracket_uses_exact_represented_width_in_both_directions() {
+    let mut p = settings();
+    p.criterion_a = 5.5e-9;
+    p.window_min_v = -1.0;
+    let mut s = samples();
+    for (left, expect_wide) in [
+        (-2.0_f64.powi(-54), true),
+        (0.0, false),
+        (2.0_f64.powi(-54), false),
+    ] {
+        s[0].gate_voltage_v = left;
+        for _ in 0..2 {
+            let output = extract_branch(&acquisition(), &s, p);
+            if expect_wide {
+                assert_eq!(output.unwrap_err(), FetError::BracketTooWide);
+            } else {
+                let f = output.unwrap();
+                assert_eq!(f.bracket_span_v, 1.0);
+                assert!((f.criterion_gate_voltage_v - 0.5).abs() < 1e-14);
+            }
+            s.reverse();
+        }
+    }
+}

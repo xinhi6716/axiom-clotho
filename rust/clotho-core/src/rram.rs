@@ -1,5 +1,6 @@
 //! Explicit SI/binary64 RRAM readpoints and paired descriptive features.
 //! State is declared, never inferred; cycles are not independent devices.
+use crate::interval_width::width_at_most;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
@@ -177,20 +178,8 @@ pub fn extract_branch(b: &Branch, p: Settings) -> Result<Readpoint, RramError> {
                 .ok_or(RramError::ReadVoltageNotBracketed)?;
             let hi = w[0].voltage_v.max(w[1].voltage_v);
             let lo = w[0].voltage_v.min(w[1].voltage_v);
-            let span = hi - lo;
-            // A width rounded onto the limit may still be too wide.
-            // Recover its exact binary64 subtraction residual (TwoDiff).
-            let too_wide = if span == p.max_bracket_span_v {
-                let lo_virtual = hi - span;
-                let hi_virtual = span + lo_virtual;
-                let residual = (hi - hi_virtual) + (lo_virtual - lo);
-                residual > 0.0
-            } else {
-                span > p.max_bracket_span_v
-            };
-            if too_wide {
-                return Err(RramError::BracketTooWide);
-            }
+            let span =
+                width_at_most(lo, hi, p.max_bracket_span_v).ok_or(RramError::BracketTooWide)?;
             // The small weight must come from a small voltage difference,
             // not from subtracting a nearly unit weight from one. Prefer the
             // lower voltage on a tie, independent of acquisition order.

@@ -7,6 +7,7 @@
 
 pub mod evaluation;
 pub mod input_support;
+mod interval_width;
 pub mod knn;
 pub mod numeric_bytes;
 pub mod regression;

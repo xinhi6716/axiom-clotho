@@ -1,5 +1,6 @@
 //! Bounded, explicitly SI/binary64 FET branch features. Not legacy exact-decimal
 //! compatibility, physical threshold identification, or automatic window search.
+use crate::interval_width::width_at_most;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
@@ -198,10 +199,12 @@ pub fn extract_branch(a: &Acquisition, s: &[Sample], p: Settings) -> Result<Feat
         (exact[0].gate_voltage_v, 0.0, vec![exact[0].source_row])
     } else {
         let w = crossing[0];
-        let span = (w[1].gate_voltage_v - w[0].gate_voltage_v).abs();
-        if span > p.max_bracket_span_v {
-            return Err(FetError::BracketTooWide);
-        }
+        let span = width_at_most(
+            w[0].gate_voltage_v.min(w[1].gate_voltage_v),
+            w[0].gate_voltage_v.max(w[1].gate_voltage_v),
+            p.max_bracket_span_v,
+        )
+        .ok_or(FetError::BracketTooWide)?;
         // Form the small weight from the nearer current. Starting at the
         // far endpoint can round a strictly interior fraction to one.
         let d0 = (p.criterion_a - w[0].drain_current_a).abs();
