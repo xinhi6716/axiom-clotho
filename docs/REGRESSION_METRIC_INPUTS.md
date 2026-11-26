@@ -130,3 +130,20 @@ For example, if three rows of one parent each give B-minus-A = −1, and
 one row of a second parent gives +2, the equal-row mean is −1/4 while
 the equal-parent mean is +1/2. Choose and record the estimand before
 evaluation; do not switch weightings based on the apparent winner.
+
+### One shared calibration offset
+
+Use `paired_mae_shared_shift_bounds` for a different question: all
+observed targets may move by the **same** offset while the forecasts are
+fixed. For log targets, this can represent one documented multiplicative
+calibration factor. Supply `(row_id, observed, prediction_a, prediction_b,
+positive_weight)` tuples and a separately frozen row-ID roster, along with
+`shift_bounds=(lower, upper)` in target units. The function returns exact
+B-minus-A values at both endpoints and at the minimum and maximum; an
+interior score can reverse the ranking even if both ends agree. Missing
+targets do not belong in this calculation.
+
+Use the [running two-path example](../examples/calibration-groups-mae/README.md)
+to see why an independently variable shift for each path is not the same
+assumption as one shared reference. Preserve path membership and calibration
+epoch rather than choosing the dependence model after seeing the ranking.

@@ -68,6 +68,8 @@ not real measurements. Current-source commands and matching fixtures are require
 - [Score a fixed device–phase schedule](scheduled-phase-scoring/README.md): see why weighting the same paired forecasts differently can reverse the ranking.
 - [Check paired MAE sensitivity to one parent](paired-parent-influence/README.md): see how repeats differ from declared parent support and why omitting one parent can reverse the contrast.
 
+- [Test MAE under shared or separate calibration offsets](calibration-groups-mae/README.md): two reference-path dependence choices on the same frozen forecasts.
+
 The budget and interval utilities print descriptive JSON. If you redirect it to a file, choose a new path: the shell may overwrite an existing file before Python starts.
 
 ## Before using real data
