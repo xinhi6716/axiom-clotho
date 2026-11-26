@@ -575,6 +575,38 @@ class MeasurementRegressionTests(unittest.TestCase):
                 self.assertFalse(destination.exists())
                 self.assertEqual(tree(self.run_dir), before)
 
+    def test_saved_score_rejects_reordered_identity_mapping_with_unchanged_predictions(self):
+        self.prepare()
+        flow.run(self.prepared, self.run_dir)
+        original = tree(self.run_dir)
+        columns = ("device", "group", "prediction")
+        rows = c.parse_csv(original["prediction_rows.csv"], columns)
+        self.assertEqual([row["device"] for row in rows], sorted(row["device"] for row in rows))
+        # Reassign engine positions to the opposite cohort ordering while
+        # retaining every prediction, device and group exactly once.
+        reversed_ids = [{k: row[k] for k in ("device", "group")} for row in reversed(rows)]
+        altered = [{**identity, "prediction": row["prediction"]}
+                   for identity, row in zip(reversed_ids, rows)]
+        self.assertNotEqual({r["device"]: r["prediction"] for r in rows},
+                            {r["device"]: r["prediction"] for r in altered})
+        metadata = c.parse_json(original["run.json"])
+        metadata["future_cohort"] = reversed_ids
+        receipt = c.parse_json(original["COMPLETE.json"])
+        for name, data in (("prediction_rows.csv", c.csv_bytes(columns, altered)),
+                           ("run.json", c.json_bytes(metadata))):
+            (self.run_dir / name).write_bytes(data)
+            receipt["files_sha256"][name] = c.sha(data)
+        (self.run_dir / "COMPLETE.json").write_bytes(c.json_bytes(receipt))
+        c.load_bundle(self.run_dir, "run")
+        saved = tree(self.run_dir)
+        result = self.command("score", "--run-dir", self.run_dir, "--outcomes",
+                              self.inputs / "later_outcomes.csv", "--output-dir", self.score_dir, no_site=True)
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn("canonical future cohort order", result.stderr)
+        self.assertFalse(result.stdout)
+        self.assertFalse(self.score_dir.exists())
+        self.assertEqual(tree(self.run_dir), saved)
+
     def test_report_escapes_endpoint_markup_and_has_no_external_assets(self):
         config = self.config(endpoint_name="<script>alert(1)</script>")
         report = flow._report("<unsafe>", config, ["<script>bad</script>"], [("scores.json", "<metrics>")]).decode()

@@ -388,6 +388,10 @@ def score(run_dir, outcomes_csv, output_dir):
             raise WorkflowError("saved preparation provenance is malformed")
         rows = parse_csv(payloads["prediction_rows.csv"], ("device", "group", "prediction"))
         predictions = keyed(rows)
+        # Prepare fixes the device order used by the calculator's row
+        # positions. A reordered identity map cannot rebind those positions.
+        if list(predictions) != sorted(predictions):
+            raise WorkflowError("saved predictions differ from canonical future cohort order")
         expected = [{"device": r["device"], "group": identifier(r["group"])} for r in rows]
         if metadata["future_cohort"] != expected or {r["group"] for r in rows} & set(groups):
             raise WorkflowError("saved prediction identities or group boundary are inconsistent")
