@@ -215,6 +215,9 @@ fn optimize(
     mut parameters: Vec<f64>,
     max_iterations: usize,
 ) -> Result<Vec<f64>, ClassificationError> {
+    // Keep a disjoint trial buffer. A rejected line-search point must not
+    // update the current parameters; an accepted one swaps storage.
+    let mut candidate = Vec::new();
     for _ in 0..max_iterations {
         let ObjectiveDerivatives {
             value: objective,
@@ -237,24 +240,26 @@ fn optimize(
             return Err(ClassificationError::ConvergenceFailure);
         }
         let mut fraction = 1.0;
-        let mut accepted = None;
+        let mut accepted = false;
         for _ in 0..MAX_BACKTRACKS {
-            let candidate: Vec<_> = parameters
-                .iter()
-                .zip(&step)
-                .map(|(value, step)| value - fraction * step)
-                .collect();
+            candidate.clear();
+            candidate.extend(
+                parameters.iter().zip(&step).map(|(value, step)| value - fraction * step),
+            );
             // Large trial steps may overflow; backtrack rather than returning
             // a model or changing the objective's regularization strength.
             if let Ok(next_objective) = loss(x, y, alpha, &candidate) {
                 if next_objective <= objective - 1e-4 * fraction * descent {
-                    accepted = Some(candidate);
+                    accepted = true;
                     break;
                 }
             }
             fraction *= 0.5;
         }
-        parameters = accepted.ok_or(ClassificationError::ConvergenceFailure)?;
+        if !accepted {
+            return Err(ClassificationError::ConvergenceFailure);
+        }
+        std::mem::swap(&mut parameters, &mut candidate);
     }
     Err(ClassificationError::ConvergenceFailure)
 }
@@ -565,6 +570,18 @@ fn dot(a: &[f64], b: &[f64]) -> Result<f64, ClassificationError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rejected_full_newton_step_does_not_change_the_current_iterate() {
+        let x = vec![vec![1.0]; 4];
+        let y = [0.0, 1.0, 0.0, 1.0];
+        let initial = vec![4.0];
+        let d = derivatives(&x, &y, 0.0, &initial).unwrap();
+        let step = solve_positive_definite(d.curvature, &d.gradient).unwrap();
+        assert!(loss(&x, &y, 0.0, &[initial[0] - step[0]]).unwrap() > d.value);
+        let solution = optimize(&x, &y, 0.0, initial, MAX_ITERATIONS).unwrap();
+        assert!(solution[0].abs() < 1e-9);
+    }
 
     #[test]
     fn packed_lower_curvature_matches_zero_logit_outer_products() {
