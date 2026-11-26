@@ -679,7 +679,7 @@ def paired_parent_mae_deletion_bounds(rows, *, expected_roster, max_deletions):
     }
 
 
-def _paired_group_error_units(rows, expected_roster):
+def _paired_group_residual_units(rows, expected_roster):
     if not all(map(_bounded_paired_sequence, (rows, expected_roster))):
         raise ValueError("Rows and frozen roster must be bounded nonempty lists or tuples.")
     roster = {}
@@ -700,9 +700,14 @@ def _paired_group_error_units(rows, expected_roster):
             raise ValueError("Paired rows must match the frozen roster exactly.")
         seen.add(row_id)
         y, pa, pb = map(_paired_binary64_units, (target, a, b))
-        yield roster[row_id], abs(pa - y), abs(pb - y)
+        yield roster[row_id], pa - y, pb - y
     if len(seen) != len(roster):
         raise ValueError("Paired rows must match the frozen roster exactly.")
+
+
+def _paired_group_error_units(rows, expected_roster):
+    for group, residual_a, residual_b in _paired_group_residual_units(rows, expected_roster):
+        yield group, abs(residual_a), abs(residual_b)
 
 
 def paired_practical_loss_rates(rows, *, expected_roster, margin):
@@ -787,3 +792,56 @@ def paired_absolute_squared_loss_tradeoff(rows, *, expected_roster, error_scale)
             sum(Fraction(b, n * scale**2) for n, _, b in groups.values()) / len(groups),
         ),
     }
+
+
+def paired_group_mse_components(rows, *, expected_roster):
+    """Decompose fixed-cohort MSE for both forecasts and their exact difference.
+
+    Rows are (row_id, observed, prediction_a, prediction_b), on a separately
+    frozen (row_id, group_id) roster. All rows must be complete, with shared
+    target units. Under either row or equal-group weighting, MSE splits into
+    within-group centered dispersion, between-group squared bias dispersion
+    and squared overall bias. All terms are exact Fractions for represented
+    binary64 values; the signed overall bias is in units of the target and
+    other terms are in squared units.
+
+    Between-group dispersion is descriptive, not evidence of physical group
+    effects or independence. No test outcomes are used to correct predictions,
+    change cohorts, or choose which weighting to report.
+    """
+    totals = {}
+    for group, residual_a, residual_b in _paired_group_residual_units(rows, expected_roster):
+        accum = totals.setdefault(group, [0, 0, 0, 0, 0])
+        accum[0] += 1
+        accum[1] += residual_a
+        accum[2] += residual_b
+        accum[3] += residual_a * residual_a
+        accum[4] += residual_b * residual_b
+    quantum = _BINARY64_QUANTUM_DENOMINATOR
+    unit_square = quantum**2
+    k = len(totals)
+
+    def summarize(column, row_weighted):
+        bias = mse = mean_group_bias_square = Fraction()
+        for state in totals.values():
+            n, error_sum, squares = state[0], state[column], state[column + 2]
+            weight = Fraction(n, len(rows)) if row_weighted else Fraction(1, k)
+            group_bias = Fraction(error_sum, n * quantum)
+            bias += weight * group_bias
+            mse += weight * Fraction(squares, n * unit_square)
+            mean_group_bias_square += weight * group_bias**2
+        bias_square = bias**2
+        return {
+            "bias": bias,
+            "mse": mse,
+            "within_group_centered_mse": mse - mean_group_bias_square,
+            "between_group_bias_dispersion": mean_group_bias_square - bias_square,
+            "overall_bias_squared": bias_square,
+        }
+
+    def view(row_weighted):
+        a, b = (summarize(column, row_weighted) for column in (1, 2))
+        return {"a": a, "b": b, "b_minus_a": {key: b[key] - a[key] for key in a}}
+
+    return {"n_rows": len(rows), "n_declared_groups": k,
+            "row_weighted": view(True), "equal_group": view(False)}
