@@ -174,3 +174,16 @@ out a common bias under the reported bounds, even if one interval is unknown.
 A nonempty common intersection is not proof of equal bias, calibration or
 acceptable mismatch. The diagnostic reports attempted and timing-eligible
 counts without printing bias values or modifying eligibility.
+
+With documented integration offsets, `--read-apertures apertures.csv` checks
+whether the full early or terminal read aperture fits its elapsed-time window.
+The exact columns are `lot,wafer,die,cell,episode,nominal_us,aperture_open_offset_us,aperture_close_offset_us`.
+Offsets are signed integral microseconds relative to the captured anchor tick.
+Supply one row per uniquely captured early/terminal anchor; leave unknown
+offsets blank. Use this diagnostic only with known offsets on the capture clock,
+not a programmed aperture setting standing in for the actual acquisition.
+The two aperture endpoints shift together under the sum of the origin and read
+timestamp error bounds. The report separates aperture fit for every admissible
+shift, fit for some but not all shifts, and impossible full fit. Missing
+metadata, unusable timestamps, and clock changes stay distinct. This diagnostic
+does not alter the scheduled timestamp eligibility or certify ADC calibration.

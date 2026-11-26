@@ -261,6 +261,59 @@ def read_bias_status(slots, metadata):
     return "missing_or_unknown_bias_without_known_conflict"
 
 
+def captured_apertures(path, expected):
+    apertures = defaultdict(dict)
+    fields = IDENTITY + ("nominal_us", "aperture_open_offset_us", "aperture_close_offset_us")
+    for key, (raw_nominal, opened, closed) in records(path, fields):
+        nominal = integer(raw_nominal)
+        if nominal not in ANCHORS[1:]:
+            raise ValueError("aperture table accepts only the early and terminal anchor reads")
+        if key not in expected or len(expected[key].get(nominal, ())) != 1:
+            raise ValueError("aperture does not identify one captured frozen anchor")
+        if nominal in apertures[key]:
+            raise ValueError("duplicate aperture for the same captured anchor")
+        if any(value and not SIGNED_INTEGER.fullmatch(value) for value in (opened, closed)):
+            raise ValueError("aperture offsets must be signed integral microseconds")
+        if opened and closed:
+            lower, upper = int(opened), int(closed)
+            if lower > upper:
+                raise ValueError("aperture opens after it closes")
+            apertures[key][nominal] = lower, upper
+        else:
+            apertures[key][nominal] = None
+    return apertures
+
+
+def aperture_status(slots, nominal, offsets):
+    rows = slots.get(nominal, ())
+    if len(rows) != 1:
+        return "missing_or_ambiguous_capture"
+    if offsets is None:
+        return "missing_or_unknown_aperture"
+    origins = slots.get(ANCHORS[0], ())
+    if len(origins) != 1 or origins[0] is None or rows[0] is None:
+        return "unusable_origin_or_read_timestamp"
+    origin, observation = origins[0], rows[0]
+    if origin[:2] != observation[:2]:
+        return "different_clock_or_epoch"
+
+    delta = observation[2] - origin[2]
+    error = observation[3] + origin[3]
+    early = nominal == ANCHORS[1]
+    lower, upper = (0, EARLY_UPPER) if early else (TERMINAL_LOWER, TERMINAL_UPPER)
+    # Both aperture ends shift by the same timestamp error. The full
+    # aperture fits only for shifts between the endpoint constraints.
+    need_lower = lower - (delta + offsets[0])
+    need_upper = upper - (delta + offsets[1])
+    min_fit, max_fit = max(-error, need_lower), min(error, need_upper)
+    if min_fit > max_fit or (early and max_fit == need_lower):
+        return "full_aperture_cannot_fit"
+    if ((-error > need_lower if early else -error >= need_lower)
+            and error <= need_upper):
+        return "full_aperture_within_window"
+    return "aperture_fit_depends_on_timestamp_error"
+
+
 def validate_digest(digest, label):
     if digest is not None and (not isinstance(digest, str) or not SHA256.fullmatch(digest)):
         raise ValueError(f"{label} SHA-256 must be 64 lowercase hexadecimal digits")
@@ -270,7 +323,7 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
           diagnose_dies=False, block_map_path=None, block_map_sha256=None, stress_history_path=None,
           diagnose_die_stress=False, diagnose_duplicate_anchors=False,
           diagnose_terminal_alternatives=False, capture_sha256=None, readout_path_table=None,
-          read_bias_table=None):
+          read_bias_table=None, aperture_table=None):
     validate_digest(roster_sha256, "frozen roster")
     validate_digest(capture_sha256, "timestamp capture")
     validate_digest(block_map_sha256, "acquisition block map")
@@ -316,6 +369,9 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
     attempted_paths, eligible_paths = Counter(), Counter()
     biases = read_bias_intervals(read_bias_table, expected) if read_bias_table is not None else None
     attempted_bias, eligible_bias = Counter(), Counter()
+    apertures = captured_apertures(aperture_table, expected) if aperture_table is not None else None
+    attempted_apertures = {nominal: Counter() for nominal in ANCHORS[1:]}
+    eligible_apertures = {nominal: Counter() for nominal in ANCHORS[1:]}
     classifications = Counter()
     die_counts = defaultdict(lambda: [0, 0]) if diagnose_dies else None
     eligible_block_dies = defaultdict(set)
@@ -339,6 +395,12 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
             attempted_bias[status] += 1
             if reason == "eligible":
                 eligible_bias[status] += 1
+        if apertures is not None:
+            for nominal in ANCHORS[1:]:
+                status = aperture_status(slots, nominal, apertures.get(key, {}).get(nominal))
+                attempted_apertures[nominal][status] += 1
+                if reason == "eligible":
+                    eligible_apertures[nominal][status] += 1
         if die_counts is not None:
             counts = die_counts[key[:3]]
             counts[0] += 1
@@ -462,6 +524,14 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
             "frozen_attempted_by_status": dict(sorted(attempted_bias.items())),
             "timing_eligible_by_status": dict(sorted(eligible_bias.items())),
         }
+    if apertures is not None:
+        report["reported_read_aperture_support_by_us"] = {
+            str(nominal): {
+                "frozen_attempted_by_status": dict(sorted(attempted_apertures[nominal].items())),
+                "timing_eligible_by_status": dict(sorted(eligible_apertures[nominal].items())),
+            }
+            for nominal in ANCHORS[1:]
+        }
     return report
 
 
@@ -493,6 +563,8 @@ def main():
                         help="independent captured anchor to readout path metadata")
     parser.add_argument("--read-bias", type=Path,
                         help="independent captured anchor to observed read-bias bounds")
+    parser.add_argument("--read-apertures", type=Path,
+                        help="optional observed early/terminal integration aperture offsets")
     args = parser.parse_args()
     try:
         report = audit(args.frozen_roster, args.capture, diagnose_anchors=args.diagnose_anchors,
@@ -503,7 +575,7 @@ def main():
                        diagnose_duplicate_anchors=args.diagnose_duplicate_anchors,
                        diagnose_terminal_alternatives=args.diagnose_terminal_alternatives,
                        capture_sha256=args.capture_sha256, readout_path_table=args.readout_paths,
-                       read_bias_table=args.read_bias)
+                       read_bias_table=args.read_bias, aperture_table=args.read_apertures)
     except (OSError, UnicodeError, csv.Error):
         parser.exit(2, "error: input could not be read as UTF-8 CSV\n")
     except ValueError as exc:

@@ -24,7 +24,7 @@ def episode(key=BASE, early=1_000_000, final=100_000_000_000, error=0):
 
 
 class RetentionAnchorAudit(unittest.TestCase):
-    def run_capture(self, roster, rows, capture_header=IDS + TIMES, *, extra=(), block_map=None, stress=None, readout_paths=None, read_bias=None):
+    def run_capture(self, roster, rows, capture_header=IDS + TIMES, *, extra=(), block_map=None, stress=None, readout_paths=None, read_bias=None, apertures=None):
         with tempfile.TemporaryDirectory() as tmp:
             folder = Path(tmp)
             for name, header, payload in (
@@ -52,6 +52,12 @@ class RetentionAnchorAudit(unittest.TestCase):
                     columns = IDS + ("nominal_us", "observed_read_bias_uV", "read_bias_error_uV")
                     csv.writer(stream).writerows((columns, *read_bias))
                 extra = (*extra, "--read-bias", str(bias_path))
+            if apertures is not None:
+                aperture_file = folder / "apertures.csv"
+                with aperture_file.open("w", newline="", encoding="utf-8") as stream:
+                    fields = IDS + ("nominal_us", "aperture_open_offset_us", "aperture_close_offset_us")
+                    csv.writer(stream).writerows((fields, *apertures))
+                extra = (*extra, "--read-apertures", str(aperture_file))
             return subprocess.run(
                 [sys.executable, str(TOOL), "--frozen-roster", str(folder / "roster.csv"),
                  "--capture", str(folder / "capture.csv"), *extra],
@@ -621,6 +627,62 @@ class RetentionAnchorAudit(unittest.TestCase):
                 self.assertFalse(denied.stdout)
                 self.assertIn(diagnostic, denied.stderr)
                 self.assertNotIn("-731", denied.stderr)
+
+    def test_read_timestamp_eligibility_does_not_imply_full_aperture_support(self):
+        roster = [(*BASE[:4], f"E{i}") for i in range(5)]
+        capture = episode(roster[0], early=1, final=80_000_000_000)
+        capture += episode(roster[1], early=12, final=80_000_000_012, error=2)
+        capture += episode(roster[2], early=5, error=5)
+        capture += episode(roster[3]) + episode(roster[4])[:2]
+        first, last = 1_000_000, 100_000_000_000
+        apertures = [
+            (*roster[0], first, -1, 0), (*roster[0], last, 0, 1),
+            (*roster[1], first, -11, 0), (*roster[1], last, -12, 1),
+            # The aperture is wider than the entire early window; translating
+            # the nominal read within its error support cannot make it fit.
+            (*roster[2], first, -5, 1_020_000), (*roster[2], last, 0, 1),
+            (*roster[3], first, "", ""), (*roster[4], first, -1, 1),
+        ]
+        baseline = self.run_capture(roster, capture)
+        checked = self.run_capture(roster, capture, apertures=apertures)
+        self.assertEqual((baseline.returncode, checked.returncode), (1, 1))
+        report = json.loads(checked.stdout)
+        self.assertEqual(report.pop("reported_read_aperture_support_by_us"), {
+            str(first): {
+                "frozen_attempted_by_status": {
+                    "aperture_fit_depends_on_timestamp_error": 1, "full_aperture_cannot_fit": 2,
+                    "full_aperture_within_window": 1, "missing_or_unknown_aperture": 1,
+                },
+                "timing_eligible_by_status": {
+                    "aperture_fit_depends_on_timestamp_error": 1, "full_aperture_cannot_fit": 1,
+                    "missing_or_unknown_aperture": 1,
+                },
+            },
+            str(last): {
+                "frozen_attempted_by_status": {
+                    "aperture_fit_depends_on_timestamp_error": 1, "full_aperture_within_window": 2,
+                    "missing_or_ambiguous_capture": 1, "missing_or_unknown_aperture": 1,
+                },
+                "timing_eligible_by_status": {
+                    "aperture_fit_depends_on_timestamp_error": 1, "full_aperture_within_window": 1,
+                    "missing_or_unknown_aperture": 1,
+                },
+            },
+        })
+        self.assertEqual(report, json.loads(baseline.stdout))
+        self.assertNotIn("privateLot", checked.stdout)
+
+    def test_read_aperture_rejects_reversed_offsets_and_unlinked_rows(self):
+        rows = episode()
+        for aperture, diagnostic in (
+            ((*BASE, 0, 0, 0), "only the early and terminal"),
+            ((*BASE, 1_000_000, 1, -1), "opens after it closes"),
+            ((*BASE, 1_000_000, "1.5", 2), "integral microseconds"),
+        ):
+            result = self.run_capture([BASE], rows, apertures=[aperture])
+            self.assertEqual(result.returncode, 2)
+            self.assertFalse(result.stdout)
+            self.assertIn(diagnostic, result.stderr)
 
     def test_capture_cannot_supply_labels_or_change_frozen_identity_set(self):
         r = self.run_capture([BASE], [(*row, "sensitive-value") for row in episode()],
