@@ -373,5 +373,70 @@ class ProcessContractTests(unittest.TestCase):
                 self.assertEqual(set(issue), {"code", "field", "row_position", "feature_position"})
 
 
+
+class TwoFactorDesignSupportTests(unittest.TestCase):
+    def test_replication_does_not_connect_a_disconnected_design(self):
+        from groupbench.process_contract import audit_two_factor_additive_design
+
+        rows = [('same', 'same'), ('b', 'high'), ('b', 'high')]
+        report = audit_two_factor_additive_design(
+            rows, a_levels=['same', 'b', 'unused'], b_levels=['same', 'high'])
+        self.assertEqual((report.n_records, report.n_distinct_cells), (3, 2))
+        self.assertEqual((report.design_rank, report.full_design_rank), (2, 4))
+        self.assertEqual((report.within_cell_residual_df, report.distinct_cell_additivity_df), (1, 0))
+        self.assertEqual(report.components, (((0,), (0,)), ((1,), (1,)), ((2,), ())))
+        self.assertEqual(report.cell_counts, ((0, 0, 1), (1, 1, 2)))
+        self.assertEqual(report, audit_two_factor_additive_design(
+            rows[::-1], a_levels=['same', 'b', 'unused'], b_levels=['same', 'high']))
+
+    def test_distinct_cells_and_repeats_contribute_different_residual_df(self):
+        from groupbench.process_contract import audit_two_factor_additive_design
+
+        levels = ('low', 'high')
+        square = [(a, b) for a in levels for b in levels]
+        tree = audit_two_factor_additive_design(
+            square[:-1] * 10, a_levels=levels, b_levels=levels)
+        cycle = audit_two_factor_additive_design(
+            square + [square[0]] * 2, a_levels=levels, b_levels=levels)
+        self.assertEqual((tree.design_rank, tree.distinct_cell_additivity_df,
+                          tree.within_cell_residual_df), (3, 0, 27))
+        self.assertEqual((cycle.design_rank, cycle.distinct_cell_additivity_df,
+                          cycle.within_cell_residual_df), (3, 1, 2))
+
+    def test_exact_graph_rank_matches_independent_matrix_elimination(self):
+        from fractions import Fraction
+        from groupbench.process_contract import audit_two_factor_additive_design
+
+        a_levels, b_levels = ('a0', 'a1', 'a2'), ('b0', 'b1', 'b2')
+        grid = [(a, b) for a in a_levels for b in b_levels]
+        for mask in range(1, 1 << len(grid)):
+            rows = [pair for index, pair in enumerate(grid) if mask & (1 << index)]
+            matrix = [[Fraction(left == level) for level in a_levels] +
+                      [Fraction(right == level) for level in b_levels] for left, right in rows]
+            pivot = 0
+            for column in range(len(a_levels) + len(b_levels)):
+                pick = next((i for i in range(pivot, len(rows)) if matrix[i][column]), None)
+                if pick is None:
+                    continue
+                matrix[pivot], matrix[pick] = matrix[pick], matrix[pivot]
+                for row in matrix[pivot + 1:]:
+                    ratio = row[column] / matrix[pivot][column]
+                    row[:] = [x - ratio * y for x, y in zip(row, matrix[pivot])]
+                pivot += 1
+            audit = audit_two_factor_additive_design(rows, a_levels=a_levels, b_levels=b_levels)
+            self.assertEqual(audit.design_rank, pivot, mask)
+            self.assertEqual(audit.distinct_cell_additivity_df, len(rows) - pivot, mask)
+
+    def test_rejects_undeclared_or_ambiguous_records_and_levels(self):
+        from groupbench.process_contract import audit_two_factor_additive_design
+
+        for levels in ([], ['a', 'a'], ['unknown'], {'a'}, [' a'], ['a\0'], [1]):
+            with self.subTest(levels=levels), self.assertRaises(ValueError):
+                audit_two_factor_additive_design([('a', 'b')], a_levels=levels, b_levels=['b'])
+        for rows in ([], [('a', 'b', 'response')], [('A', 'b')], [('a', [])],
+                     {'a': 'b'}, [('a', 'b')] * 20_001):
+            with self.assertRaises(ValueError):
+                audit_two_factor_additive_design(rows, a_levels=['a'], b_levels=['b'])
+
 if __name__ == "__main__":
     unittest.main()

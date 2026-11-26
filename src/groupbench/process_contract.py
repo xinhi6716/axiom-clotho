@@ -525,3 +525,92 @@ def summarize_bonded_track_attempts(attempt_ids, records, *, height_window_mm):
                               total_height / measured if measured else None,
                               (Fraction(bonded, n), Fraction(bonded + unknown, n)),
                               (Fraction(hits, n), Fraction(hits + (bonded - measured) + unknown, n)))
+
+
+@dataclass(frozen=True)
+class TwoFactorDesignSupport:
+    """Structural support only; all returned level positions are zero-based."""
+
+    n_records: int
+    n_distinct_cells: int
+    design_rank: int
+    full_design_rank: int
+    within_cell_residual_df: int
+    distinct_cell_additivity_df: int
+    # Counts in declaration position order, with unrepresented cells omitted.
+    cell_counts: tuple[tuple[int, int, int], ...]
+    # Each component is (factor A level positions, factor B level positions).
+    # Unrepresented levels appear as their own singleton components.
+    components: tuple[tuple[tuple[int, ...], tuple[int, ...]], ...]
+
+
+def audit_two_factor_additive_design(records, *, a_levels, b_levels) -> TwoFactorDesignSupport:
+    """Inspect recorded factor support without response values or model fitting.
+
+    Declare each factor's levels as ordered, unique, non-placeholder strings.
+    Each ordered record is a pair (A level, B level), one per response-bearing
+    record; repeated pairs do not establish independent experimental runs.
+    The caller is responsible for fixing the eligible records before scoring.
+
+    Sign-reversing the B columns makes the additive design the incidence
+    matrix of a bipartite graph. Its exact rank is vertices minus connected
+    components, including declared but unobserved vertices. A within-factor
+    level contrast is estimable exactly when both levels share a component.
+    Distinct-cell additivity degrees of freedom count independent cycles.
+    Within-cell residual degrees of freedom count repeated *records*, not
+    independent repeats or evidence for an error model. This audit cannot
+    establish randomization, causality, effect magnitude or extrapolation.
+    """
+    def index(levels):
+        if (type(levels) not in (list, tuple) or not 1 <= len(levels) <= MAX_RECORDS
+                or any(not _identity(level) for level in levels)
+                or len(levels) != len(set(levels))):
+            raise ValueError("Factor levels must be ordered, unique declared identifiers.")
+        return {level: position for position, level in enumerate(levels)}
+
+    a, b = index(a_levels), index(b_levels)
+    if type(records) not in (list, tuple) or not 1 <= len(records) <= MAX_RECORDS:
+        raise ValueError("Design records must be a bounded nonempty ordered sequence.")
+
+    offset = len(a)
+    vertices = offset + len(b)
+    parent = list(range(vertices))
+    size = [1] * vertices
+
+    def root(i):
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    counts = Counter()
+    for record in records:
+        if (type(record) not in (list, tuple) or len(record) != 2
+                or type(record[0]) is not str or record[0] not in a
+                or type(record[1]) is not str or record[1] not in b):
+            raise ValueError("Each design record must pair two declared factor levels.")
+        i, j = a[record[0]], b[record[1]]
+        counts[i, j] += 1
+        if counts[i, j] != 1:
+            continue
+        x, y = root(i), root(offset + j)
+        if x != y:
+            if size[x] < size[y]:
+                x, y = y, x
+            parent[y] = x
+            size[x] += size[y]
+
+    components = {}
+    for i in range(vertices):
+        left, right = components.setdefault(root(i), ([], []))
+        if i < offset:
+            left.append(i)
+        else:
+            right.append(i - offset)
+    rank = vertices - len(components)
+    n, distinct = len(records), len(counts)
+    return TwoFactorDesignSupport(
+        n, distinct, rank, vertices - 1, n - distinct, distinct - rank,
+        tuple((i, j, counts[i, j]) for i, j in sorted(counts)),
+        tuple((tuple(left), tuple(right)) for left, right in components.values()),
+    )
