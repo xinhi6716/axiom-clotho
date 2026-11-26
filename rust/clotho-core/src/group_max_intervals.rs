@@ -9,7 +9,7 @@ use crate::group_max_calibration::{
     calibrate_group_max, valid_key, CalibrationRow, GroupMaxCutoff, GroupMaxError, RowKey,
     MAX_CALIBRATION_ROWS,
 };
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeSet, HashMap};
 
 #[derive(Clone, Copy, Debug)]
 pub struct QueryCenter<'a> {
@@ -96,13 +96,32 @@ pub fn calibrate_group_max_intervals<'a>(
     if !query_roster.iter().copied().chain(query_centers.iter().map(|r| r.key)).all(valid_key) {
         return Err(QueryIntervalError::InvalidQueryKey);
     }
-    let expected: BTreeSet<_> = query_roster.iter().copied().collect();
-    let supplied: BTreeMap<_, _> = query_centers.iter().map(|r| (r.key, r.center)).collect();
-    if expected.len() != query_roster.len() || supplied.len() != query_centers.len()
-        || !expected.iter().copied().eq(supplied.keys().copied()) {
+    if query_roster.len() != query_centers.len() {
         return Err(QueryIntervalError::QueryRosterMismatch);
     }
-    if !supplied.values().all(|x| x.is_finite()) {
+    // Aligned, strictly ordered keys already establish a one-to-one match.
+    // Otherwise consume an exact-key index in roster order: removing each
+    // match rejects duplicate expected keys as well as missing identities.
+    let realigned = if query_roster.iter().copied().eq(query_centers.iter().map(|r| r.key))
+        && query_roster.windows(2).all(|keys| keys[0] < keys[1])
+    {
+        None
+    } else {
+        let mut supplied: HashMap<_, _> =
+            query_centers.iter().map(|r| ((r.key.group, r.key.row), r.center)).collect();
+        if supplied.len() != query_centers.len() {
+            return Err(QueryIntervalError::QueryRosterMismatch);
+        }
+        Some(
+            query_roster
+                .iter()
+                .map(|key| {
+                    supplied.remove(&(key.group, key.row)).ok_or(QueryIntervalError::QueryRosterMismatch)
+                })
+                .collect::<Result<Vec<_>, _>>()?,
+        )
+    };
+    if !query_centers.iter().all(|r| r.center.is_finite()) {
         return Err(QueryIntervalError::NonfiniteCenter);
     }
     let cutoff = calibrate_group_max(calibration_roster, calibration_rows, numerator, denominator)
@@ -125,8 +144,8 @@ pub fn calibrate_group_max_intervals<'a>(
             if !guard.is_finite() {
                 return Err(QueryIntervalError::NonfiniteBound);
             }
-            let intervals = query_roster.iter().copied().map(|key| {
-                let center = supplied[&key];
+            let intervals = query_roster.iter().copied().enumerate().map(|(i, key)| {
+                let center = realigned.as_ref().map_or_else(|| query_centers[i].center, |c| c[i]);
                 // Preserve even a signed-zero center for a point cutoff.
                 let (lower, upper) = if guard == 0.0 {
                     (center, center)
@@ -166,6 +185,31 @@ mod tests {
         });
         assert_eq!(outward_sum(1.0, 1.0, true), Ok(2.0));
         assert_eq!(outward_sum(0.0, f64::from_bits(1), true), Ok(f64::from_bits(1)));
+    }
+
+    #[test]
+    fn exact_alignment_matches_shuffled_rows_and_rejects_duplicate_keys_before_values() {
+        let cal = CalibrationRow { observed: 0.0, ..CAL };
+        let b = QueryCenter { key: B, center: -0.0 };
+        let c = QueryCenter { key: C, center: 2.0 };
+        let x = calibrate_group_max_intervals(&[A], &[cal], &[B, C], &[b, c], 1, 2).unwrap();
+        let y = calibrate_group_max_intervals(&[A], &[cal], &[B, C], &[c, b], 1, 2).unwrap();
+        assert_eq!(x, y);
+        if let GroupMaxIntervals::Finite { intervals, .. } = y {
+            assert_eq!(intervals[0].lower.to_bits(), (-0.0_f64).to_bits());
+            assert_eq!(intervals[1].lower.to_bits(), 2.0_f64.to_bits());
+        } else {
+            panic!("expected finite intervals");
+        }
+        let bad = QueryCenter { center: f64::NAN, ..b };
+        assert_eq!(
+            calibrate_group_max_intervals(&[A], &[cal], &[B, B], &[bad, c], 1, 2),
+            Err(QueryIntervalError::QueryRosterMismatch)
+        );
+        assert_eq!(
+            calibrate_group_max_intervals(&[A], &[cal], &[B, C], &[bad, b], 1, 2),
+            Err(QueryIntervalError::QueryRosterMismatch)
+        );
     }
 
     #[test]
