@@ -150,6 +150,16 @@ def stress_history(path, expected):
     return result
 
 
+def whole_episode_stress_status(history):
+    if history is None:
+        return "missing_declaration"
+    if "off_schedule_bias_observed" in history:
+        return "off_schedule_bias_observed_in_any_interval"
+    if history == ("no_off_schedule_bias_documented",) * len(STRESS_INTERVALS):
+        return "no_off_schedule_bias_documented_in_both_intervals"
+    return "unknown_without_observed_off_schedule_bias"
+
+
 def validate_digest(digest, label):
     if digest is not None and (not isinstance(digest, str) or not SHA256.fullmatch(digest)):
         raise ValueError(f"{label} SHA-256 must be 64 lowercase hexadecimal digits")
@@ -196,6 +206,7 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
     eligible_die_blocks = defaultdict(set)
     stress_attempted = [Counter(), Counter()]
     stress_eligible = [Counter(), Counter()]
+    whole_stress_attempted, whole_stress_eligible = Counter(), Counter()
     for key, slots in expected.items():
         reason = verdict(slots) if key in present else "missing_capture"
         classifications[reason] += 1
@@ -208,7 +219,12 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
             eligible_block_dies[block].add(die)
             eligible_die_blocks[die].add(block)
         if stress is not None:
-            for i, state in enumerate(stress.get(key, ("missing_declaration",) * 2)):
+            history = stress.get(key)
+            overall = whole_episode_stress_status(history)
+            whole_stress_attempted[overall] += 1
+            if reason == "eligible":
+                whole_stress_eligible[overall] += 1
+            for i, state in enumerate(history or ("missing_declaration",) * len(STRESS_INTERVALS)):
                 stress_attempted[i][state] += 1
                 if reason == "eligible":
                     stress_eligible[i][state] += 1
@@ -264,6 +280,10 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
                 "timing_eligible_by_status": dict(sorted(stress_eligible[i].items())),
             }
             for i, field in enumerate(STRESS_INTERVALS)
+        }
+        report["declared_whole_episode_stress_history_support"] = {
+            "frozen_attempted_by_status": dict(sorted(whole_stress_attempted.items())),
+            "timing_eligible_by_status": dict(sorted(whole_stress_eligible.items())),
         }
     return report
 

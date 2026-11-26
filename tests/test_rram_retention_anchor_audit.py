@@ -238,6 +238,16 @@ class RetentionAnchorAudit(unittest.TestCase):
                 "timing_eligible_by_status": {documented: 1, biased: 1},
             },
         })
+        self.assertEqual(report.pop("declared_whole_episode_stress_history_support"), {
+            "frozen_attempted_by_status": {
+                "off_schedule_bias_observed_in_any_interval": 2,
+                "unknown_without_observed_off_schedule_bias": 1, "missing_declaration": 1,
+            },
+            "timing_eligible_by_status": {
+                "off_schedule_bias_observed_in_any_interval": 1,
+                "unknown_without_observed_off_schedule_bias": 1,
+            },
+        })
         self.assertEqual(report, json.loads(ordinary.stdout))
         self.assertNotIn("privateLot", diagnostic.stdout)
         absent = self.run_capture([BASE], episode(), stress=[])
@@ -245,6 +255,28 @@ class RetentionAnchorAudit(unittest.TestCase):
         self.assertEqual(json.loads(absent.stdout)["declared_stress_history_support"]
                          ["bias_1s_to_100ks"]["timing_eligible_by_status"],
                          {"missing_declaration": 1})
+
+    def test_interval_marginals_do_not_determine_whole_episode_support(self):
+        second = (*BASE[:4], "E2")
+        roster = [BASE, second]
+        capture = episode(BASE) + episode(second)
+        clear = "no_off_schedule_bias_documented"
+        biased = "off_schedule_bias_observed"
+        aligned = self.run_capture(roster, capture,
+                                   stress=[(*BASE, clear, clear), (*second, biased, biased)])
+        crossed = self.run_capture(roster, capture,
+                                   stress=[(*BASE, clear, biased), (*second, biased, clear)])
+        self.assertEqual((aligned.returncode, crossed.returncode), (0, 0))
+        a, b = map(lambda result: json.loads(result.stdout), (aligned, crossed))
+        joint_key = "declared_whole_episode_stress_history_support"
+        joint_a, joint_b = a.pop(joint_key), b.pop(joint_key)
+        self.assertEqual(a, b)
+        for field in ("frozen_attempted_by_status", "timing_eligible_by_status"):
+            self.assertEqual(joint_a[field], {
+                "no_off_schedule_bias_documented_in_both_intervals": 1,
+                "off_schedule_bias_observed_in_any_interval": 1,
+            })
+            self.assertEqual(joint_b[field], {"off_schedule_bias_observed_in_any_interval": 2})
 
     def test_stress_history_checks_membership_duplicates_and_explicit_status(self):
         valid = (*BASE, "unknown", "unknown")

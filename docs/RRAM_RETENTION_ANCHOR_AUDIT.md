@@ -100,3 +100,13 @@ The report separates the full frozen and timing-eligible episode counts for
 each interval status. It changes no timing eligibility or success criterion,
 and does not certify physical exposure, equal read bias or stress dose,
 or mechanism. Those need separately validated measurement evidence.
+
+The whole-episode summary retains the link between the two interval
+declarations. A documented absence of extra bias across the episode requires
+that status in both intervals of the same episode. Extra bias observed in
+either interval takes precedence over an unknown in the other; unknown without
+an observed extra bias and absent declarations remain separate. Equal
+per-interval counts can conceal different whole-episode support: two episodes
+with opposite extra-bias intervals have no fully documented unbiased episode,
+even though the marginals match a plan with one clean and one biased episode.
+These are declared stress histories, not instrument validation.
