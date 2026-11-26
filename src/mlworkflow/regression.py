@@ -7,6 +7,8 @@ saved metrics. No target inference, automatic grouping or hidden fitting.
 import html
 import importlib.util
 import json
+import math
+from fractions import Fraction
 from pathlib import Path
 import re
 import tempfile
@@ -170,6 +172,49 @@ def _check_readpoint_policy(config, feature_provenance, report):
         raise WorkflowError("saved RRAM readpoint policy conflicts with its extraction records")
 
 
+def _check_feature_aggregates(originals, windows):
+    # Reconcile the duplicated aggregates using retained, valid cycle pairs.
+    # This does not establish the raw acquisition's authenticity.
+    mismatch = "saved RRAM feature aggregates differ from retained device-cycle pairs"
+    if not isinstance(windows, dict) or not isinstance(windows.get("pairs"), list):
+        raise WorkflowError(mismatch)
+    observed = {device: [] for device in originals}
+    seen = set()
+    for pair in windows["pairs"]:
+        try:
+            device, cycle = pair["device"], pair["cycle"]
+            hrs, lrs = pair["hrs"], pair["lrs"]
+            values = (hrs["resistance_ohm"], lrs["resistance_ohm"], pair["resistance_ratio"])
+            if (not isinstance(device, str) or device not in originals
+                    or not isinstance(cycle, str) or (device, cycle) in seen
+                    or pair["status"] != "valid"
+                    or hrs["read_condition"] != originals[device]["condition"]
+                    or lrs["read_condition"] != originals[device]["condition"]
+                    or any(type(v) not in (int, float) or not math.isfinite(v) or v <= 0
+                           for v in values)
+                    or pair["ratio_below_one"] is not (values[2] < 1)):
+                raise WorkflowError(mismatch)
+        except (KeyError, TypeError, OverflowError):
+            raise WorkflowError(mismatch) from None
+        seen.add((device, cycle))
+        observed[device].append(values)
+
+    def median(values):
+        values = sorted(values)
+        half = len(values) // 2
+        if len(values) % 2:
+            return float(values[half])
+        return float((Fraction(values[half - 1]) + Fraction(values[half])) / 2)
+
+    for device, pairs in observed.items():
+        row = originals[device]
+        if (not pairs or row["cycle_count"] != str(len(pairs))
+                or row["ratio_below_one_cycle_count"] != str(sum(v[2] < 1 for v in pairs))
+                or any(row[key] != repr(median(values))
+                       for key, values in zip(FEATURES, zip(*pairs)))):
+            raise WorkflowError(mismatch)
+
+
 def _prepared(path):
     from .adapters import is_v2_bundle
     if is_v2_bundle(path):
@@ -215,6 +260,7 @@ def _prepared(path):
             or feature_provenance.get("inputs_sha256") != expected_raw_hashes):
         raise WorkflowError("saved RRAM feature source declarations differ from preparation provenance")
     _check_readpoint_policy(config, feature_provenance, parse_json(payloads["features/iv_readpoints.json"]))
+    _check_feature_aggregates(originals, parse_json(payloads["features/rram_windows.json"]))
     return config, training, future, payloads, receipt_sha
 
 

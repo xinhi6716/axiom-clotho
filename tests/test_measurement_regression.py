@@ -332,6 +332,38 @@ class MeasurementRegressionTests(unittest.TestCase):
                 self.assertFalse(self.run_dir.exists())
                 self.assertEqual(tree(self.prepared), before)
 
+    def test_replay_reconciles_saved_feature_aggregates_with_device_pairs(self):
+        config = self.config()
+        self.prepare()
+        good = tree(self.prepared)
+        self.assertEqual(self.command("plan", "--prepared", self.prepared).returncode, 0)
+        feature = "features/features.csv"
+        training = "training.csv"
+        columns = ("device", "group", "target", *config["features"])
+        cases = (("hrs_resistance_median_ohm", "777.0"), ("cycle_count", "999"),
+                 ("ratio_below_one_cycle_count", "999"))
+        for key, value in cases:
+            with self.subTest(field=key):
+                feature_rows = c.parse_csv(good[feature], flow.FEATURE_COLUMNS)
+                training_rows = c.parse_csv(good[training], columns)
+                row = next(r for r in feature_rows if r["device"] == training_rows[0]["device"])
+                row[key] = value
+                if key in config["features"]:
+                    training_rows[0][key] = value
+                receipt = c.parse_json(good["COMPLETE.json"])
+                for name, raw in ((feature, c.csv_bytes(flow.FEATURE_COLUMNS, feature_rows)),
+                                  (training, c.csv_bytes(columns, training_rows))):
+                    (self.prepared / name).write_bytes(raw)
+                    receipt["files_sha256"][name] = c.sha(raw)
+                (self.prepared / "COMPLETE.json").write_bytes(c.json_bytes(receipt))
+                c.load_bundle(self.prepared, "prepared")
+                before = tree(self.prepared)
+                reply = self.command("plan", "--prepared", self.prepared)
+                self.assertEqual(reply.returncode, 2, reply.stderr)
+                self.assertIn("saved RRAM feature aggregates", reply.stderr)
+                self.assertFalse(reply.stdout)
+                self.assertEqual(tree(self.prepared), before)
+
     def test_future_targets_cannot_enter_training_file(self):
         train = self.rows("training_targets.csv", ("device", "target"))
         future = self.rows("later_outcomes.csv", ("device", "target"))
