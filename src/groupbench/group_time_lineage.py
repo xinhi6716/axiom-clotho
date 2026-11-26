@@ -7,8 +7,9 @@ from dataclasses import dataclass, fields, is_dataclass
 from typing import Literal
 
 from .group_time_plan import (
-    ForwardWindowFold, GroupForwardWindowPlan, GroupIdentity, GroupSpan,
-    MAX_TICK, MIN_TICK, plan_group_forward_windows,
+    ForecastLabelTiming, ForwardLabelTimingAudit, ForwardWindowFold,
+    GroupForwardWindowPlan, GroupIdentity, GroupSpan, MAX_TICK, MIN_TICK,
+    audit_group_forward_label_timing, plan_group_forward_windows,
 )
 
 _MAX_ROWS = 20_000
@@ -330,3 +331,40 @@ def audit_group_time_lineage(
         "group-forward-as-of-lineage-v1", size, len(features), len(revisions), visited_count,
         frozen_timing_roster_matched=expected_revision_timing is not None,
     )
+
+
+
+@dataclass(frozen=True, slots=True)
+class JointForecastTimingAudit:
+    """Validated feature and label metadata at identical ordered origins."""
+
+    feature_lineage: GroupTimeLineageAudit
+    label_timing: ForwardLabelTimingAudit
+
+
+def audit_joint_forecast_timing(
+    plan: GroupForwardWindowPlan, *, clock_id: str, time_unit: str,
+    features: tuple[str, ...], rows: tuple[ForecastRow, ...],
+    lineage: tuple[RowLineage, ...], revisions: tuple[EventRevision, ...],
+    horizon: int, labels: list[ForecastLabelTiming] | tuple[ForecastLabelTiming, ...],
+    expected_revision_timing: tuple[tuple[RevisionRef, int, int], ...] | None = None,
+) -> JointForecastTimingAudit:
+    """Check that the feature cutoff and label horizon use the same origin.
+
+    Each component checks every row against the same forward plan and clock.
+    Then their origins must agree exactly by canonical row position. Label
+    timing does not carry an independent physical row identity; callers must
+    supply correctly bound label metadata. No target values, fit or scoring
+    are involved, and matching declarations cannot verify acquisition facts.
+    """
+    feature_report = audit_group_time_lineage(
+        plan, clock_id=clock_id, time_unit=time_unit, features=features, rows=rows,
+        lineage=lineage, revisions=revisions, expected_revision_timing=expected_revision_timing,
+    )
+    label_report = audit_group_forward_label_timing(
+        plan, clock_id=clock_id, time_unit=time_unit, horizon=horizon, labels=labels,
+    )
+    for position, (feature_row, label_row) in enumerate(zip(rows, labels)):
+        if feature_row.origin != label_row.forecast_origin:
+            _fail(f"Feature cutoff and label forecast origin differ at row position {position}.")
+    return JointForecastTimingAudit(feature_report, label_report)

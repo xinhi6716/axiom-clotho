@@ -6,9 +6,12 @@ from unittest.mock import patch
 
 from groupbench.group_time_lineage import (
     EventRevision, FeatureLineage, ForecastRow, GroupTimeLineageError, LineageKey,
-    RevisionRef, RowLineage, audit_group_time_lineage,
+    RevisionRef, RowLineage, audit_group_time_lineage, audit_joint_forecast_timing,
 )
-from groupbench.group_time_plan import GroupSpan, TimeWindow, plan_group_forward_windows
+from groupbench.group_time_plan import (
+    ForecastLabelTiming, GroupSpan, TimeWindow, audit_group_forward_label_timing,
+    plan_group_forward_windows,
+)
 
 
 class GroupTimeLineageTests(TestCase):
@@ -226,3 +229,47 @@ class GroupTimeLineageTests(TestCase):
                     {entry}):
             with self.subTest(roster=bad), self.assertRaises(GroupTimeLineageError):
                 self.audit(expected_revision_timing=bad)
+
+
+    def joint(self, labels, **overrides):
+        kwargs = dict(clock_id="acquisition", time_unit="step", horizon=1,
+                      features=("x",), rows=self.rows, lineage=self.roots,
+                      revisions=self.revisions, labels=labels)
+        kwargs.update(overrides)
+        return audit_joint_forecast_timing(self.plan, **kwargs)
+
+    def test_joint_uses_identical_origins_and_preserves_component_diagnostics(self):
+        labels = [ForecastLabelTiming(0, 1, 3, 4, 5),
+                  ForecastLabelTiming(1, "1", 10, 11, 15)]
+        roster = tuple((x.ref, x.measured_at, x.available_at) for x in self.revisions)
+        got = self.joint(labels, expected_revision_timing=roster)
+        self.assertEqual(got.feature_lineage, self.audit(expected_revision_timing=roster))
+        self.assertEqual(got.label_timing, audit_group_forward_label_timing(
+            self.plan, clock_id="acquisition", time_unit="step", horizon=1, labels=labels))
+        self.assertEqual(got.label_timing.n_tested_labels, 1)
+        self.assertTrue(got.feature_lineage.frozen_timing_roster_matched)
+
+    def test_separately_valid_metadata_can_incorporate_post_origin_features(self):
+        later = self.event("1", "late-measurement", 0, 9, 9)
+        roots = self.with_root(later.ref)
+        revisions = self.revisions + (later,)
+        labels = [ForecastLabelTiming(0, 1, 3, 4, 5),
+                  ForecastLabelTiming(1, "1", 8, 9, 15)]
+        self.assertEqual(self.audit(lineage=roots, revisions=revisions).n_rows, 2)
+        self.assertEqual(audit_group_forward_label_timing(
+            self.plan, clock_id="acquisition", time_unit="step", horizon=1, labels=labels).n_rows, 2)
+        with self.assertRaisesRegex(GroupTimeLineageError, 'origins? differ.*position 1'):
+            self.joint(labels, lineage=roots, revisions=revisions)
+
+    def test_joint_does_not_bypass_clock_row_and_catalog_rules(self):
+        labels = [ForecastLabelTiming(0, 1, 3, 4, 5),
+                  ForecastLabelTiming(1, "1", 10, 11, 15)]
+        with self.assertRaisesRegex(ValueError, 'typed groups'):
+            self.joint([labels[0], replace(labels[1], group=1)])
+        with self.assertRaisesRegex(ValueError, 'every plan row'):
+            self.joint(labels[:1])
+        with self.assertRaisesRegex(GroupTimeLineageError, 'clock and unit'):
+            self.joint(labels, clock_id="different")
+        with self.assertRaisesRegex(GroupTimeLineageError, 'exactly match'):
+            self.joint(labels, expected_revision_timing=[
+                (self.raw_train.ref, self.raw_train.measured_at, self.raw_train.available_at)])
