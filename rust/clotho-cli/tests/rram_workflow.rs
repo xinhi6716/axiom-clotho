@@ -417,3 +417,35 @@ fn even_cycle_median_preserves_subnormal_ratios() {
     let median = csv.lines().nth(1).unwrap().rsplit(',').next().unwrap();
     assert_eq!(median.parse::<f64>().unwrap().to_bits(), 2);
 }
+
+#[test]
+fn rounded_bracket_tie_checks_exact_binary64_width() {
+    let header = DATA.lines().next().unwrap();
+    for (lo, accepted) in [("0", true), ("-5.551115123125783e-17", false)] {
+        let mut hrs = [
+            format!("B,W,D,1,R1,H,HRS,C,P,0.5,300,0,{lo},0.01"),
+            "B,W,D,1,R1,H,HRS,C,P,0.5,300,0,1,0.01".to_owned(),
+        ];
+        for _ in 0..2 {
+            let w = Workspace::new();
+            w.write(&format!(
+                "{header}\n{}\n{}\nB,W,D,1,R1,L,LRS,C,P,0.5,300,0,0.5,0.1\n",
+                hrs[0], hrs[1]
+            ));
+            let result = w.run(&[]);
+            assert_eq!(
+                result.status.success(),
+                accepted,
+                "{}",
+                String::from_utf8_lossy(&result.stderr)
+            );
+            if accepted {
+                assert!(w.0.join("out/COMPLETE").is_file());
+            } else {
+                assert!(String::from_utf8_lossy(&result.stderr).contains("BracketTooWide"));
+                assert!(!w.0.join("out").exists());
+            }
+            hrs.reverse();
+        }
+    }
+}

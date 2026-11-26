@@ -175,8 +175,20 @@ pub fn extract_branch(b: &Branch, p: Settings) -> Result<Readpoint, RramError> {
                         && c.read_voltage_v < w[0].voltage_v.max(w[1].voltage_v)
                 })
                 .ok_or(RramError::ReadVoltageNotBracketed)?;
-            let span = (w[1].voltage_v - w[0].voltage_v).abs();
-            if span > p.max_bracket_span_v {
+            let hi = w[0].voltage_v.max(w[1].voltage_v);
+            let lo = w[0].voltage_v.min(w[1].voltage_v);
+            let span = hi - lo;
+            // A width rounded onto the limit may still be too wide.
+            // Recover its exact binary64 subtraction residual (TwoDiff).
+            let too_wide = if span == p.max_bracket_span_v {
+                let lo_virtual = hi - span;
+                let hi_virtual = span + lo_virtual;
+                let residual = (hi - hi_virtual) + (lo_virtual - lo);
+                residual > 0.0
+            } else {
+                span > p.max_bracket_span_v
+            };
+            if too_wide {
                 return Err(RramError::BracketTooWide);
             }
             // The small weight must come from a small voltage difference,
