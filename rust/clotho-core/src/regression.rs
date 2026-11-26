@@ -137,12 +137,10 @@ impl RidgeRegressor {
         columns[0][..x.len()].fill(1.0);
         let mut scalers = Vec::with_capacity(width);
         for j in 0..width {
-            let scaler = FeatureScaler::fit(x, j)?;
-            for (i, row) in x.iter().enumerate() {
-                columns[j + 1][i] = scaler.transform(row[j])?;
-            }
+            let column = &mut columns[j + 1];
+            let scaler = FeatureScaler::fit_into(x, j, &mut column[..x.len()])?;
             if alpha > 0.0 {
-                columns[j + 1][x.len() + j] = penalty;
+                column[x.len() + j] = penalty;
             }
             scalers.push(scaler);
         }
@@ -242,7 +240,11 @@ struct FeatureScaler {
 }
 
 impl FeatureScaler {
-    fn fit(x: &[Vec<f64>], column: usize) -> Result<Self, RegressionError> {
+    fn fit_into(
+        x: &[Vec<f64>],
+        column: usize,
+        deltas: &mut [f64],
+    ) -> Result<Self, RegressionError> {
         let origin = x[0][column];
         let magnitude = x
             .iter()
@@ -251,10 +253,12 @@ impl FeatureScaler {
         let magnitude = if magnitude == 0.0 { 1.0 } else { magnitude };
         // Subtract before dividing whenever possible. This preserves feature
         // differences when a large common offset is added to a column.
-        let deltas = x
-            .iter()
-            .map(|row| scaled_difference(row[column], origin, magnitude))
-            .collect::<Result<Vec<_>, _>>()?;
+        // Stage each checked delta in the corresponding QR column, then
+        // replace it in place. The same delta feeds both scale fitting
+        // and the training transform.
+        for (delta, row) in deltas.iter_mut().zip(x) {
+            *delta = scaled_difference(row[column], origin, magnitude)?;
+        }
         let mean_delta = checked_div(compensated_sum(deltas.iter().copied())?, x.len() as f64)?;
         let norm = deltas
             .iter()
@@ -264,19 +268,24 @@ impl FeatureScaler {
         } else {
             checked_div(norm, (x.len() as f64).sqrt())?
         };
-        Ok(Self {
+        let scaler = Self {
             origin,
             magnitude,
             mean_delta,
             deviation,
-        })
+        };
+        for delta in deltas {
+            *delta = scaler.transform_delta(*delta)?;
+        }
+        Ok(scaler)
     }
 
     fn transform(&self, value: f64) -> Result<f64, RegressionError> {
-        checked_div(
-            scaled_difference(value, self.origin, self.magnitude)? - self.mean_delta,
-            self.deviation,
-        )
+        self.transform_delta(scaled_difference(value, self.origin, self.magnitude)?)
+    }
+
+    fn transform_delta(&self, delta: f64) -> Result<f64, RegressionError> {
+        checked_div(delta - self.mean_delta, self.deviation)
     }
 }
 
