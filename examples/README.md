@@ -34,6 +34,7 @@ For your own measurements, [clotho init](../docs/WORKFLOW_INIT.md) creates blank
 | Does holding out devices test a new recipe? | [Held devices versus held protocols](device-versus-protocol/README.md): paired toy scores on the same 20 invented devices, with two separate holdout questions. |
 | Can changing units change a model's predictions? | [A versus nA](numeric-unit-equivalence/README.md): twelve fixed fits comparing raw models and train-only scaling. Requires scikit-learn 1.8.0 and the documented source hash; saved results can be read without fitting. |
 | Does a matching present reading establish the same future? | [Hidden-state closure](hidden-state-closure/README.md): exact two-horizon counterexample for a compact device state. |
+| Does a better mixed score mean better physical predictions? | [Simulation mixture and transfer](simulation-mixture-transfer/README.md): one mixed score improves while the reserved measured score worsens. |
 | How does adjusting for an intermediary change a causal question? | [Causal-design rehearsal](causal-design-rehearsal/README.md): OLS and paired interventions in an invented model. Requires the simulation-only flag; it is not a real-data causal estimator. |
 
 ## Choose the measurement before choosing the model
