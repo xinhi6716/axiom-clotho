@@ -245,15 +245,15 @@ def _check(manifest, summary, raw):
             _reject_domain_audits(audit)
         if version in ("1.2", "1.3", "1.4"):
             inner = _count(inner_counts[fold] if version == "1.3" else config.get("inner_splits"), len(train_groups), 2)
+            seed = _count(config.get("random_state"), 2**32 - 1)
+            expected_seed = seed + fold + 1
+            if type(audit.get("inner_seed")) is not int or audit["inner_seed"] != expected_seed:
+                _fail("extended evaluation inner seed differs from the scheduled fold.")
             if version == "1.4":
-                seed = _count(config.get("random_state"), 2**32 - 1)
-                expected_seed = seed + fold + 1
-                if type(audit.get("inner_seed")) is not int or audit["inner_seed"] != expected_seed:
-                    _fail("extended-families-v2 inner seed differs from the scheduled fold.")
                 _extended_selection_v2(audit, n-test_rows, len(train_groups), inner, expected_seed,
                                        config, group_sizes={g: len(group_rows[g]) for g in train_groups})
             elif optional:
-                _optional_selection_metadata(audit, n-test_rows, len(train_groups), inner, audit.get("inner_seed"), optional)
+                _optional_selection_metadata(audit, n-test_rows, len(train_groups), inner, expected_seed, optional)
             if version == "1.3":
                 if not isinstance(audit.get("family_candidates"), dict):
                     _fail("domain family winner declaration is missing.")

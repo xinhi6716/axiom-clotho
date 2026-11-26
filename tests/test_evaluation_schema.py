@@ -162,6 +162,40 @@ class EvaluationSchemaTests(unittest.TestCase):
         self.assertFalse(reply.stdout)
         self.assertEqual({p.name: p.read_bytes() for p in self.root.iterdir()}, before)
 
+    def test_cli_rejects_extended_seed_inconsistent_with_outer_fold_schedule(self):
+        frame = pd.DataFrame({"g": list("abcdef") * 2, "d": ["1", "1", "2", "2", "3", "3"] * 2,
+                              "x": range(12), "y": range(12)})
+        command = [sys.executable, "-m", "groupbench.cli", "validate-evaluation-bundle", str(self.root)]
+        env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1] / "src"),
+                   OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1", PYTHONDONTWRITEBYTECODE="1")
+
+        def replay():
+            return subprocess.run(command, env=env, text=True, capture_output=True, timeout=30)
+
+        for version, options in (
+            ("1.2", dict(baselines=("dummy", "group_median"), inner_splits=2, features=("x",))),
+            ("1.3", dict(baselines=("dummy",), domain="d", inner_strategy="leave_one_domain_out",
+                         inner_splits=None)),
+        ):
+            with self.subTest(version=version):
+                result = benchmark(frame, target="y", group="g", outer_splits=3, random_state=7, **options)
+                self.assertEqual(result.manifest["schema_version"], version)
+                result.write(self.root, overwrite=True)
+                self.assertEqual(replay().returncode, 0)
+
+                def corrupt(manifest):
+                    audit = manifest["outer_folds"]
+                    audit[0]["inner_seed"] = audit[1]["inner_seed"]
+
+                self.mutate_json("manifest.json", corrupt)
+                self.assertEqual(verify_bundle(self.root).bundle_type, "evaluation")
+                before = {p.name: p.read_bytes() for p in self.root.iterdir()}
+                reply = replay()
+                self.assertEqual(reply.returncode, 2, reply.stderr)
+                self.assertIn("inner seed differs from the scheduled fold", reply.stderr)
+                self.assertFalse(reply.stdout)
+                self.assertEqual({p.name: p.read_bytes() for p in self.root.iterdir()}, before)
+
     def test_count_bool_null_model_and_fold_corruption(self):
         mutations = [('summary.json', lambda d: d['models']['selected']['overall'].update(n_rows=True)),
                      ('summary.json', lambda d: d['models']['selected']['overall'].update(r2=None)),
