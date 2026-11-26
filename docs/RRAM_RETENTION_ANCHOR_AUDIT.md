@@ -64,3 +64,15 @@ eligible-episode count on any one die makes concentration visible without
 emitting identities. These counts describe timing availability, not independent
 samples, valid electrical readout, or cross-chip model performance. They do
 not alter the exit status.
+
+If the protocol declares acquisition blocks independently of the capture,
+pass `--acquisition-block-map blocks.csv`. The map has exactly
+`lot,wafer,die,cell,episode,acquisition_block` and assigns one opaque block
+label to each frozen episode. Missing, duplicate, or out-of-roster entries
+fail before loading capture metadata. The aggregate distinguishes blocks in
+the plan from those with eligible episodes, and counts blocks spanning
+multiple declared dies versus dies repeated across blocks. Neither clocks nor
+die labels substitute for independently documented block assignments. The
+report is descriptive support, not a claim of independent blocks or permission
+to count repeated dies as new physical units. Timing eligibility
+and the exit status for a valid mapping are unchanged.

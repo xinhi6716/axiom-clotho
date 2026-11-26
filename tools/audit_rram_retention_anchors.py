@@ -117,8 +117,24 @@ def verdict(slots):
     return "eligible"
 
 
+def acquisition_blocks(path, expected):
+    """Require a total, one-to-one assignment onto the exact frozen roster."""
+    blocks = {}
+    for key, (block,) in records(path, IDENTITY + ("acquisition_block",)):
+        if not KEY.fullmatch(block):
+            raise ValueError("invalid acquisition block label")
+        if key not in expected:
+            raise ValueError("acquisition block map contains non-roster episode")
+        if key in blocks:
+            raise ValueError("duplicate episode in acquisition block map")
+        blocks[key] = block
+    if len(blocks) != len(expected):
+        raise ValueError("acquisition block map does not cover the frozen roster")
+    return blocks
+
+
 def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=None,
-          diagnose_dies=False):
+          diagnose_dies=False, block_map_path=None):
     if roster_sha256 is not None and (
             not isinstance(roster_sha256, str) or not SHA256.fullmatch(roster_sha256)):
         raise ValueError("frozen roster SHA-256 must be 64 lowercase hexadecimal digits")
@@ -130,6 +146,7 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
     if not expected:
         raise ValueError("frozen acquisition roster must not be empty")
 
+    blocks = acquisition_blocks(block_map_path, expected) if block_map_path is not None else None
     present, unexpected = set(), set()
     off_anchor_rows = 0
     for key, (nominal, clock, epoch, tick, error) in records(capture_path, IDENTITY + TIMING):
@@ -150,6 +167,8 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
 
     classifications = Counter()
     die_counts = defaultdict(lambda: [0, 0]) if diagnose_dies else None
+    eligible_block_dies = defaultdict(set)
+    eligible_die_blocks = defaultdict(set)
     for key, slots in expected.items():
         reason = verdict(slots) if key in present else "missing_capture"
         classifications[reason] += 1
@@ -157,6 +176,10 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
             counts = die_counts[key[:3]]
             counts[0] += 1
             counts[1] += int(reason == "eligible")
+        if blocks is not None and reason == "eligible":
+            block, die = blocks[key], key[:3]
+            eligible_block_dies[block].add(die)
+            eligible_die_blocks[die].add(block)
     report = {
         "schema": "clotho.rram_retention_anchor_audit.v1",
         "frozen_attempted_episodes": len(expected),
@@ -189,6 +212,17 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
             "dies_with_no_frozen_episodes_eligible": absent,
             "max_eligible_episodes_on_one_die": maximum,
         }
+    if blocks is not None:
+        report["declared_acquisition_block_timing_support"] = {
+            "frozen_declared_blocks": len(set(blocks.values())),
+            "blocks_with_eligible_episodes": len(eligible_block_dies),
+            "blocks_with_eligible_episodes_from_multiple_dies": sum(
+                len(dies) > 1 for dies in eligible_block_dies.values()
+            ),
+            "dies_with_eligible_episodes_in_multiple_blocks": sum(
+                len(die_blocks) > 1 for die_blocks in eligible_die_blocks.values()
+            ),
+        }
     return report
 
 
@@ -202,10 +236,13 @@ def main():
                         help="verify exact roster bytes against a previously trusted SHA-256")
     parser.add_argument("--diagnose-dies", action="store_true",
                         help="summarize frozen timing support by declared physical die")
+    parser.add_argument("--acquisition-block-map", type=Path,
+                        help="exact frozen episode-to-block metadata map for aggregate support")
     args = parser.parse_args()
     try:
         report = audit(args.frozen_roster, args.capture, diagnose_anchors=args.diagnose_anchors,
-                       roster_sha256=args.frozen_roster_sha256, diagnose_dies=args.diagnose_dies)
+                       roster_sha256=args.frozen_roster_sha256, diagnose_dies=args.diagnose_dies,
+                       block_map_path=args.acquisition_block_map)
     except (OSError, UnicodeError, csv.Error):
         parser.exit(2, "error: input could not be read as UTF-8 CSV\n")
     except ValueError as exc:

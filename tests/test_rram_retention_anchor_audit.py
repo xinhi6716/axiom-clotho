@@ -24,13 +24,18 @@ def episode(key=BASE, early=1_000_000, final=100_000_000_000, error=0):
 
 
 class RetentionAnchorAudit(unittest.TestCase):
-    def run_capture(self, roster, rows, capture_header=IDS + TIMES, *, extra=()):
+    def run_capture(self, roster, rows, capture_header=IDS + TIMES, *, extra=(), block_map=None):
         with tempfile.TemporaryDirectory() as tmp:
             folder = Path(tmp)
             for name, header, payload in (
                     ("roster.csv", IDS, roster), ("capture.csv", capture_header, rows)):
                 with (folder / name).open("w", newline="", encoding="utf-8") as stream:
                     csv.writer(stream).writerows((header, *payload))
+            if block_map is not None:
+                block_map_path = folder / "blocks.csv"
+                with block_map_path.open("w", newline="", encoding="utf-8") as stream:
+                    csv.writer(stream).writerows((IDS + ("acquisition_block",), *block_map))
+                extra = (*extra, "--acquisition-block-map", str(block_map_path))
             return subprocess.run(
                 [sys.executable, str(TOOL), "--frozen-roster", str(folder / "roster.csv"),
                  "--capture", str(folder / "capture.csv"), *extra],
@@ -123,6 +128,43 @@ class RetentionAnchorAudit(unittest.TestCase):
         self.assertEqual(report["eligible_episodes"], 3)
         self.assertEqual(report["unexpected_capture_episodes"], 1)
         self.assertNotIn("privateLot", diag.stdout)
+
+    def test_explicit_blocks_distinguish_repeated_die_from_shared_session(self):
+        repeat = (*BASE[:4], "E2")
+        another = (BASE[0], "W2", *BASE[2:])
+        absent = (*BASE[:4], "E3")
+        roster = [BASE, repeat, another, absent]
+        capture = episode(BASE) + episode(repeat) + episode(another)
+        block_map = [
+            (*another, "privateBlockA"), (*BASE, "privateBlockA"),
+            (*absent, "privateBlockC"), (*repeat, "privateBlockB"),
+        ]
+        ordinary = self.run_capture(roster, capture)
+        diag = self.run_capture(roster, capture, block_map=block_map)
+        self.assertEqual((ordinary.returncode, diag.returncode), (1, 1))
+        report = json.loads(diag.stdout)
+        self.assertEqual(report.pop("declared_acquisition_block_timing_support"), {
+            "frozen_declared_blocks": 3, "blocks_with_eligible_episodes": 2,
+            "blocks_with_eligible_episodes_from_multiple_dies": 1,
+            "dies_with_eligible_episodes_in_multiple_blocks": 1,
+        })
+        self.assertEqual(report, json.loads(ordinary.stdout))
+        self.assertNotIn("privateBlock", diag.stdout)
+        self.assertNotIn("privateLot", diag.stdout)
+
+    def test_block_map_cannot_omit_duplicate_or_add_an_episode(self):
+        for mapping, diagnostic in [
+            ([], "does not cover"),
+            ([(*BASE, "block1"), (*BASE, "block1")], "duplicate episode"),
+            ([(*BASE, "block1"), (*BASE[:4], "E2", "block2")], "non-roster episode"),
+            ([(*BASE, "")], "invalid acquisition block label"),
+        ]:
+            with self.subTest(diagnostic=diagnostic):
+                r = self.run_capture([BASE], episode(), block_map=mapping)
+                self.assertEqual(r.returncode, 2)
+                self.assertFalse(r.stdout)
+                self.assertIn(diagnostic, r.stderr)
+                self.assertNotIn("privateLot", r.stderr)
 
     def test_cannot_borrow_late_or_other_episode_measurement(self):
         rows = episode()[:2]
