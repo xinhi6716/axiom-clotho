@@ -256,6 +256,45 @@ class MeasurementRegressionTests(unittest.TestCase):
                 self.assertFalse(result.stdout)
                 self.assertEqual(tree(self.prepared), saved)
 
+    def test_cli_rejects_saved_readpoint_policy_inconsistent_with_preparation(self):
+        # A bound reported as 1/10 V but prepared under 0.11 V is not
+        # evidence of having applied the tighter acquisition filter.
+        self.prepare()
+        good = tree(self.prepared)
+        baseline = self.command("plan", "--prepared", self.prepared)
+        self.assertEqual(baseline.returncode, 0, baseline.stderr)
+        provenance = "features/provenance.json"
+        report = "features/iv_readpoints.json"
+        cases = (
+            ("config.json", None, "max_bracket_span_V", "0.10"),
+            (provenance, "parameters", "max_bracket_span_V_input", "0.110000000000000001"),
+            (provenance, "parameters", "input_voltage_unit", "mV"),
+            (provenance, "parameters", "input_current_unit", "mA"),
+            (provenance, "parameters", "measurement_assumptions_declared", 1),
+            (report, None, "max_bracket_span_V", 0.10),
+            (report, None, "schema_version", True),
+        )
+        for relative, outer, field, value in cases:
+            with self.subTest(relative=relative, field=field):
+                for name, data in good.items():
+                    (self.prepared / name).write_bytes(data)
+                payload = c.parse_json(good[relative])
+                (payload[outer] if outer else payload)[field] = value
+                raw = c.json_bytes(payload)
+                (self.prepared / relative).write_bytes(raw)
+                receipt = c.parse_json(good["COMPLETE.json"])
+                receipt["files_sha256"][relative] = c.sha(raw)
+                (self.prepared / "COMPLETE.json").write_bytes(c.json_bytes(receipt))
+                c.load_bundle(self.prepared, "prepared")
+                saved = tree(self.prepared)
+                for command in (("plan",), ("run", "--output-dir", self.run_dir)):
+                    result = self.command(command[0], "--prepared", self.prepared, *command[1:])
+                    self.assertEqual(result.returncode, 2, result.stderr)
+                    self.assertIn("saved RRAM readpoint policy", result.stderr)
+                    self.assertFalse(result.stdout)
+                self.assertFalse(self.run_dir.exists())
+                self.assertEqual(tree(self.prepared), saved)
+
     def test_replay_rejects_contradictory_preparation_provenance_before_work(self):
         self.prepare()
         receipt_path = self.prepared / "COMPLETE.json"

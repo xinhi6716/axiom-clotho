@@ -152,6 +152,24 @@ def _check_preparation_provenance(provenance, n_train, n_future):
         raise WorkflowError("saved preparation provenance is inconsistent with the v1 device join")
 
 
+def _check_readpoint_policy(config, feature_provenance, report):
+    # The inputs are not retained here. Compare the exact declaration to
+    # the extractor record before checking its binary64 summary in the report.
+    declaration = config["max_bracket_span_V"]
+    parameters = feature_provenance.get("parameters")
+    if (not isinstance(parameters, dict)
+            or parameters.get("max_bracket_span_V_input") != declaration
+            or parameters.get("input_voltage_unit") != "V"
+            or parameters.get("input_current_unit") != "A"
+            or parameters.get("measurement_assumptions_declared") is not True
+            or not isinstance(report, dict)
+            or type(report.get("schema_version")) is not int or report["schema_version"] != 1
+            or report.get("tool") != "iv-readpoint"
+            or type(report.get("max_bracket_span_V")) not in (int, float)
+            or report["max_bracket_span_V"] != number(declaration)):
+        raise WorkflowError("saved RRAM readpoint policy conflicts with its extraction records")
+
+
 def _prepared(path):
     from .adapters import is_v2_bundle
     if is_v2_bundle(path):
@@ -196,6 +214,7 @@ def _prepared(path):
     if (not isinstance(feature_provenance, dict)
             or feature_provenance.get("inputs_sha256") != expected_raw_hashes):
         raise WorkflowError("saved RRAM feature source declarations differ from preparation provenance")
+    _check_readpoint_policy(config, feature_provenance, parse_json(payloads["features/iv_readpoints.json"]))
     return config, training, future, payloads, receipt_sha
 
 
