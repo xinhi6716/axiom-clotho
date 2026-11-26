@@ -243,6 +243,7 @@ def _optional_selection_metadata(value, rows, groups, inner_splits, seed, option
     audits = value.get("inner_folds")
     if not isinstance(audits, list) or len(audits) != inner_splits:
         _fail("extended inner fold coverage differs.")
+    held_rows = held_groups = 0
     for fold, audit in enumerate(audits):
         audit = _object(audit)
         train = _count(audit.get("train_rows"), rows, positive=True)
@@ -253,6 +254,12 @@ def _optional_selection_metadata(value, rows, groups, inner_splits, seed, option
             _fail("extended inner fold group counts differ.")
         if type(audit.get("fold")) is not int or audit["fold"] != fold or train + test != rows:
             _fail("extended inner fold row counts differ.")
+        held_rows += test
+        held_groups += test_groups
+    # A complete grouped-validation schedule holds out every original
+    # training row and group once. Per-fold complements alone are weaker.
+    if (held_rows, held_groups) != (rows, groups):
+        _fail("extended inner held coverage differs from the declared training population.")
     records = value.get("inner_selection")
     if not isinstance(records, list) or any(not isinstance(record, dict) for record in records):
         _fail("extended selection records are missing or invalid.")

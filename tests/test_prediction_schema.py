@@ -336,6 +336,51 @@ class PredictionSchemaTests(unittest.TestCase):
                         self.assertFalse(reply.stdout)
                 self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
 
+    def test_cli_checks_total_extended_inner_held_coverage(self):
+        import pandas as pd
+        from groupbench import fit_predict
+
+        frame = pd.DataFrame({"g": list("abcdef") * 3, "x": range(18), "y": range(18)})
+        result = fit_predict(frame, frame[["x"]].head(2), target="y", group="g",
+                             baselines=("dummy", "group_median"), inner_splits=3)
+        self.assertEqual(result.manifest["schema_version"], "1.3")
+        result.write(self.root)
+        raw = (self.root / "predictions.csv").read_bytes()
+        env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1] / "src"),
+                   PYTHONDONTWRITEBYTECODE="1", OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1")
+        command = [sys.executable, "-m", "groupbench.cli", "validate-prediction-bundle", str(self.root)]
+
+        def replay():
+            return subprocess.run(command, env=env, capture_output=True, text=True, timeout=30)
+
+        self.assertEqual(replay().returncode, 0)
+        for field in ("rows", "groups"):
+            with self.subTest(field=field):
+                value = copy.deepcopy(result.manifest)
+                audit = value["inner_folds"][0]
+                candidate = next(r for r in value["inner_selection"] if r["family"] == "group_median")
+                fit = candidate["inner_fit_details"][0]
+                if field == "rows":
+                    audit["test_rows"] -= 1
+                    audit["train_rows"] += 1
+                    fit["test_rows"] -= 1
+                    fit["train_rows"] += 1
+                    fit["details"]["training_rows"] += 1
+                else:
+                    audit["test_group_count"] -= 1
+                    audit["train_group_count"] += 1
+                    fit["details"]["training_groups"] += 1
+                # Individual fold totals and corresponding fit-detail
+                # declarations still match, but row/group coverage does not.
+                write_bundle(self.root, value, csv=raw)
+                self.assertEqual(verify_bundle(self.root).bundle_type, "prediction")
+                before = {p.name: p.read_bytes() for p in self.root.iterdir()}
+                reply = replay()
+                self.assertEqual(reply.returncode, 2, reply.stderr)
+                self.assertIn("inner held coverage", reply.stderr)
+                self.assertFalse(reply.stdout)
+                self.assertEqual({p.name: p.read_bytes() for p in self.root.iterdir()}, before)
+
     def test_actual_writer_both_encodings(self):
         from groupbench import fit_predict, make_materials_fixture
         frame = make_materials_fixture(4, 2, 7)
