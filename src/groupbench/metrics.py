@@ -679,6 +679,32 @@ def paired_parent_mae_deletion_bounds(rows, *, expected_roster, max_deletions):
     }
 
 
+def _paired_group_error_units(rows, expected_roster):
+    if not all(map(_bounded_paired_sequence, (rows, expected_roster))):
+        raise ValueError("Rows and frozen roster must be bounded nonempty lists or tuples.")
+    roster = {}
+    for membership in expected_roster:
+        if (type(membership) is not tuple or len(membership) != 2
+                or not all(map(_paired_roster_id, membership))):
+            raise ValueError("Frozen roster memberships require valid (row ID, group ID) tuples.")
+        row_id, group = membership
+        if row_id in roster:
+            raise ValueError("Frozen roster row IDs must be unique.")
+        roster[row_id] = group
+    seen = set()
+    for row in rows:
+        if type(row) is not tuple or len(row) != 4 or not _paired_roster_id(row[0]):
+            raise ValueError("Paired rows require an ID, observation and both predictions.")
+        row_id, target, a, b = row
+        if row_id not in roster or row_id in seen:
+            raise ValueError("Paired rows must match the frozen roster exactly.")
+        seen.add(row_id)
+        y, pa, pb = map(_paired_binary64_units, (target, a, b))
+        yield roster[row_id], abs(pa - y), abs(pb - y)
+    if len(seen) != len(roster):
+        raise ValueError("Paired rows must match the frozen roster exactly.")
+
+
 def paired_practical_loss_rates(rows, *, expected_roster, margin):
     """Describe how often either forecast beats the other by a fixed margin.
 
@@ -699,37 +725,65 @@ def paired_practical_loss_rates(rows, *, expected_roster, margin):
     margin_units = _paired_binary64_units(margin)
     if margin_units < 0:
         raise ValueError("Practical absolute-error margin must be nonnegative.")
-    roster = {}
-    for membership in expected_roster:
-        if (type(membership) is not tuple or len(membership) != 2
-                or not all(map(_paired_roster_id, membership))):
-            raise ValueError("Frozen roster memberships require valid (row ID, group ID) tuples.")
-        row_id, group = membership
-        if row_id in roster:
-            raise ValueError("Frozen roster row IDs must be unique.")
-        roster[row_id] = group
-    seen, by_group = set(), {}
-    for row in rows:
-        if type(row) is not tuple or len(row) != 4 or not _paired_roster_id(row[0]):
-            raise ValueError("Paired rows require an ID, observation and both predictions.")
-        row_id, target, a, b = row
-        if row_id not in roster or row_id in seen:
-            raise ValueError("Paired rows must match the frozen roster exactly.")
-        seen.add(row_id)
-        y, pa, pb = map(_paired_binary64_units, (target, a, b))
-        gap = abs(pb - y) - abs(pa - y)
+    by_group = {}
+    for group, error_a, error_b in _paired_group_error_units(rows, expected_roster):
+        gap = error_b - error_a
         index = 0 if gap > margin_units else 2 if gap < -margin_units else 1
-        by_group.setdefault(roster[row_id], [0, 0, 0])[index] += 1
-    if len(seen) != len(roster):
-        raise ValueError("Paired rows must match the frozen roster exactly.")
-
+        by_group.setdefault(group, [0, 0, 0])[index] += 1
     names = ("a_lower_loss_beyond_margin", "within_margin", "b_lower_loss_beyond_margin")
-    row_rates = {name: Fraction(sum(counts[i] for counts in by_group.values()), len(seen))
+    row_rates = {name: Fraction(sum(counts[i] for counts in by_group.values()), len(rows))
                  for i, name in enumerate(names)}
     equal_group_rates = {name: sum((Fraction(counts[i], sum(counts)) for counts in by_group.values()),
                                    Fraction()) / len(by_group) for i, name in enumerate(names)}
     return {
-        "n_rows": len(seen), "n_declared_groups": len(by_group),
+        "n_rows": len(rows), "n_declared_groups": len(by_group),
         "margin_exact": Fraction(margin_units, _BINARY64_QUANTUM_DENOMINATOR),
         "row_weighted": row_rates, "equal_group": equal_group_rates,
+    }
+
+
+def paired_absolute_squared_loss_tradeoff(rows, *, expected_roster, error_scale):
+    """Describe when a fixed paired ranking depends on the loss definition.
+
+    Rows are (row_id, observed, prediction_a, prediction_b) and each ID
+    has one entry in an independently frozen (row_id, group) roster. Declare
+    a positive error scale in common target units independently of outcomes.
+    Compare (1-w)*|error|/scale + w*(error/scale)**2 for w in [0,1].
+    Endpoints and any exact tie weight are returned without selecting w.
+    Negative B-minus-A means lower loss for B. A tie at 0 or 1 need not
+    imply an interior rank reversal. This descriptive cohort sensitivity
+    does not establish population performance or physical independence.
+    """
+    scale = _paired_binary64_units(error_scale)
+    if scale <= 0:
+        raise ValueError("The absolute/squared loss comparison requires a positive error scale.")
+    groups = {}
+    for group, error_a, error_b in _paired_group_error_units(rows, expected_roster):
+        gap = error_b - error_a
+        counts = groups.setdefault(group, [0, 0, 0])
+        counts[0] += 1
+        counts[1] += gap
+        counts[2] += gap * (error_a + error_b)
+
+    def summarize(a, b):
+        # a and b are exact differences at squared-loss weights zero and one.
+        return {
+            "normalized_absolute_b_minus_a": a,
+            "normalized_squared_b_minus_a": b,
+            "tie_squared_weight": a / (a - b) if a != b and min(a, b) <= 0 <= max(a, b) else None,
+            "all_weights_tied": a == b == 0,
+            "strict_interior_rank_reversal": a < 0 < b or b < 0 < a,
+        }
+
+    return {
+        "n_rows": len(rows), "n_declared_groups": len(groups),
+        "error_scale_exact": Fraction(scale, _BINARY64_QUANTUM_DENOMINATOR),
+        "row_weighted": summarize(
+            Fraction(sum(group[1] for group in groups.values()), len(rows) * scale),
+            Fraction(sum(group[2] for group in groups.values()), len(rows) * scale**2),
+        ),
+        "equal_group": summarize(
+            sum(Fraction(a, n * scale) for n, a, _ in groups.values()) / len(groups),
+            sum(Fraction(b, n * scale**2) for n, _, b in groups.values()) / len(groups),
+        ),
     }
