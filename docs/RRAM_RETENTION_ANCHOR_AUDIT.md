@@ -162,3 +162,15 @@ changes, all three paths declared identical, missing/unknown paths, and
 absent/ambiguous capture, separately on the attempted and timing-eligible
 denominators. Matching labels do not establish calibration or equivalent
 electrical response, and no timing eligibility or exit rule changes.
+
+Add `--read-bias bias.csv` for independently observed read bias, not a
+commanded setpoint. Its exact columns are
+`lot,wafer,die,cell,episode,nominal_us,observed_read_bias_uV,read_bias_error_uV`.
+Each row refers to one unambiguous captured frozen anchor. Signed observed
+bias and nonnegative absolute error bounds are integral microvolts, at most
+18 digits each; a blank field leaves the interval unknown. Matching clock or
+readout-path labels do not fill missing bias evidence. Disjoint intervals rule
+out a common bias under the reported bounds, even if one interval is unknown.
+A nonempty common intersection is not proof of equal bias, calibration or
+acceptable mismatch. The diagnostic reports attempted and timing-eligible
+counts without printing bias values or modifying eligibility.

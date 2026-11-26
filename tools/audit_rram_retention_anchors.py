@@ -21,6 +21,7 @@ MAX_BYTES = 8 * 1024 * 1024
 MAX_ROWS = 100_000
 KEY = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.:-]{0,127}", re.ASCII)
 INTEGER = re.compile(r"[0-9]{1,18}", re.ASCII)
+SIGNED_INTEGER = re.compile(r"[+-]?[0-9]{1,18}", re.ASCII)
 SHA256 = re.compile(r"[a-f0-9]{64}", re.ASCII)
 
 
@@ -228,6 +229,38 @@ def readout_path_status(slots, metadata):
     return "missing_or_unknown_path_without_observed_change"
 
 
+def read_bias_intervals(path, expected):
+    biases = defaultdict(dict)
+    fields = IDENTITY + ("nominal_us", "observed_read_bias_uV", "read_bias_error_uV")
+    for key, (raw_nominal, value, error) in records(path, fields):
+        nominal = integer(raw_nominal)
+        if nominal not in ANCHORS:
+            raise ValueError("read bias table includes an off-anchor slot")
+        if key not in expected or len(expected[key].get(nominal, ())) != 1:
+            raise ValueError("read bias does not identify one captured frozen anchor")
+        if nominal in biases[key]:
+            raise ValueError("duplicate read bias for the same captured anchor")
+        if (value and not SIGNED_INTEGER.fullmatch(value)) or (error and not INTEGER.fullmatch(error)):
+            raise ValueError("read bias and error must be integral microvolts; error cannot be negative")
+        if value and error:
+            tick, bound = int(value), int(error)
+            biases[key][nominal] = (tick - bound, tick + bound)
+        else:
+            biases[key][nominal] = None
+    return biases
+
+
+def read_bias_status(slots, metadata):
+    if any(len(slots.get(nominal, ())) != 1 for nominal in ANCHORS):
+        return "missing_or_ambiguous_capture"
+    known = [interval for interval in metadata.values() if interval is not None]
+    if known and max(lo for lo, _ in known) > min(hi for _, hi in known):
+        return "common_reported_bias_ruled_out"
+    if len(known) == len(ANCHORS):
+        return "all_known_common_bias_not_ruled_out"
+    return "missing_or_unknown_bias_without_known_conflict"
+
+
 def validate_digest(digest, label):
     if digest is not None and (not isinstance(digest, str) or not SHA256.fullmatch(digest)):
         raise ValueError(f"{label} SHA-256 must be 64 lowercase hexadecimal digits")
@@ -236,7 +269,8 @@ def validate_digest(digest, label):
 def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=None,
           diagnose_dies=False, block_map_path=None, block_map_sha256=None, stress_history_path=None,
           diagnose_die_stress=False, diagnose_duplicate_anchors=False,
-          diagnose_terminal_alternatives=False, capture_sha256=None, readout_path_table=None):
+          diagnose_terminal_alternatives=False, capture_sha256=None, readout_path_table=None,
+          read_bias_table=None):
     validate_digest(roster_sha256, "frozen roster")
     validate_digest(capture_sha256, "timestamp capture")
     validate_digest(block_map_sha256, "acquisition block map")
@@ -280,6 +314,8 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
 
     paths = readout_paths(readout_path_table, expected) if readout_path_table is not None else None
     attempted_paths, eligible_paths = Counter(), Counter()
+    biases = read_bias_intervals(read_bias_table, expected) if read_bias_table is not None else None
+    attempted_bias, eligible_bias = Counter(), Counter()
     classifications = Counter()
     die_counts = defaultdict(lambda: [0, 0]) if diagnose_dies else None
     eligible_block_dies = defaultdict(set)
@@ -298,6 +334,11 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
             attempted_paths[path_status] += 1
             if reason == "eligible":
                 eligible_paths[path_status] += 1
+        if biases is not None:
+            status = read_bias_status(slots, biases.get(key, {}))
+            attempted_bias[status] += 1
+            if reason == "eligible":
+                eligible_bias[status] += 1
         if die_counts is not None:
             counts = die_counts[key[:3]]
             counts[0] += 1
@@ -416,6 +457,11 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
             "frozen_attempted_by_status": dict(sorted(attempted_paths.items())),
             "timing_eligible_by_status": dict(sorted(eligible_paths.items())),
         }
+    if biases is not None:
+        report["reported_read_bias_support"] = {
+            "frozen_attempted_by_status": dict(sorted(attempted_bias.items())),
+            "timing_eligible_by_status": dict(sorted(eligible_bias.items())),
+        }
     return report
 
 
@@ -445,6 +491,8 @@ def main():
                         help="verify exact outcome-free timestamp capture against a trusted SHA-256")
     parser.add_argument("--readout-paths", type=Path,
                         help="independent captured anchor to readout path metadata")
+    parser.add_argument("--read-bias", type=Path,
+                        help="independent captured anchor to observed read-bias bounds")
     args = parser.parse_args()
     try:
         report = audit(args.frozen_roster, args.capture, diagnose_anchors=args.diagnose_anchors,
@@ -454,7 +502,8 @@ def main():
                        stress_history_path=args.stress_history, diagnose_die_stress=args.diagnose_die_stress,
                        diagnose_duplicate_anchors=args.diagnose_duplicate_anchors,
                        diagnose_terminal_alternatives=args.diagnose_terminal_alternatives,
-                       capture_sha256=args.capture_sha256, readout_path_table=args.readout_paths)
+                       capture_sha256=args.capture_sha256, readout_path_table=args.readout_paths,
+                       read_bias_table=args.read_bias)
     except (OSError, UnicodeError, csv.Error):
         parser.exit(2, "error: input could not be read as UTF-8 CSV\n")
     except ValueError as exc:

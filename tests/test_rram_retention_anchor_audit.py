@@ -24,7 +24,7 @@ def episode(key=BASE, early=1_000_000, final=100_000_000_000, error=0):
 
 
 class RetentionAnchorAudit(unittest.TestCase):
-    def run_capture(self, roster, rows, capture_header=IDS + TIMES, *, extra=(), block_map=None, stress=None, readout_paths=None):
+    def run_capture(self, roster, rows, capture_header=IDS + TIMES, *, extra=(), block_map=None, stress=None, readout_paths=None, read_bias=None):
         with tempfile.TemporaryDirectory() as tmp:
             folder = Path(tmp)
             for name, header, payload in (
@@ -46,6 +46,12 @@ class RetentionAnchorAudit(unittest.TestCase):
                 with paths.open("w", newline="", encoding="utf-8") as stream:
                     csv.writer(stream).writerows((IDS + ("nominal_us", "readout_path"), *readout_paths))
                 extra = (*extra, "--readout-paths", str(paths))
+            if read_bias is not None:
+                bias_path = folder / "bias.csv"
+                with bias_path.open("w", newline="", encoding="utf-8") as stream:
+                    columns = IDS + ("nominal_us", "observed_read_bias_uV", "read_bias_error_uV")
+                    csv.writer(stream).writerows((columns, *read_bias))
+                extra = (*extra, "--read-bias", str(bias_path))
             return subprocess.run(
                 [sys.executable, str(TOOL), "--frozen-roster", str(folder / "roster.csv"),
                  "--capture", str(folder / "capture.csv"), *extra],
@@ -576,6 +582,45 @@ class RetentionAnchorAudit(unittest.TestCase):
                 self.assertFalse(denied.stdout)
                 self.assertIn(diagnostic, denied.stderr)
                 self.assertNotIn("privatePath", denied.stderr)
+
+    def test_read_bias_keeps_clock_and_route_separate_from_observed_bias(self):
+        roster = [(*BASE[:4], f"E{i}") for i in range(5)]
+        capture = [row for key in roster[:4] for row in episode(key)]
+        capture.extend(episode(roster[4])[:2])
+        ns = (0, 1_000_000, 100_000_000_000)
+        paths = [(*key, n, "same_private_path") for key in roster[:4] for n in ns]
+        bias = [(*roster[0], n, v, 5) for n, v in zip(ns, (-10, 0, 10))]
+        bias += [(*roster[1], ns[0], -10, 0), (*roster[1], ns[2], 0, 0)]
+        bias += [(*roster[2], n, v, 5) for n, v in zip(ns, (-10, 0, -5))]
+        bias += [(*roster[3], ns[0], -7, ""), (*roster[3], ns[2], -7, 1)]
+        ordinary = self.run_capture(roster, capture, readout_paths=paths)
+        checked = self.run_capture(roster, capture, readout_paths=paths, read_bias=bias)
+        self.assertEqual((ordinary.returncode, checked.returncode), (1, 1))
+        report = json.loads(checked.stdout)
+        timing = {"common_reported_bias_ruled_out": 2, "all_known_common_bias_not_ruled_out": 1,
+                  "missing_or_unknown_bias_without_known_conflict": 1}
+        self.assertEqual(report.pop("reported_read_bias_support"), {
+            "frozen_attempted_by_status": {**timing, "missing_or_ambiguous_capture": 1},
+            "timing_eligible_by_status": timing,
+        })
+        self.assertEqual(report, json.loads(ordinary.stdout))
+        self.assertNotIn("same_private_path", checked.stdout)
+
+    def test_read_bias_rejects_unsupported_bindings_and_malformed_signed_data(self):
+        rows = episode()
+        terminal = (*BASE, 100_000_000_000, "-731", "1")
+        for capture, mapping, diagnostic in (
+            (rows[:2], [terminal], "does not identify one captured frozen anchor"),
+            (rows, [terminal, terminal], "duplicate read bias"),
+            (rows, [(*terminal[:-1], "-1")], "error cannot be negative"),
+            (rows, [(*terminal[:-2], "-3.5", "1")], "integral microvolts"),
+        ):
+            with self.subTest(diagnostic=diagnostic):
+                denied = self.run_capture([BASE], capture, read_bias=mapping)
+                self.assertEqual(denied.returncode, 2)
+                self.assertFalse(denied.stdout)
+                self.assertIn(diagnostic, denied.stderr)
+                self.assertNotIn("-731", denied.stderr)
 
     def test_capture_cannot_supply_labels_or_change_frozen_identity_set(self):
         r = self.run_capture([BASE], [(*row, "sensitive-value") for row in episode()],
