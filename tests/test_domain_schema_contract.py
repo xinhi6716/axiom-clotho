@@ -248,6 +248,41 @@ class DomainSchemaContractTests(unittest.TestCase):
             self.assertFalse(reply.stdout)
             self.assertEqual({p.name: p.read_bytes() for p in root.iterdir()}, before)
 
+    def test_cli_rejects_renumbered_domain_fold_order(self):
+        frame = fixture()
+        frame["d"] = frame["d"].map({"A": "丙", "B": "甲", "C": "乙"})
+        result = fit_predict(frame, frame[["x"]], **ARGS)
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1] / "src"),
+                       OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1", PYTHONDONTWRITEBYTECODE="1")
+            command = [sys.executable, "-m", "groupbench.cli", "validate-prediction-bundle", str(root)]
+
+            def replay():
+                return subprocess.run(command, env=env, capture_output=True, text=True, timeout=30)
+
+            result.write(root)
+            self.assertEqual(replay().returncode, 0)
+            raw = (root / "predictions.csv").read_bytes()
+            manifest = deepcopy(result.manifest)
+            audits = manifest["inner_folds"]
+            self.assertEqual([a["test_domains"][0] for a in audits], sorted(frame["d"].unique()))
+            # Swap whole fold records and their score slots to preserve every
+            # group, weight, outcome and pooled selection score.
+            audits.reverse()
+            for fold, audit in enumerate(audits):
+                audit["fold"] = fold
+            for record in manifest["inner_selection"]:
+                record["inner_fold_scores"].reverse()
+            write_bundle(root, manifest, csv=raw)
+            self.assertEqual(verify_bundle(root).bundle_type, "prediction")
+            frozen = {p.name: p.read_bytes() for p in root.iterdir()}
+            reply = replay()
+            self.assertEqual(reply.returncode, 2, reply.stderr)
+            self.assertIn("canonical held-domain order", reply.stderr)
+            self.assertFalse(reply.stdout)
+            self.assertEqual({p.name: p.read_bytes() for p in root.iterdir()}, frozen)
+
     def test_saved_selection_tie_does_not_hide_nonzero_decimal_underflow(self):
         m = deepcopy(self.pred)
         for record in m["inner_selection"]:

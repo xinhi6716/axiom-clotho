@@ -667,6 +667,7 @@ def _domain_selection(value, rows, group_ids, mapping, inner, config, *, group_s
     audits = value.get("inner_folds")
     if not isinstance(audits, list) or len(audits) != inner:
         _fail("domain inner fold coverage differs.")
+    canonical_domains = sorted(domains)
     seen, tests = set(), 0
     for fold, audit in enumerate(audits):
         audit = _object(audit)
@@ -679,6 +680,8 @@ def _domain_selection(value, rows, group_ids, mapping, inner, config, *, group_s
         td, vd = sorted(set(mapping[g] for g in train)), sorted(set(mapping[g] for g in test))
         if len(vd) != 1 or set(td) & set(vd) or vd[0] in seen:
             _fail("inner domains overlap or validation domain repeats.")
+        if vd[0] != canonical_domains[fold]:
+            _fail("inner folds differ from canonical held-domain order.")
         seen.add(vd[0])
         for key, expected in dict(fold=fold, train_domains=td, test_domains=vd,
                 train_domain_count=len(td), test_domain_count=1, domain_overlap_count=0,
