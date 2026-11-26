@@ -15,7 +15,8 @@ import pandas as pd
 from groupbench import benchmark, fit_predict, plan_benchmark, plan_prediction
 from groupbench.cli import main
 from groupbench.data import validate_features
-from groupbench.input_support import (audit_complete_feature_support_by_group,
+from groupbench.input_support import (audit_categorical_pair_group_support,
+                                      audit_complete_feature_support_by_group,
                                       audit_numeric_pair_hull, prediction_input_support)
 from groupbench.model import make_pipeline
 from groupbench.verification import _SAFE_OPEN_SUPPORTED, verify_bundle
@@ -362,6 +363,60 @@ class CompleteFeatureSupportByGroupTests(unittest.TestCase):
                 audit_complete_feature_support_by_group(frame, groups)
         with self.assertRaises(ValueError):
             audit_complete_feature_support_by_group(frame.assign(a=np.inf), [0, 1])
+
+
+class CategoricalPairGroupSupportTests(unittest.TestCase):
+    def test_many_rows_not_many_groups_and_known_levels_not_known_pair(self):
+        rows = [("A", "hot")] * 50 + [("B", "cold"), ("B", "cold")]
+        ids = ["p0"] * 50 + ["p0", "p1"]
+        query = [("A", "hot"), ("A", "cold"), ("C", "hot"), ("B", "cold")]
+        expected = {
+            "n_training_rows": 52, "n_declared_training_groups": 2,
+            "n_distinct_training_pairs": 2, "n_query_rows": 4, "minimum_training_groups": 2,
+            "n_query_rows_with_unseen_level": 1,
+            "n_query_rows_with_unseen_pair_of_known_levels": 1,
+            "n_query_rows_with_pair_below_group_threshold": 1,
+            "n_query_rows_with_pair_at_group_threshold_or_above": 1,
+        }
+        self.assertEqual(audit_categorical_pair_group_support(rows, query, training_groups=ids,
+                                                               minimum_training_groups=2), expected)
+        reversed_report = audit_categorical_pair_group_support(
+            rows[::-1], query[::-1], training_groups=ids[::-1], minimum_training_groups=2)
+        self.assertEqual(reversed_report, expected)
+
+    def test_every_small_support_pattern_matches_direct_sets(self):
+        atoms = list(product(("A", "B"), ("cold", "hot"), (0, 1)))
+        queries = list(product(("A", "B", "a"), ("cold", "hot")))
+        for mask in range(1, 1 << len(atoms)):
+            selected = [atom for i, atom in enumerate(atoms) if mask & (1 << i)]
+            train, groups = [x[:2] for x in selected], [x[2] for x in selected]
+            report = audit_categorical_pair_group_support(
+                train, queries, training_groups=groups, minimum_training_groups=2)
+            expected = [0] * 4
+            for a, b in queries:
+                matching_groups = {g for x, y, g in selected if (x, y) == (a, b)}
+                known_levels = any(a == x for x, _, _ in selected) and any(b == y for _, y, _ in selected)
+                unit = (0 if not known_levels else 1 if not matching_groups else
+                        2 if len(matching_groups) == 1 else 3)
+                expected[unit] += 1
+            keys = ("with_unseen_level", "with_unseen_pair_of_known_levels",
+                    "with_pair_below_group_threshold", "with_pair_at_group_threshold_or_above")
+            self.assertEqual([report["n_query_rows_" + key] for key in keys], expected, mask)
+
+    def test_malformed_pairs_groups_and_threshold_reject(self):
+        train = [("A", "hot")]
+        for invalid in ([], [("A",)], [("A", None)], [(" ", "hot")], [("A", 1)],
+                        [("A\0", "hot")], [["A", "hot"]], [("\ud800", "hot")]):
+            with self.subTest(query=invalid), self.assertRaises(ValueError):
+                audit_categorical_pair_group_support(train, invalid, training_groups=[0],
+                                                     minimum_training_groups=1)
+        for limit in (False, 0, -1, 1., 20_001):
+            with self.assertRaises(ValueError):
+                audit_categorical_pair_group_support(train, train, training_groups=[0],
+                                                     minimum_training_groups=limit)
+        with self.assertRaises(ValueError):
+            audit_categorical_pair_group_support(train, train, training_groups=[],
+                                                 minimum_training_groups=1)
 
 
 if __name__ == "__main__":

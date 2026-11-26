@@ -281,3 +281,65 @@ def audit_complete_feature_support_by_group(features: pd.DataFrame, row_groups) 
         "n_groups_with_at_least_one_complete_row": int((complete_per_group > 0).sum()),
         "n_groups_with_only_complete_rows": int((complete_per_group == rows_per_group).sum()),
     }
+
+
+def audit_categorical_pair_group_support(training, query, *, training_groups,
+                                         minimum_training_groups: int) -> dict:
+    """Count declared training groups supporting each preselected category pair.
+
+    Supply explicit ordered two-string tuples in the same feature order,
+    without imputations, collapse or case normalization. Group identifiers
+    follow the normal group contract and must align to training row positions.
+    Choose the positive minimum group count before examining query results.
+    Repeated rows from one group do not establish additional group support.
+
+    Distinguish a new marginal level, a previously unseen combination of
+    known levels, an observed pair below the group threshold, and a pair
+    meeting that threshold. These descriptive counts do not establish
+    physical independence, adequate uncertainty, or transfer accuracy.
+    """
+    from .data import MAX_ROWS, validate_groups
+
+    def pairs(values):
+        if type(values) not in (list, tuple) or not 1 <= len(values) <= MAX_ROWS:
+            raise ValueError("Training and query pairs require bounded nonempty sequences.")
+        # Keep each literal, including meaningful spaces or case. Reject
+        # malformed text rather than stringify numeric IDs or missing values.
+        for pair in values:
+            if (type(pair) is not tuple or len(pair) != 2 or any(
+                type(v) is not str or not v.strip() or len(v) > 1024 or "\x00" in v
+                or any(0xd800 <= ord(c) <= 0xdfff for c in v) for v in pair
+            )):
+                raise ValueError("Categorical pairs require two bounded, nonblank string values.")
+        return values
+
+    if type(minimum_training_groups) is not int or not 1 <= minimum_training_groups <= MAX_ROWS:
+        raise ValueError("The minimum training group count must be a bounded positive integer.")
+    train, queries = pairs(training), pairs(query)
+    groups = validate_groups(training_groups, len(train))
+    supporting = {}
+    levels_left, levels_right = set(), set()
+    for pair, group in zip(train, groups):
+        supporting.setdefault(pair, set()).add(group)
+        levels_left.add(pair[0])
+        levels_right.add(pair[1])
+
+    novel_level = novel_pair = below_minimum = supported = 0
+    for pair in queries:
+        if pair[0] not in levels_left or pair[1] not in levels_right:
+            novel_level += 1
+        elif pair not in supporting:
+            novel_pair += 1
+        elif len(supporting[pair]) < minimum_training_groups:
+            below_minimum += 1
+        else:
+            supported += 1
+    return {
+        "n_training_rows": len(train), "n_declared_training_groups": len(set(groups)),
+        "n_distinct_training_pairs": len(supporting), "n_query_rows": len(queries),
+        "minimum_training_groups": minimum_training_groups,
+        "n_query_rows_with_unseen_level": novel_level,
+        "n_query_rows_with_unseen_pair_of_known_levels": novel_pair,
+        "n_query_rows_with_pair_below_group_threshold": below_minimum,
+        "n_query_rows_with_pair_at_group_threshold_or_above": supported,
+    }
