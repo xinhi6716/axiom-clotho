@@ -337,6 +337,27 @@ def run(prepared_dir, output_dir):
     return metadata
 
 
+def _check_saved_prediction_provenance(payloads, metadata, hashes, n_predictions):
+    # Outer receipt integrity is not evidence that the nested calculator
+    # output came from these prepared inputs. Bind its redundant declarations
+    # before opening later outcomes; this is not an authenticity signature.
+    names = ("manifest.json", "predictions.csv")
+    nested = {name: payloads[f"prediction/{name}"] for name in names}
+    receipt = parse_json(payloads["prediction/checksums.json"])
+    manifest = parse_json(nested["manifest.json"])
+    counts = {"n_training_rows": metadata["training_rows"],
+              "n_training_groups": len(metadata["training_groups"]),
+              "n_predictions": n_predictions}
+    if (receipt != {"algorithm": "sha256", "files": {n: sha(b) for n, b in nested.items()}}
+            or not isinstance(manifest, dict)
+            or manifest.get("mode") != "fit_predict"
+            or manifest.get("source_file_sha256") != hashes["training.csv"]
+            or manifest.get("prediction_source_file_sha256") != hashes["future.csv"]
+            or any(type(manifest.get(key)) is not int or manifest[key] != value
+                   for key, value in counts.items())):
+        raise WorkflowError("saved calculator prediction provenance conflicts with the run bundle")
+
+
 def score(run_dir, outcomes_csv, output_dir):
     """Use already saved predictions; do not load ML, train, select, or refit."""
     protect_output(output_dir, run_dir)
@@ -370,6 +391,7 @@ def score(run_dir, outcomes_csv, output_dir):
         expected = [{"device": r["device"], "group": identifier(r["group"])} for r in rows]
         if metadata["future_cohort"] != expected or {r["group"] for r in rows} & set(groups):
             raise WorkflowError("saved prediction identities or group boundary are inconsistent")
+        _check_saved_prediction_provenance(payloads, metadata, hashes, len(rows))
         engine = parse_csv(payloads["prediction/predictions.csv"], ("row_position", "prediction"))
         mismatch = "keyed predictions differ from the unchanged calculator prediction bundle"
         if len(engine) != len(rows):

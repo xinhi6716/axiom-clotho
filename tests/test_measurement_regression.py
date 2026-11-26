@@ -536,6 +536,45 @@ class MeasurementRegressionTests(unittest.TestCase):
         with self.assertRaisesRegex(c.WorkflowError, "differ from"):
             flow.score(self.run_dir, self.inputs / "later_outcomes.csv", self.score_dir)
 
+    def test_saved_score_rejects_predictions_spliced_from_different_training_snapshot(self):
+        self.prepare()
+        flow.run(self.prepared, self.run_dir)
+        original = tree(self.run_dir)
+        outcomes = self.inputs / "later_outcomes.csv"
+        self.assertEqual(self.command("score", "--run-dir", self.run_dir, "--outcomes", outcomes,
+                                      "--output-dir", self.root / "control", no_site=True).returncode, 0)
+        targets = self.rows("training_targets.csv", ("device", "target"))
+        for row in targets:
+            row["target"] = str(c.number(row["target"]) + 100)
+        (self.inputs / "training_targets.csv").write_bytes(c.csv_bytes(("device", "target"), targets))
+        self.prepared = self.root / "other_prepared"
+        self.prepare()
+        other_run = self.root / "other_run"
+        flow.run(self.prepared, other_run)
+        other = tree(other_run)
+        self.assertNotEqual(original["prediction_rows.csv"], other["prediction_rows.csv"])
+        for index, (case, replacements) in enumerate((
+            ("valid inner bundle from another run", {k: v for k, v in other.items()
+                 if k.startswith("prediction/") or k == "prediction_rows.csv"}),
+            ("stale inner checksum", {"prediction/manifest.json": original["prediction/manifest.json"] + b" "}),
+        )):
+            with self.subTest(case=case):
+                destination = self.root / f"splice-score-{index}"
+                for name, data in {**original, **replacements}.items():
+                    (self.run_dir / name).write_bytes(data)
+                receipt = c.parse_json(original["COMPLETE.json"])
+                receipt["files_sha256"].update({name: c.sha(data) for name, data in replacements.items()})
+                (self.run_dir / "COMPLETE.json").write_bytes(c.json_bytes(receipt))
+                c.load_bundle(self.run_dir, "run")
+                before = tree(self.run_dir)
+                result = self.command("score", "--run-dir", self.run_dir, "--outcomes", outcomes,
+                                      "--output-dir", destination, no_site=True)
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertIn("saved calculator prediction provenance", result.stderr)
+                self.assertFalse(result.stdout)
+                self.assertFalse(destination.exists())
+                self.assertEqual(tree(self.run_dir), before)
+
     def test_report_escapes_endpoint_markup_and_has_no_external_assets(self):
         config = self.config(endpoint_name="<script>alert(1)</script>")
         report = flow._report("<unsafe>", config, ["<script>bad</script>"], [("scores.json", "<metrics>")]).decode()
