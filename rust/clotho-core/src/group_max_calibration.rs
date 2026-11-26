@@ -71,15 +71,18 @@ pub fn calibrate_group_max(
     if roster.is_empty() {
         return Err(GroupMaxError::EmptyRoster);
     }
-    if !roster
-        .iter()
-        .copied()
-        .chain(rows.iter().map(|r| r.key))
-        .all(valid_key)
+    let same_length = roster.len() == rows.len();
+    let first_difference = roster.iter().zip(rows).position(|(key, row)| *key != row.key);
+    let aligned = same_length && first_difference.is_none();
+    // Exactly aligned keys are already checked by the declared roster.
+    // Otherwise keep the original precedence: malformed supplied keys
+    // outrank roster mismatch, even when lengths differ.
+    if !roster.iter().copied().all(valid_key)
+        || (!aligned && !rows.iter().all(|r| valid_key(r.key)))
     {
         return Err(GroupMaxError::InvalidKey);
     }
-    let order = match_roster(roster, rows).ok_or(GroupMaxError::RosterMismatch)?;
+    let order = match_roster(roster, rows, first_difference).ok_or(GroupMaxError::RosterMismatch)?;
     let (groups, rank, maxima) = match order {
         RosterMatch::InGroupOrder => {
             let maxima = ordered_group_maxima(rows)?;
@@ -169,16 +172,16 @@ enum RosterMatch {
     Arbitrary,
 }
 
-fn match_roster(roster: &[RowKey<'_>], rows: &[CalibrationRow<'_>]) -> Option<RosterMatch> {
+fn match_roster(
+    roster: &[RowKey<'_>],
+    rows: &[CalibrationRow<'_>],
+    first_difference: Option<usize>,
+) -> Option<RosterMatch> {
     if roster.len() != rows.len() {
         return None;
     }
     // A strictly ordered roster proves uniqueness. If the supplied keys
     // follow it directly or in reverse, there is nothing to index.
-    let first_difference = roster
-        .iter()
-        .zip(rows)
-        .position(|(key, row)| *key != row.key);
     if first_difference.is_some_and(|i| i + 1 == roster.len()) {
         // With every other pair unchanged, one differing final key cannot
         // be a permutation. This also rejects a repeated last key cheaply.
@@ -232,6 +235,15 @@ mod tests {
             observed,
             prediction: 0.0,
         }
+    }
+
+    #[test]
+    fn aligned_keys_are_still_validated_before_duplicate_and_numeric_checks() {
+        let key = RowKey { group: "g", row: "\n" };
+        let row = CalibrationRow { key, observed: f64::NAN, prediction: 0.0 };
+        assert_eq!(calibrate_group_max(&[key, key], &[row, row], 1, 2), Err(GroupMaxError::InvalidKey));
+        let valid = RowKey { group: "g", row: "r" };
+        assert_eq!(calibrate_group_max(&[valid, valid], &[row], 1, 2), Err(GroupMaxError::InvalidKey));
     }
 
     #[test]
