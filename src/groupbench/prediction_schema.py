@@ -748,6 +748,12 @@ def _metadata(manifest):
         names.append(record["name"])
     if len(set(names)) != len(names) or config.get("features") != names:
         _fail("feature names must be unique and match ordered config.features.")
+    # Historical narrow manifests may omit role declarations. When present,
+    # they cannot contradict the producer's disjoint column-role contract.
+    roles = [config[k] for k in ("target", "group") if k in config]
+    if (any(type(role) is not str or role in names for role in roles)
+            or len(set(roles)) != len(roles)):
+        _fail("declared target and group columns must be distinct from each other and all model features.")
     if version == "1.0":
         if "input_support" in manifest:
             _fail("schema 1.0 does not declare the input-support contract.")

@@ -306,6 +306,36 @@ class PredictionSchemaTests(unittest.TestCase):
             self.assertEqual(main(["verify", str(self.root)]), 0)
             self.assertIn("Byte integrity only", output.getvalue())
 
+    def test_cli_rejects_contradictory_declared_target_group_and_feature_roles(self):
+        env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1] / "src"),
+                   PYTHONDONTWRITEBYTECODE="1", OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1")
+        outcomes = self.root.parent / "outcomes.csv"
+        outcomes.write_text("row_position,group,observed\n0,A,1\n1,B,2\n")
+        commands = [
+            ["validate-prediction-bundle", str(self.root)],
+            ["score-predictions", "--run-dir", str(self.root), "--outcomes", str(outcomes)],
+        ]
+        for roles in ({"target": "voltage", "group": "batch"},
+                      {"target": "response", "group": "voltage"},
+                      {"target": "response", "group": "response"},
+                      {"target": "response", "group": 1},
+                      {"target": "response", "group": "batch"},
+                      {}):  # Legacy narrow manifests may omit both roles.
+            with self.subTest(roles=roles):
+                value = manifest()
+                value["config"].update(roles)
+                write_bundle(self.root, value)
+                verify_bundle(self.root)
+                before = {p.name: p.read_bytes() for p in self.root.iterdir()}
+                valid = not roles or roles == {"target": "response", "group": "batch"}
+                for args in commands:
+                    reply = subprocess.run([sys.executable, "-m", "groupbench.cli", *args],
+                                           env=env, capture_output=True, text=True, timeout=30)
+                    self.assertEqual(reply.returncode, 0 if valid else 2, reply.stderr)
+                    if not valid:
+                        self.assertFalse(reply.stdout)
+                self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
+
     def test_actual_writer_both_encodings(self):
         from groupbench import fit_predict, make_materials_fixture
         frame = make_materials_fixture(4, 2, 7)
