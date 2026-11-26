@@ -550,3 +550,19 @@ fn reused_median_scratch_never_mixes_interleaved_numeric_columns() {
         .collect();
     assert_eq!(fills, [5.0_f64.to_bits(), 0, (-0.0_f64).to_bits(), 11.0_f64.to_bits()]);
 }
+
+#[test]
+fn large_categorical_batches_keep_lexical_indices_and_exact_unknown_identity() {
+    let labels: Vec<_> = (0..23).map(|i| format!("k{i:02}")).collect();
+    let mut train: Vec<_> = labels.iter().rev().map(|s| Some(s.as_str())).collect();
+    train.push(Some("技研"));
+    let prep = Preprocessor::fit(&[categorical("recipe", &train)]).unwrap();
+    let query = [Some("k06"), Some("技研"), Some("技研 "), Some("K06"), None].repeat(52);
+    let got = prep.transform(&[categorical("recipe", &query)]).unwrap();
+    for (i, row) in got.iter().enumerate() {
+        let expected = match i % 5 {
+            0 => Some(7), 1 => Some(24), 4 => Some(0), _ => None,
+        };
+        assert!(row.iter().enumerate().all(|(j, &v)| v == f64::from(u8::from(expected == Some(j)))));
+    }
+}

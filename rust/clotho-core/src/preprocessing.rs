@@ -217,7 +217,20 @@ impl Preprocessor {
             if !same_type && !all_missing(query) {
                 return Err(PreprocessingError::TypeMismatch);
             }
-            matched.push((column, query));
+            // Hash once per larger compatible batch, retaining each
+            // training vocabulary's existing lexical indicator index.
+            let lookup = match (&column.values, query) {
+                (FittedValues::Categorical { vocabulary }, FeatureValues::Categorical(_))
+                    if rows >= 128 && vocabulary.len() >= 16 =>
+                {
+                    Some(
+                        vocabulary.iter().enumerate().map(|(i, s)| (s.as_str(), i))
+                            .collect::<HashMap<_, _>>(),
+                    )
+                }
+                _ => None,
+            };
+            matched.push((column, query, lookup));
         }
 
         // Keep just-initialized rows near the processor while writing the
@@ -228,7 +241,7 @@ impl Preprocessor {
             let end_row = (start_row + TILE_ROWS).min(rows);
             output.resize_with(end_row, || vec![0.0; self.feature_names.len()]);
             let tile = &mut output[start_row..end_row];
-            for &(column, query) in &matched {
+            for (column, query, lookup) in &matched {
                 let start = column.output_start;
                 match (&column.values, query) {
                     (FittedValues::Numeric { fill }, FeatureValues::Numeric(values)) => {
@@ -243,14 +256,18 @@ impl Preprocessor {
                         }
                     }
                     (FittedValues::Categorical { vocabulary }, FeatureValues::Categorical(values)) => {
-                        for (row, value) in tile.iter_mut().zip(&values[start_row..end_row]) {
-                            match value {
-                                None => row[start] = 1.0,
-                                Some(value) => {
-                                    if let Ok(index) = vocabulary.binary_search(value) {
-                                        row[start + index + 1] = 1.0;
+                        let values = &values[start_row..end_row];
+                        if let Some(lookup) = lookup {
+                            fill_categorical_tile(tile, values, start, |s| lookup.get(s).copied());
+                        } else {
+                            for (row, value) in tile.iter_mut().zip(values) {
+                                match value {
+                                    None => row[start] = 1.0,
+                                    Some(value) => {
+                                        if let Ok(index) = vocabulary.binary_search(value) {
+                                            row[start + index + 1] = 1.0;
+                                        }
                                     }
-                                    // Query-only strings intentionally remain all zero.
                                 }
                             }
                         }
@@ -307,6 +324,25 @@ impl Preprocessor {
                 }
             })
             .collect()
+    }
+}
+
+fn fill_categorical_tile(
+    tile: &mut [Vec<f64>],
+    values: &[Option<String>],
+    start: usize,
+    indicator: impl Fn(&str) -> Option<usize>,
+) {
+    for (row, value) in tile.iter_mut().zip(values) {
+        match value {
+            None => row[start] = 1.0,
+            Some(s) => {
+                if let Some(index) = indicator(s) {
+                    row[start + index + 1] = 1.0;
+                }
+                // Query-only strings intentionally remain all zero.
+            }
+        }
     }
 }
 
