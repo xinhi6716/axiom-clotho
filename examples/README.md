@@ -43,6 +43,7 @@ For your own measurements, [clotho init](../docs/WORKFLOW_INIT.md) creates blank
 | Whether two sources define track height the same way | [Order of profile aggregation](profile-aggregation-order/README.md) | Transverse registration, baseline, along-track span, and whether averaging precedes peak extraction. Equal areas do not resolve a ranking reversal. |
 | Whether derived printability quantities can replace measured height | [Derived bead geometry](derived-bead-geometry-alias/README.md) | Keep measured bead height, melt depth, hatch spacing and design layer thickness as distinct endpoints. |
 | Whether a penetration reading establishes adhesion | [Penetration and adhesion](penetration-is-not-adhesion/README.md) | Count all attempted tracks. Keep zero depth, missing depth and measured adhesion status separate. |
+| Whether order can masquerade as a recipe effect | [Track order and carryover](track-order-balance/README.md) | Distinguish a common time trend from a prior recipe changing the next measurement. |
 | Whether two resistance reads satisfy the same prediction schedule | [Scheduled reads versus first-after reads](scheduled-anchor-vs-first-after/README.md) | Record the declared slot and actual elapsed time; a read after the cutoff cannot silently replace a missing scheduled read. |
 | Whether local timer values establish a retention interval | [Retention clock identity](retention-clock-identity/README.md) | Require a common clock and epoch, retained origin, and bounded per-read timing before applying the elapsed window. |
 
