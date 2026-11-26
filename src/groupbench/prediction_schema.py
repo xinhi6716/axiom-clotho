@@ -659,7 +659,7 @@ def _domain_config(config, expected_groups):
     return mapping
 
 
-def _domain_selection(value, rows, group_ids, mapping, inner, config):
+def _domain_selection(value, rows, group_ids, mapping, inner, config, *, group_sizes=None):
     groups = set(group_ids)
     domains = set(mapping[g] for g in groups)
     if type(inner) is not int or inner < 2 or inner != len(domains):
@@ -690,6 +690,10 @@ def _domain_selection(value, rows, group_ids, mapping, inner, config):
         te = _count(audit.get("test_rows"), rows, positive=True)
         if tr + te != rows or tr < len(train) or te < len(test):
             _fail("inner domain row partition differs.")
+        # Evaluation retains one outer out-of-fold row per original
+        # observation; prediction-only replay has no such independent tally.
+        if group_sizes is not None and te != sum(group_sizes[group] for group in test):
+            _fail("inner domain row counts differ from retained outer group sizes.")
         tests += te
     if seen != domains or tests != rows:
         _fail("domain validation must cover all training rows exactly once by declared counts.")

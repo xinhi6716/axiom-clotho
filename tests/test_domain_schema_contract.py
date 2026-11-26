@@ -1,5 +1,6 @@
 """Saved declaration checks only; hand-authored fixtures, no study draws."""
 from copy import deepcopy
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -139,6 +140,45 @@ class DomainSchemaContractTests(unittest.TestCase):
                     self.assertIn("pooled fold scores", reply.stderr)
                     self.assertFalse(reply.stdout)
                     self.assertEqual({p.name: p.read_bytes() for p in path.iterdir()}, before)
+
+    def test_cli_domain_inner_counts_match_retained_group_sizes(self):
+        import pandas as pd
+
+        base = fixture()
+        frame = pd.concat([base, base, base], ignore_index=True).assign(y=0.)
+        result = benchmark(frame, outer_splits=3, **(ARGS | {"baselines": ("dummy",)}))
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1] / "src"),
+                       OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1", PYTHONDONTWRITEBYTECODE="1")
+            command = [sys.executable, "-m", "groupbench.cli", "validate-evaluation-bundle", str(root)]
+
+            def replay():
+                return subprocess.run(command, env=env, capture_output=True, text=True, timeout=30)
+
+            result.write(root)
+            self.assertEqual(replay().returncode, 0)
+            path = root / "manifest.json"
+            manifest = json.loads(path.read_text())
+            first, second, *_ = manifest["outer_folds"][0]["inner_folds"]
+            self.assertGreater(second["test_rows"], second["test_group_count"])
+            self.assertGreater(first["train_rows"], first["train_group_count"])
+            first["test_rows"] += 1
+            first["train_rows"] -= 1
+            second["test_rows"] -= 1
+            second["train_rows"] += 1
+            path.write_text(json.dumps(manifest))
+            receipt_path = root / "checksums.json"
+            receipt = json.loads(receipt_path.read_text())
+            receipt["files"]["manifest.json"] = hashlib.sha256(path.read_bytes()).hexdigest()
+            receipt_path.write_text(json.dumps(receipt))
+            self.assertEqual(verify_bundle(root).bundle_type, "evaluation")
+            before = {p.name: p.read_bytes() for p in root.iterdir()}
+            reply = replay()
+            self.assertEqual(reply.returncode, 2, reply.stderr)
+            self.assertIn("retained outer group sizes", reply.stderr)
+            self.assertFalse(reply.stdout)
+            self.assertEqual({p.name: p.read_bytes() for p in root.iterdir()}, before)
 
     def test_saved_selection_tie_does_not_hide_nonzero_decimal_underflow(self):
         m = deepcopy(self.pred)

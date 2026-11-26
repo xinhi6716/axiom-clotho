@@ -191,6 +191,7 @@ def _check(manifest, summary, raw):
         _fail("outer fold audit coverage differs.")
     sorted_groups = sorted(membership)
     if version == "1.3":
+        group_sizes = {group: len(rows) for group, rows in group_rows.items()}
         candidates = _domain_candidates(config)
         declared = config.get("candidates")
         if (not isinstance(declared, list) or len(declared) != len(candidates)
@@ -234,7 +235,8 @@ def _check(manifest, summary, raw):
             if version == "1.3":
                 if not isinstance(audit.get("family_candidates"), dict):
                     _fail("domain family winner declaration is missing.")
-                _domain_selection(audit, n-test_rows, train_groups, mapping, inner, config)
+                _domain_selection(audit, n-test_rows, train_groups, mapping, inner, config,
+                                  group_sizes=group_sizes)
         # Older narrow artifacts can omit selection metadata. Whenever the
         # family is declared, the selected entry must equal that fold's
         # family refit, not a separate vector with matching scalar metrics.
