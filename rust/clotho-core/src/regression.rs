@@ -70,18 +70,7 @@ impl MeanRegressor {
 
     pub fn fit(x: &[Vec<f64>], y: &[f64]) -> Result<Self, RegressionError> {
         let width = validate_training(x, y, false)?;
-        let scale = y.iter().map(|v| v.abs()).fold(0.0_f64, f64::max);
-        let mean = if scale == 0.0 {
-            0.0
-        } else {
-            let normalized = y
-                .iter()
-                .map(|v| checked_div(*v, scale))
-                .collect::<Result<Vec<_>, _>>()?;
-            let average = checked_div(compensated_sum(normalized.into_iter())?, y.len() as f64)?
-                .clamp(-1.0, 1.0);
-            checked_mul(average, scale)?
-        };
+        let (mean, _) = checked_target_location(y)?;
         Ok(Self { width, mean })
     }
 
@@ -144,7 +133,7 @@ impl RidgeRegressor {
             }
             scalers.push(scaler);
         }
-        let targets = TargetScaler::fit(x, y)?;
+        let targets = TargetScaler::fit(y)?;
         let mut target = vec![0.0; row_count];
         for (b, value) in target.iter_mut().zip(y) {
             *b = targets.transform(*value)?;
@@ -187,9 +176,9 @@ struct TargetScaler {
 }
 
 impl TargetScaler {
-    fn fit(x: &[Vec<f64>], y: &[f64]) -> Result<Self, RegressionError> {
-        let origin = MeanRegressor::fit(x, y)?.mean();
-        let magnitude = y.iter().map(|value| value.abs()).fold(0.0_f64, f64::max);
+    fn fit(y: &[f64]) -> Result<Self, RegressionError> {
+        // The caller already validated the full feature and target tables.
+        let (origin, magnitude) = checked_target_location(y)?;
         let magnitude = if magnitude == 0.0 { 1.0 } else { magnitude };
         let mut deviation = 0.0_f64;
         for value in y {
@@ -370,6 +359,18 @@ fn checked_mul(a: f64, b: f64) -> Result<f64, RegressionError> {
     } else {
         Ok(value)
     }
+}
+
+// Inputs were validated by the estimator. Sharing the scale with TargetScaler
+// avoids reading the targets again merely to recover their magnitude.
+fn checked_target_location(y: &[f64]) -> Result<(f64, f64), RegressionError> {
+    let scale = y.iter().map(|value| value.abs()).fold(0.0_f64, f64::max);
+    if scale == 0.0 {
+        return Ok((0.0, 0.0));
+    }
+    let normalized = y.iter().map(|&value| checked_div(value, scale));
+    let average = checked_div(compensated_checked_sum(normalized)?, y.len() as f64)?.clamp(-1.0, 1.0);
+    Ok((checked_mul(average, scale)?, scale))
 }
 
 fn compensated_sum(values: impl Iterator<Item = f64>) -> Result<f64, RegressionError> {

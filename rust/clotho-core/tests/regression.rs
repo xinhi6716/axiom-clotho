@@ -372,3 +372,18 @@ fn extended_training_has_separate_cell_work_and_query_budgets() {
     assert_eq!(RidgeRegressor::fit(&vec![vec![0.0; 18]; n], &y, -1.0).unwrap_err(), RegressionError::Capacity);
     assert_eq!(RidgeRegressor::fit(&vec![vec![0.0; 100]; 20_000], &vec![0.0; 20_000], -1.0).unwrap_err(), RegressionError::InvalidAlpha);
 }
+
+#[test]
+fn mean_and_ridge_preserve_checked_target_location_semantics() {
+    let x = [vec![1.0], vec![1.0], vec![1.0]];
+    let maximum = 2.0_f64.powi(512);
+    let y = [maximum, 3.0, -maximum];
+    assert_eq!(MeanRegressor::fit(&x, &y).unwrap().mean().to_bits(), 1.0_f64.to_bits());
+    assert_eq!(MeanRegressor::fit(&x, &[-0.0; 3]).unwrap().mean().to_bits(), 0);
+
+    // A feature matrix can be valid even though target normalization would
+    // erase an observed nonzero target.
+    let too_wide = [f64::MAX, f64::from_bits(1), 0.0];
+    assert_eq!(MeanRegressor::fit(&x, &too_wide).unwrap_err(), RegressionError::NumericFailure);
+    assert_eq!(RidgeRegressor::fit(&x, &too_wide, 1.0).unwrap_err(), RegressionError::NumericFailure);
+}
