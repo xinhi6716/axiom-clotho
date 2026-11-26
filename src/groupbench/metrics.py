@@ -845,3 +845,75 @@ def paired_group_mse_components(rows, *, expected_roster):
 
     return {"n_rows": len(rows), "n_declared_groups": k,
             "row_weighted": view(True), "equal_group": view(False)}
+
+
+def paired_threshold_decision_cost_bounds(rows, *, expected_roster, threshold,
+                                           false_positive_cost, false_negative_cost):
+    """Bound paired threshold decision costs for independently bounded truths.
+
+    Supply (row_id, truth_lower, truth_upper, prediction_a, prediction_b)
+    tuples, and an independently frozen (row_id, group_id) roster. Predict
+    and observe the event at or above the same predeclared finite threshold.
+    Reaching the threshold counts as an event. A truth interval crossing the
+    threshold allows either event state; a point interval is an exact truth.
+
+    The caller freezes common target units, nonnegative cost penalties,
+    and the complete roster before comparing models. Bounds are exact for
+    represented binary64 inputs and independently varying row truths.
+    They are descriptive cost sensitivities, not a probability model or
+    authorization to deploy a decision rule.
+    """
+    if not all(map(_bounded_paired_sequence, (rows, expected_roster))):
+        raise ValueError("Rows and frozen roster must be bounded nonempty lists or tuples.")
+    t, fp, fn = map(_paired_binary64_units, (threshold, false_positive_cost, false_negative_cost))
+    if min(fp, fn) < 0 or fp + fn == 0:
+        raise ValueError("Both costs must be nonnegative, with at least one positive.")
+    roster = {}
+    for member in expected_roster:
+        if (type(member) is not tuple or len(member) != 2
+                or not all(map(_paired_roster_id, member))):
+            raise ValueError("Frozen roster entries require valid (row ID, group ID) tuples.")
+        key, group = member
+        if key in roster:
+            raise ValueError("Frozen roster row IDs must be unique.")
+        roster[key] = group
+
+    seen, totals = set(), {}
+    ambiguous = ambiguous_disagreement = 0
+    for row in rows:
+        if type(row) is not tuple or len(row) != 5 or not _paired_roster_id(row[0]):
+            raise ValueError("Paired rows require an ID, two truth bounds and two predictions.")
+        key = row[0]
+        if key not in roster or key in seen:
+            raise ValueError("Paired rows must match the frozen roster exactly.")
+        seen.add(key)
+        lower, upper, a, b = map(_paired_binary64_units, row[1:])
+        if lower > upper:
+            raise ValueError("Each truth interval must have ordered endpoints.")
+        different = int(b >= t) - int(a >= t)
+        if lower < t <= upper:
+            ambiguous += 1
+            ambiguous_disagreement += different != 0
+            cost_if_negative, cost_if_positive = different * fp, -different * fn
+            low, high = min(cost_if_negative, cost_if_positive), max(cost_if_negative, cost_if_positive)
+        else:
+            low = high = different * fp if upper < t else -different * fn
+        pooled = totals.setdefault(roster[key], [0, 0, 0])
+        pooled[0] += 1
+        pooled[1] += low
+        pooled[2] += high
+    if len(seen) != len(roster):
+        raise ValueError("Paired rows must match the frozen roster exactly.")
+
+    quantum = _BINARY64_QUANTUM_DENOMINATOR
+    return {
+        "n_rows": len(seen), "n_declared_groups": len(totals),
+        "n_ambiguous_truth_rows": ambiguous,
+        "n_ambiguous_truth_rows_with_action_disagreement": ambiguous_disagreement,
+        "row_weighted_b_minus_a_cost_bounds": tuple(
+            Fraction(sum(group[i] for group in totals.values()), len(seen) * quantum)
+            for i in (1, 2)),
+        "equal_group_b_minus_a_cost_bounds": tuple(
+            sum(Fraction(group[i], group[0] * quantum) for group in totals.values()) / len(totals)
+            for i in (1, 2)),
+    }
