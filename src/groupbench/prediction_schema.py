@@ -594,7 +594,8 @@ def _extended_details_v2(family, value, rows, groups, seed, params, sizes):
         _fail("unknown optional family in the extended-families-v2 detail contract.")
 
 
-def _domain_records(value, config, inner):
+def _domain_records(value, config, audits):
+    inner = len(audits)
     expected = _domain_candidates(config)
     records = value.get("inner_selection")
     if not isinstance(records, list) or len(records) != len(expected):
@@ -614,6 +615,16 @@ def _domain_records(value, config, inner):
                 or any(type(x) not in (int, float) or not math.isfinite(x) or x < 0 for x in scores)
                 or type(score) not in (int, float) or not math.isfinite(score) or score < 0):
             _fail("domain MAE scores must be nonnegative finite numbers covering every fold.")
+        weight_key = "test_group_count" if objective == "group_mae" else "test_rows"
+        total = sum(audit[weight_key] for audit in audits)
+        scale = max(scores)
+        pooled = 0.0 if scale == 0 else scale * math.fsum(
+            (s / scale) * (audit[weight_key] / total) for s, audit in zip(scores, audits))
+        # The producer accumulates over all retained rows or whole held
+        # groups, not equally over domains. Fold diagnostics are rounded.
+        if not math.isfinite(pooled) or not math.isclose(
+                score, pooled, rel_tol=1e-10, abs_tol=2 * math.ulp(0.0)):
+            _fail("domain selection score differs from its pooled fold scores.")
     winner = min(records, key=lambda r: r["selection_score"])
     if (value.get("selected_candidate") != winner["candidate"]
             or value.get("selected_family") != winner["family"]):
@@ -682,7 +693,7 @@ def _domain_selection(value, rows, group_ids, mapping, inner, config):
         tests += te
     if seen != domains or tests != rows:
         _fail("domain validation must cover all training rows exactly once by declared counts.")
-    _domain_records(value, config, inner)
+    _domain_records(value, config, audits)
 
 
 def _metadata(manifest):

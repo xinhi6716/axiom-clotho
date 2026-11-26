@@ -1,8 +1,11 @@
 """Saved declaration checks only; hand-authored fixtures, no study draws."""
 from copy import deepcopy
 import json
+import os
 from pathlib import Path
 import tempfile
+import subprocess
+import sys
 import unittest
 from unittest.mock import patch
 
@@ -107,10 +110,41 @@ class DomainSchemaContractTests(unittest.TestCase):
             self.assertEqual(_metadata(self.pred)[0], '1.4')
             self.assertEqual(self.check_eval(self.evaluation.manifest)[0], '1.3')
 
+    def test_cli_rejects_changed_domain_selection_score_with_folds_unchanged(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp)
+            env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1] / "src"),
+                       OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1", PYTHONDONTWRITEBYTECODE="1")
+            command = [sys.executable, "-m", "groupbench.cli", "validate-prediction-bundle", str(path)]
+            for objective in ("mae", "group_mae"):
+                with self.subTest(objective=objective):
+                    import pandas as pd
+                    frame = pd.concat([fixture(), fixture().iloc[[0]],
+                                       fixture().iloc[[2]].assign(g="new-group")], ignore_index=True)
+                    result = fit_predict(frame, frame[["x"]], **(ARGS | {"objective": objective}))
+                    raw = result.predictions.to_csv(index=False).encode()
+                    write_bundle(path, result.manifest, csv=raw)
+                    self.assertEqual(subprocess.run(command, env=env, capture_output=True,
+                                                    timeout=30).returncode, 0)
+                    value = deepcopy(result.manifest)
+                    chosen = next(r for r in value["inner_selection"]
+                                  if r["candidate"] == value["selected_candidate"])
+                    self.assertGreater(chosen["selection_score"], 0)
+                    chosen["selection_score"] = 0.0
+                    write_bundle(path, value, csv=raw)
+                    self.assertEqual(verify_bundle(path).bundle_type, "prediction")
+                    before = {p.name: p.read_bytes() for p in path.iterdir()}
+                    reply = subprocess.run(command, env=env, capture_output=True, text=True, timeout=30)
+                    self.assertEqual(reply.returncode, 2, reply.stderr)
+                    self.assertIn("pooled fold scores", reply.stderr)
+                    self.assertFalse(reply.stdout)
+                    self.assertEqual({p.name: p.read_bytes() for p in path.iterdir()}, before)
+
     def test_saved_selection_tie_does_not_hide_nonzero_decimal_underflow(self):
         m = deepcopy(self.pred)
         for record in m["inner_selection"]:
             record["selection_score"] = 0.0
+            record["inner_fold_scores"] = [0.0] * len(record["inner_fold_scores"])
         m.update(selected_candidate="dummy_mean", selected_family="dummy")
         m["inner_selection"][0]["selection_score"] = 12345.125
         m["inner_selection"][0]["inner_fold_scores"][0] = 12346.125
@@ -136,6 +170,7 @@ class DomainSchemaContractTests(unittest.TestCase):
         m = deepcopy(self.pred)
         for record in m['inner_selection']:
             record['selection_score'] = 0
+            record['inner_fold_scores'] = [0] * len(record['inner_fold_scores'])
         m.update(selected_candidate='dummy_mean', selected_family='dummy')
         self.assertEqual(_metadata(m)[0], '1.4')
         m.update(selected_candidate='ridge_alpha_0.1', selected_family='ridge')
