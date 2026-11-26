@@ -131,6 +131,35 @@ class SavedBinaryJsonCliTests(unittest.TestCase):
             self.assertEqual(result['cohort']['scored_rows'], 4)
             self.assertEqual(list(root.iterdir()), [path]); self.assertEqual(path.read_bytes(), raw)
 
+    def test_saved_binary_cli_rejects_lone_surrogates_in_decoded_text(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "input.json"
+            cli = [sys.executable, "-m", "groupbench.binary.saved_evaluation", str(source)]
+            for where in ("malformed_id", "malformed_metadata", "valid_non_bmp"):
+                with self.subTest(where=where):
+                    doc = document()
+                    if where != "malformed_metadata":
+                        original = doc["rows"][0]["row_id"]
+                        label = "ID-" + chr(0xd800 if where == "malformed_id" else 0x1f680)
+                        doc["rows"][0]["row_id"] = label
+                        doc["expected_row_ids"][doc["expected_row_ids"].index(original)] = label
+                    else:
+                        doc["metadata"]["target_definition"] = "Target-" + chr(0xdfff)
+                    raw = json.dumps(doc, ensure_ascii=True).encode("utf-8")
+                    source.write_bytes(raw)
+                    reply = subprocess.run(cli, text=True, capture_output=True, timeout=30)
+                    self.assertEqual(source.read_bytes(), raw)
+                    if where == "valid_non_bmp":
+                        self.assertEqual(reply.returncode, 0, reply.stderr)
+                        result = json.loads(reply.stdout)
+                        json.dumps(result, ensure_ascii=False).encode("utf-8")
+                        self.assertIn(label, {r["row_id"] for r in result["observations"]})
+                    else:
+                        self.assertEqual(reply.returncode, 2, reply.stderr)
+                        self.assertFalse(reply.stdout)
+                        self.assertIn("no scores were written", reply.stderr)
+                        self.assertNotIn("Target-", reply.stderr)
+
     def test_main_failure_has_no_partial_stdout_or_payload(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory)/'PRIVATE_PATH.json'

@@ -31,8 +31,9 @@ def _keys(value, expected, context):
 
 def _label(value, limit):
     if (type(value) is not str or not value or len(value) > limit
-            or value != value.strip() or any(ord(char) < 32 for char in value)):
-        raise ValueError("Declarations and row IDs must be bounded, nonempty, trimmed text without control characters")
+            or value != value.strip()
+            or any(code < 32 or 0xD800 <= code <= 0xDFFF for code in map(ord, value))):
+        raise ValueError("Declarations and row IDs must be bounded, nonempty, trimmed Unicode scalar text without control characters")
     return value
 
 
