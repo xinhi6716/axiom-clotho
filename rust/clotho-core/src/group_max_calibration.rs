@@ -80,7 +80,7 @@ pub fn calibrate_group_max(
         return Err(GroupMaxError::InvalidKey);
     }
     let order = match_roster(roster, rows).ok_or(GroupMaxError::RosterMismatch)?;
-    let (groups, rank, mut ordered) = match order {
+    let (groups, rank, maxima) = match order {
         RosterMatch::InGroupOrder => {
             let maxima = ordered_group_maxima(rows)?;
             let groups = maxima.len();
@@ -105,12 +105,24 @@ pub fn calibrate_group_max(
             (groups, rank, maxima.into_values().collect())
         }
     };
-    ordered.sort_unstable_by(f64::total_cmp);
     Ok(GroupMaxCutoff::Finite {
         groups,
         rank,
-        radius: ordered[rank - 1],
+        radius: select_radius(maxima, rank),
     })
+}
+
+fn select_radius(mut maxima: Vec<f64>, rank: usize) -> f64 {
+    debug_assert!((1..=maxima.len()).contains(&rank));
+    // Only the selected order statistic is exposed; the scores on either
+    // side need not be sorted or returned.
+    if rank == 1 {
+        maxima.into_iter().min_by(f64::total_cmp).unwrap()
+    } else if rank == maxima.len() {
+        maxima.into_iter().max_by(f64::total_cmp).unwrap()
+    } else {
+        *maxima.select_nth_unstable_by(rank - 1, f64::total_cmp).1
+    }
 }
 
 fn cutoff_rank(groups: usize, numerator: u64, denominator: u64) -> usize {
@@ -219,6 +231,19 @@ mod tests {
             key,
             observed,
             prediction: 0.0,
+        }
+    }
+
+    #[test]
+    fn selected_radii_match_sorted_binary64_scores_at_every_rank() {
+        let values = [
+            f64::MAX, 0.0, f64::from_bits(1), 1.0,
+            f64::from_bits(1.0_f64.to_bits() + 1), 1.0, f64::MIN_POSITIVE,
+        ];
+        let mut ordered = values;
+        ordered.sort_unstable_by(f64::total_cmp);
+        for rank in 1..=values.len() {
+            assert_eq!(select_radius(values.to_vec(), rank).to_bits(), ordered[rank - 1].to_bits());
         }
     }
 
