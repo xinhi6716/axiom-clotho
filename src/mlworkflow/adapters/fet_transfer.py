@@ -149,6 +149,22 @@ def _check_crossing_support(extraction, max_span):
     # A valid exact interior fraction may round to 0 or 1 in the report.
 
 
+def _check_fixed_conditions(row, threshold, slope):
+    """Reconcile fixed temperature and biases for one retained acquisition."""
+    fields = ("temperature_K", "drain_source_voltage_V", "body_source_voltage_V")
+    reports = (threshold.get("conditions"), slope.get("conditions"))
+    mismatch = "saved FET fixed acquisition conditions differ across the feature row and extractor reports"
+    if any(not isinstance(report, dict) or report.keys() != set(fields) for report in reports):
+        raise c.WorkflowError(mismatch)
+    for key in fields:
+        token = row[key]
+        left, right = (report[key] for report in reports)
+        if (len(token) > 64 or not c.NUMBER.fullmatch(token)
+                or any(type(v) not in (int, float) or not math.isfinite(v) for v in (left, right))
+                or left != right or float(token) != left or (key == "temperature_K" and left <= 0)):
+            raise c.WorkflowError(mismatch)
+
+
 def _feature_rows(features, config):
     """Validate retained report identity and byte lineage, without rerunning extraction."""
     if set(features) != set(FET_FILES) or any(not isinstance(v, bytes) for v in features.values()):
@@ -226,6 +242,7 @@ def _feature_rows(features, config):
         for row in rows:
             key = _key(row, ACQUISITION)
             threshold_row, slope_row = threshold[key], slopes[key]
+            _check_fixed_conditions(row, threshold_row, slope_row)
             extraction = threshold_row["extraction"]
             _check_crossing_support(extraction, vth["parameters"]["max_bracket_span_V"])
             if (float(row[FET_FEATURES[0]]) != extraction["gate_source_voltage_at_criterion_V"]

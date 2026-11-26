@@ -402,6 +402,46 @@ class FetAdapterTests(unittest.TestCase):
                 self.assertFalse(failure.stdout)
                 self.assertEqual({p: p.read_bytes() for p in before}, before)
 
+    def test_cli_requires_fixed_conditions_to_match_both_fet_reports(self):
+        self.prepare()
+        directory = self.output / "features"
+        good = {p.name: p.read_bytes() for p in directory.iterdir()}
+        command = [sys.executable, "-m", "mlworkflow", "plan", "--prepared", str(self.output)]
+        env = dict(os.environ, PYTHONPATH=str(ROOT / "src"), PYTHONDONTWRITEBYTECODE="1",
+                   OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1")
+
+        def replay():
+            return subprocess.run(command, cwd=self.root, env=env, text=True,
+                                  capture_output=True, timeout=30)
+
+        self.assertEqual(replay().returncode, 0)
+        for key, artifact in (("temperature_K", "features.csv"),
+                              ("drain_source_voltage_V", "vth_report.json"),
+                              ("body_source_voltage_V", "log_slope_report.json")):
+            with self.subTest(artifact=artifact, key=key):
+                if artifact == "features.csv":
+                    rows = c.parse_csv(good[artifact], fet.FEATURE_COLUMNS)
+                    rows[0][key] = str(float(rows[0][key]) + 1.0)
+                    altered = c.csv_bytes(fet.FEATURE_COLUMNS, rows)
+                else:
+                    report = c.parse_json(good[artifact])
+                    report["results"][0]["conditions"][key] += 1.0
+                    altered = c.json_bytes(report)
+                files = {**good, artifact: altered}
+                provenance = c.parse_json(good["provenance.json"])
+                provenance["output_sha256"][artifact] = c.sha(altered)
+                files["provenance.json"] = c.json_bytes(provenance)
+                for name, data in files.items():
+                    (directory / name).write_bytes(data)
+                rehash(self.output)
+                load_bundle(self.output, "prepared")
+                before = {p: p.read_bytes() for p in self.output.rglob("*") if p.is_file()}
+                failed = replay()
+                self.assertEqual(failed.returncode, 2, failed.stderr)
+                self.assertIn("FET fixed acquisition conditions", failed.stderr)
+                self.assertFalse(failed.stdout)
+                self.assertEqual({p: p.read_bytes() for p in before}, before)
+
     def test_plan_rejects_noninteger_extraction_group_counts(self):
         self.prepare()
         report = self.output / "features/vth_report.json"
