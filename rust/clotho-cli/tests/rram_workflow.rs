@@ -372,3 +372,48 @@ fn sampled_only_policy_rejects_each_interpolation_pattern_without_partial_output
     assert!(!invalid.run(&["--require-sampled-readpoints", "1"]).status.success());
     assert!(!invalid.0.join("out").exists());
 }
+
+#[test]
+fn even_cycle_median_preserves_subnormal_ratios() {
+    let w = Workspace::new();
+    let mut capture = format!("{}\n", DATA.lines().next().unwrap());
+    for (cycle, endpoint_current) in [(1, "5e-24"), (2, "1e-23")] {
+        capture.push_str(&format!(
+            "B,W,D,{cycle},R{cycle},H,HRS,C,P,1e-150,300,0,1e-150,1\n\
+             B,W,D,{cycle},R{cycle},L,LRS,C,P,1e-150,300,0,0,0\n\
+             B,W,D,{cycle},R{cycle},L,LRS,C,P,1e-150,300,0,1e150,{endpoint_current}\n"
+        ));
+    }
+    w.write(&capture);
+    let output = Command::new(env!("CARGO_BIN_EXE_clotho"))
+        .current_dir(&w.0)
+        .args([
+            "extract-rram",
+            "--csv",
+            "data.csv",
+            "--out",
+            "out",
+            "--max-bracket-v",
+            "1e150",
+            "--accept-assumptions",
+            "true",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let j: serde_json::Value =
+        serde_json::from_slice(&fs::read(w.0.join("out/extraction.json")).unwrap()).unwrap();
+    let pairs = j["lineage"][0]["pairs"].as_array().unwrap();
+    let bits: Vec<_> = pairs
+        .iter()
+        .map(|pair| pair["resistance_ratio"].as_f64().unwrap().to_bits())
+        .collect();
+    assert_eq!(bits, [1, 2]);
+    let csv = fs::read_to_string(w.0.join("out/features.csv")).unwrap();
+    let median = csv.lines().nth(1).unwrap().rsplit(',').next().unwrap();
+    assert_eq!(median.parse::<f64>().unwrap().to_bits(), 2);
+}

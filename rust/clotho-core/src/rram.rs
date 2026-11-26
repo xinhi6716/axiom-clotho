@@ -233,9 +233,33 @@ fn median(mut values: Vec<f64>) -> f64 {
     if values.len() % 2 == 1 {
         values[mid]
     } else {
-        values[mid - 1] + (values[mid] - values[mid - 1]) / 2.0
+        let lo = values[mid - 1];
+        let hi = values[mid];
+        // All admitted values are finite and positive. Sum first when safe
+        // so halving a subnormal difference cannot round away a half-step.
+        // At huge magnitudes, halve first to avoid overflowing the sum.
+        if hi <= f64::MAX / 2.0 {
+            (lo + hi) / 2.0
+        } else {
+            lo / 2.0 + hi / 2.0
+        }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::median;
+
+    #[test]
+    fn positive_median_handles_subnormal_ties_and_overflowing_sums() {
+        let tiny = |bits| f64::from_bits(bits);
+        assert_eq!(median(vec![tiny(1), tiny(2)]).to_bits(), 2);
+        assert_eq!(median(vec![tiny(2), tiny(3)]).to_bits(), 2);
+        assert_eq!(median(vec![f64::MAX, f64::MAX]), f64::MAX);
+        assert_eq!(median(vec![tiny(1), f64::MAX]), f64::MAX / 2.0);
+    }
+}
+
 /// Reject the entire cohort on invalid or incomplete acquisitions. Device IDs are
 /// globally unique, condition labels denote one protocol, and medians never pool
 /// devices or conditions. Output is sorted by device and condition, then cycle.
