@@ -481,3 +481,17 @@ fn extract_rram_preserves_read_current_when_the_weight_is_subnormal() {
     assert!((exported / expected - 1.0).abs() <= 4.0 * f64::EPSILON);
     assert!(w.0.join("out/COMPLETE").is_file());
 }
+
+#[test]
+fn extract_rram_rejects_roundoff_that_would_create_a_finite_resistance() {
+    let header = DATA.lines().next().unwrap();
+    let w = Workspace::new();
+    w.write(&format!(
+        "{header}\nB,W,D,1,R1,H,HRS,C,P,1,300,0,0,1\nB,W,D,1,R1,L,LRS,C,P,1,300,0,1,1\nB,W,D,1,R1,H,HRS,C,P,1,300,0,3,-2\n"
+    ));
+    let result = w.run_with_limit("3", &[]);
+    assert_eq!(result.status.code(), Some(2));
+    assert!(result.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&result.stderr).contains("NumericalRange"));
+    assert!(!w.0.join("out").exists());
+}

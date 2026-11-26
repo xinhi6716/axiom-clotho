@@ -155,6 +155,33 @@ fn subnormal_weight_does_not_discard_precision_from_a_normal_read_current() {
 }
 
 #[test]
+fn nonzero_rounding_residual_is_not_admitted_as_a_read_current() {
+    for sign in [1.0, -1.0] {
+        let mut b = branch(State::Hrs, "1", sign, 2);
+        b.conditions.read_voltage_v = sign;
+        b.samples[0].voltage_v = 0.0;
+        b.samples.push(Sample {
+            source_row: 3,
+            voltage_v: sign * 3.0,
+            current_a: sign * -2.0,
+        });
+        let p = Settings {
+            max_bracket_span_v: 3.0,
+            ..settings()
+        };
+        for _ in 0..2 {
+            assert!(matches!(
+                extract_branch(&b, p),
+                Err(RramError::NumericalRange | RramError::InvalidCurrent)
+            ));
+            b.samples.reverse();
+        }
+        b.samples[1].current_a = sign * -1.75;
+        assert!((extract_branch(&b, p).unwrap().current_a / sign - 1.0 / 12.0).abs() < 1e-15);
+    }
+}
+
+#[test]
 fn midpoint_that_interpolates_to_zero_current_remains_invalid() {
     let mut b = branch(State::Hrs, "1", -0.25, 2);
     b.samples[0].voltage_v = 0.5;

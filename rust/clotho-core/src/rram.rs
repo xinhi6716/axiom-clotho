@@ -222,7 +222,22 @@ pub fn extract_branch(b: &Branch, p: Settings) -> Result<Readpoint, RramError> {
                 } else {
                     far.current_a * t
                 };
-                let estimate = near.current_a * (1.0 - t) + far_term;
+                let near_term = near.current_a * (1.0 - t);
+                let estimate = near_term + far_term;
+                // Opposing signed currents can cancel. Do not interpret a
+                // rounding residual as a nonzero static read current. Near
+                // cancellation the terms are both normal: the near term is
+                // at least about half a bounded nonzero sample current.
+                // Rounded distances, division, complement and products
+                // contribute less than eight epsilons of the larger term.
+                if estimate != 0.0
+                    && ((near_term > 0.0 && far_term < 0.0)
+                        || (near_term < 0.0 && far_term > 0.0))
+                    && estimate.abs()
+                        <= (8.0 * f64::EPSILON) * near_term.abs().max(far_term.abs())
+                {
+                    return Err(RramError::NumericalRange);
+                }
                 // Rounding the weighted terms separately can extrapolate
                 // even between distinct, adjacent measured currents.
                 estimate.clamp(
