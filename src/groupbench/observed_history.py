@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from fractions import Fraction
 from numbers import Integral, Real
 
 import numpy as np
@@ -76,10 +77,32 @@ def _keys(frame, name):
     return keys
 
 
+def _elapsed_continuation(times, previous, previous2, schedule,
+                          values, *, integer_ticks):
+    clock = int if integer_ticks else lambda t: Fraction.from_float(float(t))
+    # Convert before differencing to avoid int64 wrap or float64 span overflow.
+    out = []
+    for future, newer, older in zip(schedule, previous, previous2):
+        t0, t1, t2 = clock(times[older]), clock(times[newer]), clock(future)
+        ratio = Fraction(t2 - t1, t1 - t0)
+        y0 = Fraction.from_float(float(values[older]))
+        y1 = Fraction.from_float(float(values[newer]))
+        exact = y1 + ratio * (y1 - y0)
+        try:
+            forecast = float(exact)
+        except OverflowError as exc:
+            raise ValueError("Elapsed-time continuation exceeds float64 range.") from exc
+        if forecast == 0.0 and exact:
+            raise ValueError("Nonzero elapsed-time continuation underflows float64.")
+        out.append(forecast)
+    return np.asarray(out, dtype=np.float64)
+
+
 def evaluate_observed_history(observations: pd.DataFrame, *, origins: pd.DataFrame,
                               saved_predictions: pd.DataFrame,
-                              timestamp_mode: str = 'float64') -> ObservedHistoryResult:
-    """Score one saved model and two baselines on exactly the same origins.
+                              timestamp_mode: str = 'float64',
+                              scheduled_origins: pd.DataFrame | None = None) -> ObservedHistoryResult:
+    """Score one saved model and observed-history baselines on the same origins.
 
     observations: columns trace_id, timestamp, value. Input order within each
     trace defines zero-based positions and must have strictly increasing finite
@@ -93,7 +116,13 @@ def evaluate_observed_history(observations: pd.DataFrame, *, origins: pd.DataFra
     Each target at t uses observed values at t-1 and t-2 in its OWN trace. This
     is teacher-forced one-step scoring, not recursive/open-loop forecasting.
     The second baseline is 2*y[t-1]-y[t-2] in index space, not elapsed-time
-    extrapolation. Strict timestamps do not prove upstream causal processing,
+    extrapolation. Optionally provide scheduled_origins: columns trace_id,
+    target_index, timestamp, with the same ordered frozen roster and exact
+    realized clock values. This enables an elapsed-time linear baseline using
+    the *supplied* scheduled target clock. A schedule mismatch fails the entire
+    evaluation, never subset-selects. The caller must freeze the schedule before
+    forecasting; matching clock values cannot verify that provenance.
+    Strict timestamps do not prove upstream causal processing,
     saved-model training provenance or prospective availability of measurements.
     """
     _table(observations, ['trace_id', 'timestamp', 'value'], 'observations')
@@ -128,6 +157,17 @@ def evaluate_observed_history(observations: pd.DataFrame, *, origins: pd.DataFra
         selected.append(indices[target])
         previous.append(indices[target - 1])
         previous2.append(indices[target - 2])
+    elapsed = None
+    if scheduled_origins is not None:
+        _table(scheduled_origins, ['trace_id', 'target_index', 'timestamp'], 'scheduled_origins')
+        if _keys(scheduled_origins, 'scheduled_origins') != keys:
+            raise ValueError('Scheduled origins must match the exact ordered frozen origin roster.')
+        schedule = (_integer_ticks(scheduled_origins['timestamp']) if timestamp_mode == 'integer_ticks'
+                    else _numbers(scheduled_origins['timestamp'], 'scheduled timestamps'))
+        if not np.array_equal(schedule, times[selected]):
+            raise ValueError('Scheduled timestamps must exactly match the realized target clocks.')
+        elapsed = _elapsed_continuation(times, previous, previous2, schedule, values,
+                                        integer_ticks=timestamp_mode == 'integer_ticks')
     observed = values[selected]
     persistence = values[previous]
     older = values[previous2]
@@ -151,8 +191,11 @@ def evaluate_observed_history(observations: pd.DataFrame, *, origins: pd.DataFra
     output['previous2_index'] = [t - 2 for _, t in keys]
     output['observed'] = observed
     scores = {}
-    for name, prediction in [('saved_model', model), ('persistence', persistence),
-                             ('index_continuation', continuation)]:
+    forecasts = [('saved_model', model), ('persistence', persistence),
+                 ('index_continuation', continuation)]
+    if elapsed is not None:
+        forecasts.append(('elapsed_continuation', elapsed))
+    for name, prediction in forecasts:
         overall, per_trace = grouped_metrics(observed, prediction, [t for t, _ in keys])
         scores[name] = {'overall': overall, 'per_trace': per_trace}
         output[name] = prediction
@@ -176,7 +219,10 @@ def evaluate_observed_history(observations: pd.DataFrame, *, origins: pd.DataFra
         'weighting': 'overall row metrics and separately reported equal-trace group metrics',
         'models': scores, 'fit_calls': 0, 'selection_performed': False,
         'history': 'past observed values, including earlier scored targets once observed',
-        'time_basis': 'index continuation; irregular timestamps allowed',
+        'time_basis': ('index and scheduled elapsed-time continuation; irregular timestamps allowed'
+                       if elapsed is not None else 'index continuation; irregular timestamps allowed'),
+        **({'schedule_provenance': 'caller supplied; prospective availability not independently verified'}
+           if elapsed is not None else {}),
         'upstream_processing': 'unknown; timestamp order does not establish causal preprocessing',
         'prediction_provenance': 'caller supplied; training cutoff and prediction freeze not independently verified',
         'claim_limit': 'exported-sequence comparison only; no physical, causal or read-saving claim',

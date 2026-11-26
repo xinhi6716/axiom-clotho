@@ -40,6 +40,54 @@ class ObservedHistoryTests(unittest.TestCase):
             self.assertEqual(entry['overall']['n_rows'], 3)
         self.assertEqual(r.summary['fit_calls'], 0)
 
+    def test_scheduled_elapsed_baseline_reproduces_linear_clock_trend(self):
+        obs, origins, pred = self.fixture()
+        obs['value'] = 2 * obs['timestamp'] + 3
+        schedule = origins.assign(timestamp=[4, 9, 8])
+        r = evaluate_observed_history(obs, origins=origins, saved_predictions=pred,
+                                      scheduled_origins=schedule)
+        self.assertEqual(r.predictions.elapsed_continuation.tolist(), [11., 21., 19.])
+        self.assertEqual(r.summary['models']['elapsed_continuation']['overall']['mae'], 0.)
+        self.assertGreater(r.summary['models']['index_continuation']['overall']['mae'], 0.)
+        self.assertNotIn('elapsed_continuation', self.run_case().predictions)
+        self.assertIn('not independently verified', r.summary['schedule_provenance'])
+        obs.loc[2, 'value'] += 300.
+        after = evaluate_observed_history(obs, origins=origins, saved_predictions=pred,
+                                          scheduled_origins=schedule)
+        self.assertEqual(after.predictions.loc[0, 'elapsed_continuation'], 11.)
+        self.assertNotEqual(after.predictions.loc[1, 'elapsed_continuation'], 21.)
+
+    def test_scheduled_elapsed_rejects_inexact_roster_and_clock(self):
+        obs, origins, pred = self.fixture()
+        schedule = origins.assign(timestamp=[4, 9, 8])
+        for bad in (schedule.iloc[:-1], schedule.iloc[::-1],
+                    pd.concat([schedule, schedule.iloc[:1]]),
+                    schedule.assign(trace_id=['a', 'a', 'unknown'])):
+            with self.subTest(bad=bad.shape), self.assertRaises(ValueError):
+                evaluate_observed_history(obs, origins=origins, saved_predictions=pred,
+                                          scheduled_origins=bad)
+        bad = schedule.assign(timestamp=[np.nextafter(4., 5.), 9., 8.])
+        with self.assertRaisesRegex(ValueError, 'match the realized target clocks'):
+            evaluate_observed_history(obs, origins=origins, saved_predictions=pred,
+                                      scheduled_origins=bad)
+
+    def test_scheduled_elapsed_uses_exact_wide_clock_differences(self):
+        origin = pd.DataFrame({'trace_id': ['a'], 'target_index': [2]})
+        for mode, times in (
+                ('integer_ticks', [-(1 << 63), 0, (1 << 62)]),
+                ('float64', [-1.6e308, 3e307, 1.25e308])):
+            obs = pd.DataFrame({'trace_id': ['a'] * 3, 'timestamp': times,
+                                'value': [0., 4., 6.]})
+            with self.subTest(mode=mode):
+                r = evaluate_observed_history(obs, origins=origin, saved_predictions=origin.assign(prediction=6.),
+                                              timestamp_mode=mode, scheduled_origins=origin.assign(timestamp=times[-1]))
+                self.assertEqual(r.predictions.elapsed_continuation.tolist(), [6.])
+        obs = pd.DataFrame({'trace_id': ['a'] * 3, 'timestamp': [0., np.nextafter(0., 1.), 1.],
+                            'value': [0., 2., 2.]})
+        with self.assertRaisesRegex(ValueError, 'exceeds float64 range'):
+            evaluate_observed_history(obs, origins=origin, saved_predictions=origin.assign(prediction=2.),
+                                      scheduled_origins=origin.assign(timestamp=1.))
+
     def test_target_future_mutation_does_not_change_same_origin_baselines(self):
         obs, origins, pred = self.fixture()
         before = self.run_case()
