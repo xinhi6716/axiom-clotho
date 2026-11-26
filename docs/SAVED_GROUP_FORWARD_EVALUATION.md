@@ -42,6 +42,13 @@ frozen-result admission boundary; the existing result and its `to_dict()`
 behavior remain unchanged. The reader returns a frozen
 `GroupForwardBundleValidation` summary, not a reconstructed executable result.
 
+When a workflow has already frozen the payload digest independently of the
+bundle, pass it as `expected_payload_sha256=trusted_digest`. The reader
+requires lowercase hexadecimal SHA-256 and checks the retained payload
+against that expectation before parsing and scoring. A hash copied from the
+bundle under review adds no independent evidence. A match identifies the
+expected bytes, not who ran the model or how it was run.
+
 `GroupForwardBundleError` identifies malformed, inconsistent, resource-exceeding,
 or unsupported safe-reading content. Public content errors are categorical and
 omit original values, group labels, paths, dependency text, and chained parser

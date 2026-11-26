@@ -741,6 +741,36 @@ class PlanAndPredictionTamperingTests(SavedFixtureTestCase):
         write(exact_result(document), self.fresh())
 
 
+    def test_independent_payload_digest_detects_rechecksummed_prediction_changes(self):
+        original = self.install(self.document)
+        expected = hashlib.sha256((original / "temporal_result.json").read_bytes()).hexdigest()
+        unpinned = validate(original)
+        pinned = validate(original, expected_payload_sha256=expected)
+        self.assertEqual(pinned.temporal_result_sha256, expected)
+        self.assertEqual(pinned.checked_scope[:-1], unpinned.checked_scope)
+        self.assertIn("expected SHA-256", pinned.checked_scope[-1])
+        self.assertEqual(unpinned.unchecked_scope, pinned.unchecked_scope)
+
+        replacement = deepcopy(self.document)
+        replacement["predictions"][0]["prediction_ridge_alpha_1"] += 2.0
+        refresh_metrics(replacement)
+        replacement_run = self.install(replacement)
+        consistent = validate(replacement_run)
+        self.assertNotEqual(consistent.temporal_result_sha256, expected)
+        self.assertEqual(consistent.n_tested_rows, pinned.n_tested_rows)
+        with patch.object(saved, "_decode", side_effect=AssertionError("decoded replacement")):
+            with self.assertRaises(GroupForwardBundleError):
+                validate(replacement_run, expected_payload_sha256=expected)
+        self.assertEqual(validate(original).temporal_result_sha256, expected)
+
+    def test_invalid_expected_digest_fails_before_opening_storage(self):
+        for digest in ("0" * 63, "A" * 64, True, b"a" * 64, " " + "a" * 64):
+            with self.subTest(digest=digest), patch.object(
+                    saved.v, "_open_run_directory", side_effect=AssertionError("opened invalid request")):
+                with self.assertRaises(GroupForwardBundleError):
+                    validate(self.fresh(), expected_payload_sha256=digest)
+
+
 class RecipeBudgetRoleTests(SavedFixtureTestCase):
     """Acceptance group 7: exact v1 declarations, not merely plausible limits."""
     def test_shared_pure_recipe_and_limit_helpers_keep_literal_v1_meanings(self):

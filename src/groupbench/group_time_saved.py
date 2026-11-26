@@ -639,14 +639,21 @@ def _check_document(document):
     return plan
 
 
-def validate_group_forward_evaluation_bundle(run_dir) -> GroupForwardBundleValidation:
+def validate_group_forward_evaluation_bundle(
+    run_dir, *, expected_payload_sha256: str | None = None,
+) -> GroupForwardBundleValidation:
     """Check retained bytes and declarations read-only, with zero fits.
 
     Unknown files are unopened. Known legacy artifacts reject. Trusted idle
     POSIX storage is required; detected races fail, but no atomic snapshot or
     authenticated origin is promised. Declared source paths are never opened.
+    If provided, the expected digest must come from a separately trusted
+    preexisting record, not from the bundle being checked. A digest match
+    binds these bytes to that expectation, not to any executed model.
     """
     try:
+        if expected_payload_sha256 is not None:
+            _sha(expected_payload_sha256)
         with v._open_run_directory(run_dir) as directory_fd:
             _, _, checksum_bytes, checksum_signature = v._read_file(
                 directory_fd, "checksums.json", v.MAX_CHECKSUM_BYTES, collect=True)
@@ -658,6 +665,8 @@ def validate_group_forward_evaluation_bundle(run_dir) -> GroupForwardBundleValid
                 directory_fd, "temporal_result.json", MAX_PAYLOAD_BYTES, collect=True)
             if digest != records["temporal_result.json"]:
                 _reject("Saved temporal payload SHA-256 is inconsistent.")
+            if expected_payload_sha256 is not None and digest != expected_payload_sha256:
+                _reject("Saved temporal payload differs from the expected SHA-256.")
             document = _decode(raw)["result"]
             plan = _check_document(document)
             v._reject_stale_temporal(directory_fd)
@@ -667,11 +676,14 @@ def validate_group_forward_evaluation_bundle(run_dir) -> GroupForwardBundleValid
     except (OSError, ValueError, TypeError, OverflowError, RecursionError):
         # Neither filesystem/parser messages nor declared labels/paths escape.
         raise GroupForwardBundleError("Saved temporal bundle is invalid, changed, or unsupported for safe reading.") from None
+    checked = _CHECKED
+    if expected_payload_sha256 is not None:
+        checked += ("Retained payload matches the caller's expected SHA-256.",)
     return GroupForwardBundleValidation(
         1, 1, PROTOCOL, COVERAGE_MODE, plan.total.n_rows, plan.total.n_groups,
         plan.tested.n_rows, plan.tested.n_groups, plan.untested.n_rows, plan.untested.n_groups,
         len(plan.folds), len(document["feature_schema"]), 2, 2 * len(plan.folds), 0,
-        size, digest, _CHECKED, _UNCHECKED)
+        size, digest, checked, _UNCHECKED)
 
 
 def write_group_forward_evaluation_bundle(result, output_dir) -> Path:
