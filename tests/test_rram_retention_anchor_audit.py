@@ -459,6 +459,45 @@ class RetentionAnchorAudit(unittest.TestCase):
         self.assertEqual(result["frozen_episodes_by_primary_reason"], {"duplicate_nominal_anchor": 4})
         self.assertNotIn("privateLot", richer.stdout)
 
+    def test_alternative_times_diagnose_absent_terminal_without_substitution(self):
+        roster = [(*BASE[:4], f"E{i}") for i in range(7)]
+        rows = [episode(key) for key in roster]
+
+        def off_slot(row, delta, *, epoch="epoch", error=0):
+            r = row.copy()
+            r[5], r[7], r[8], r[9] = 95_000_000_000, epoch, delta + 47, error
+            return r
+
+        inside = off_slot(rows[0].pop(), 100_001_000_000)
+        rows[0].append(inside)
+        rows[0].append(off_slot(inside, 80_000_000_000, error=1))
+        rows[1].append(off_slot(rows[1].pop(), 80_000_000_000, error=1))
+        wrong_epoch = off_slot(rows[2].pop(), 100_001_000_000, epoch="unknown_epoch")
+        rows[2].append(wrong_epoch)
+        rows[2].append(off_slot(wrong_epoch, 70_000_000_000))
+        rows[3].append(off_slot(rows[3].pop(), 70_000_000_000))
+        rows[4].append(off_slot(rows[4].pop(), 100_001_000_000))
+        rows[4].pop(0)  # Missing origin, even though the raw timer seems plausible.
+        rows[5].clear()  # Completely missing frozen capture.
+        rows[6].append(off_slot(rows[6][-1], 100_001_000_001))
+        capture = [item for group in rows for item in group]
+        baseline = self.run_capture(roster, capture)
+        checked = self.run_capture(roster, capture, extra=("--diagnose-terminal-alternatives",))
+        self.assertEqual((baseline.returncode, checked.returncode), (1, 1))
+        report = json.loads(checked.stdout)
+        self.assertEqual(report.pop("nonscheduled_read_timing_when_nominal_terminal_absent"), {
+            "frozen_episodes_without_nominal_terminal": 6,
+            "episodes_by_status": {
+                "all_outside_window": 1, "at_least_one_in_window": 1,
+                "boundary_uncertain_without_in_window": 1, "no_nonscheduled_rows": 1,
+                "unresolved_without_proven_in_window": 1, "unusable_origin": 1,
+            },
+        })
+        self.assertEqual(report, json.loads(baseline.stdout))
+        self.assertEqual(report["eligible_episodes"], 1)
+        self.assertNotIn("unknown_epoch", checked.stdout)
+        self.assertNotIn("privateLot", checked.stdout)
+
     def test_capture_cannot_supply_labels_or_change_frozen_identity_set(self):
         r = self.run_capture([BASE], [(*row, "sensitive-value") for row in episode()],
                              IDS + TIMES + ("conductance_S",))

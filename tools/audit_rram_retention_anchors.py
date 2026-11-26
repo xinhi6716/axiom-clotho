@@ -119,6 +119,29 @@ def duplicate_anchor_status(rows):
     return "identical_usable_stamps"
 
 
+def terminal_alternative_status(slots, off_anchor_stamps):
+    if not off_anchor_stamps:
+        return "no_nonscheduled_rows"
+    origins = slots.get(ANCHORS[0], ())
+    if len(origins) != 1 or origins[0] is None:
+        return "unusable_origin"
+    origin = origins[0]
+    uncertain = unresolved = False
+    for stamp in off_anchor_stamps:
+        status = timing_status(origin, stamp, ANCHORS[-1]) if stamp is not None else None
+        if status == "within_window":
+            return "at_least_one_in_window"
+        if status == "boundary_uncertain":
+            uncertain = True
+        if status in (None, "different_clock_or_epoch"):
+            unresolved = True
+    if uncertain:
+        return "boundary_uncertain_without_in_window"
+    if unresolved:
+        return "unresolved_without_proven_in_window"
+    return "all_outside_window"
+
+
 def verdict(slots):
     # A duplicate scheduled anchor is ambiguous even when both rows agree.
     if any(len(slots.get(key, ())) > 1 for key in ANCHORS):
@@ -185,7 +208,8 @@ def validate_digest(digest, label):
 
 def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=None,
           diagnose_dies=False, block_map_path=None, block_map_sha256=None, stress_history_path=None,
-          diagnose_die_stress=False, diagnose_duplicate_anchors=False):
+          diagnose_die_stress=False, diagnose_duplicate_anchors=False,
+          diagnose_terminal_alternatives=False):
     validate_digest(roster_sha256, "frozen roster")
     validate_digest(block_map_sha256, "acquisition block map")
     if block_map_sha256 is not None and block_map_path is None:
@@ -205,6 +229,7 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
     stress = stress_history(stress_history_path, expected) if stress_history_path is not None else None
     present, unexpected = set(), set()
     off_anchor_rows = 0
+    off_anchor_stamps = defaultdict(list) if diagnose_terminal_alternatives else None
     for key, (nominal, clock, epoch, tick, error) in records(capture_path, IDENTITY + TIMING):
         nominal = integer(nominal)
         if any(value and not KEY.fullmatch(value) for value in (clock, epoch)):
@@ -218,6 +243,8 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
         present.add(key)
         if nominal not in ANCHORS:
             off_anchor_rows += 1
+            if off_anchor_stamps is not None:
+                off_anchor_stamps[key].append(stamp)
             continue
         expected[key].setdefault(nominal, []).append(stamp)
 
@@ -289,6 +316,15 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
         report["duplicate_frozen_anchor_metadata_by_us"] = {
             nominal: dict(sorted(counts.items())) for nominal, counts in duplicates.items()
         }
+    if off_anchor_stamps is not None:
+        alternatives = Counter(
+            terminal_alternative_status(slots, off_anchor_stamps.get(key, ()))
+            for key, slots in expected.items() if ANCHORS[-1] not in slots
+        )
+        report["nonscheduled_read_timing_when_nominal_terminal_absent"] = {
+            "frozen_episodes_without_nominal_terminal": sum(alternatives.values()),
+            "episodes_by_status": dict(sorted(alternatives.items())),
+        }
     if die_counts is not None:
         complete = partial = absent = maximum = 0
         for attempted, eligible in die_counts.values():
@@ -359,6 +395,8 @@ def main():
                         help="count declared dice by whole-episode stress status; requires --stress-history")
     parser.add_argument("--diagnose-duplicate-anchors", action="store_true",
                         help="describe repeated scheduled timestamp metadata without repairing it")
+    parser.add_argument("--diagnose-terminal-alternatives", action="store_true",
+                        help="report off-slot timing for absent terminal rows without substituting")
     args = parser.parse_args()
     try:
         report = audit(args.frozen_roster, args.capture, diagnose_anchors=args.diagnose_anchors,
@@ -366,7 +404,8 @@ def main():
                        block_map_path=args.acquisition_block_map,
                        block_map_sha256=args.acquisition_block_map_sha256,
                        stress_history_path=args.stress_history, diagnose_die_stress=args.diagnose_die_stress,
-                       diagnose_duplicate_anchors=args.diagnose_duplicate_anchors)
+                       diagnose_duplicate_anchors=args.diagnose_duplicate_anchors,
+                       diagnose_terminal_alternatives=args.diagnose_terminal_alternatives)
     except (OSError, UnicodeError, csv.Error):
         parser.exit(2, "error: input could not be read as UTF-8 CSV\n")
     except ValueError as exc:

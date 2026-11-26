@@ -130,3 +130,13 @@ with both a conflict and an unresolved row are counted as conflicts. Equivalent
 integer encodings are identical timestamp metadata, not necessarily identical
 raw rows or electrical measurements. The tool never selects a preferred row
 or repairs a duplicate. Every such episode remains timing-ineligible.
+
+Use `--diagnose-terminal-alternatives` to see whether frozen episodes
+without any nominal 100 ks row nevertheless contain off-slot data near
+the target time. Only rows at other, non-anchor nominal slots on the same
+episode are checked. The report distinguishes no off-slot rows, unusable
+origin, at least one proven in-window row, boundary uncertainty, unresolved
+clock or timestamp, and all rows proven outside. That order resolves mixed
+cases. It never selects an off-slot read or adds it to the eligible
+endpoint. A duplicated or unresolved nominal terminal row is not an absent
+one; use the other diagnostics for those cases.
