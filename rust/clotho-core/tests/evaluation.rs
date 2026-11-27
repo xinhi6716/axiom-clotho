@@ -481,3 +481,35 @@ fn split_groups_merge_noncontiguous_runs_with_lexical_and_row_order_intact() {
         assert_eq!(fold.test_indices, rows);
     }
 }
+
+#[test]
+fn rmse_direct_subtraction_preserves_subnormals_and_rejects_range_loss() {
+    use clotho_core::evaluation::regression_rmse;
+
+    let tiny = f64::from_bits(1);
+    let next = f64::from_bits(2);
+    assert_eq!(
+        regression_rmse(&[next, -tiny, -0.0], &[tiny, -next, 0.0])
+            .unwrap()
+            .to_bits(),
+        1
+    );
+    assert_eq!(
+        regression_rmse(&[1e308, tiny], &[0.0, 0.0]),
+        Err(EvaluationError::NumericOverflow)
+    );
+
+    // The overflowed difference triggers half scaling for every pair.
+    // It succeeds when the aggregate remains representable, but must not
+    // erase a subnormal residual from another row.
+    let max = f64::MAX;
+    let mut target = [max, 0.0, 0.0, 0.0, 0.0];
+    let predictions = [-max, 0.0, 0.0, 0.0, 0.0];
+    let value = regression_rmse(&target, &predictions).unwrap();
+    assert!(value.is_finite() && value > max * 0.8);
+    target[4] = tiny;
+    assert_eq!(
+        regression_rmse(&target, &predictions),
+        Err(EvaluationError::NumericOverflow)
+    );
+}

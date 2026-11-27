@@ -82,9 +82,20 @@ pub fn regression_rmse(y_true: &[f64], y_pred: &[f64]) -> Result<f64, Evaluation
         return Ok(0.0);
     }
     let mut squares = CompensatedSum::default();
-    for (a, b) in pairs() {
-        let normalized = normalize_error(scaled_error(a, b, factor)?, scale)?;
-        squares.add(normalized * normalized);
+    if factor == 1.0 {
+        // The scale pass proved each direct subtraction finite. Two distinct
+        // finite binary64 values cannot subtract to zero with gradual
+        // underflow: their exact difference is at least one subnormal unit.
+        // Keep the separate division-underflow check.
+        for (a, b) in pairs() {
+            let normalized = normalize_error(a - b, scale)?;
+            squares.add(normalized * normalized);
+        }
+    } else {
+        for (a, b) in pairs() {
+            let normalized = normalize_error(scaled_error(a, b, factor)?, scale)?;
+            squares.add(normalized * normalized);
+        }
     }
     restore_scale(
         (squares.total() / y_true.len() as f64).sqrt(),
