@@ -354,3 +354,52 @@ fn auc_distinguishes_adjacent_scores_and_ties_both_signed_zeros() {
         }
     }
 }
+
+#[test]
+fn confusion_marginals_match_independent_tallies_at_closed_unit_boundaries() {
+    let tiny = f64::from_bits(1);
+    let below_one = f64::from_bits(1.0_f64.to_bits() - 1);
+    let labels = [-0.0, 1.0, 0.0, 1.0, 0.0, 1.0];
+    let scores = [-0.0, 0.0, tiny, 0.5, below_one, 1.0];
+    for threshold in scores {
+        let mut expected = [0; 4];
+        for (&label, score) in labels.iter().zip(scores) {
+            let cell = match (label == 1.0, score >= threshold) {
+                (true, true) => 0,
+                (false, true) => 1,
+                (false, false) => 2,
+                (true, false) => 3,
+            };
+            expected[cell] += 1;
+        }
+        let actual = binary_metrics(&labels, &scores, threshold).unwrap();
+        assert_eq!([actual.tp, actual.fp, actual.tn, actual.fn_], expected);
+    }
+    for invalid in [-tiny, f64::INFINITY, f64::NAN, f64::from_bits(1.0_f64.to_bits() + 1)] {
+        assert_eq!(
+            binary_metrics(&[0.0, 2.0], &[0.0, invalid], 0.5),
+            Err(ClassificationMetricsError::InvalidLabel)
+        );
+        assert_eq!(
+            binary_metrics(&[0.0, 1.0], &[0.0, invalid], 0.5),
+            Err(ClassificationMetricsError::InvalidProbability)
+        );
+    }
+}
+
+#[test]
+fn hard_score_auc_matches_pairwise_ties_even_with_a_late_fractional_score() {
+    let labels = [0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 0.0];
+    let probabilities = [1.0, -0.0, 1.0, 0.0, 1.0, 0.0, 1.0];
+    for candidate in [
+        probabilities,
+        [-0.0; 7],
+        [1.0; 7],
+        [1.0, -0.0, 1.0, 0.0, 1.0, 0.25, 1.0],
+    ] {
+        for threshold in [0.0, 0.5, 1.0] {
+            let actual = binary_metrics(&labels, &candidate, threshold).unwrap().roc_auc;
+            assert_eq!(actual, pairwise_auc(&labels, &candidate));
+        }
+    }
+}

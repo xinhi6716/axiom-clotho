@@ -105,7 +105,8 @@ pub struct BinaryMetrics {
 ///
 /// Average-rank ROC AUC uses `O(n)` time and constant additional storage when
 /// the probabilities are monotone, and otherwise `O(n log n)` time and `O(n)`
-/// additional storage. Metric sums use compensated addition. No inputs are
+/// additional storage. Forecasts with only 0/1 scores also use linear time
+/// and constant additional storage. Metric sums use compensated addition. No inputs are
 /// changed, and errors do not include raw row values or indices. A Brier score
 /// that rounds to zero despite a nonzero error returns
 /// [`ClassificationMetricsError::BrierUnderflow`]. Preliminary Brier results
@@ -123,35 +124,35 @@ pub fn binary_metrics(
     if y_true.is_empty() {
         return Err(ClassificationMetricsError::Empty);
     }
-    if !threshold.is_finite() || !(0.0..=1.0).contains(&threshold) {
+    if !(0.0..=1.0).contains(&threshold) {
         return Err(ClassificationMetricsError::InvalidThreshold);
     }
     if y_true.iter().any(|&label| label != 0.0 && label != 1.0) {
         return Err(ClassificationMetricsError::InvalidLabel);
     }
-    if probability
-        .iter()
-        .any(|&value| !value.is_finite() || !(0.0..=1.0).contains(&value))
-    {
-        return Err(ClassificationMetricsError::InvalidProbability);
+    // An endpoint-only prefix is valid by construction; once a score is
+    // not an endpoint, validate the remainder against the closed interval.
+    let first_other = probability.iter().position(|&p| !((p == 0.0) | (p == 1.0)));
+    if let Some(first) = first_other {
+        if probability[first..].iter().any(|p| !(0.0..=1.0).contains(p)) {
+            return Err(ClassificationMetricsError::InvalidProbability);
+        }
     }
 
     let mut tp = 0_usize;
-    let mut fp = 0_usize;
-    let mut tn = 0_usize;
-    let mut fn_ = 0_usize;
+    let mut actual_positive = 0_usize;
+    let mut predicted_positive = 0_usize;
     let mut loss_sum = CompensatedSum::default();
     let mut brier_sum = CompensatedSum::default();
 
     for (&label, &value) in y_true.iter().zip(probability) {
-        match (label == 1.0, value >= threshold) {
-            (true, true) => tp += 1,
-            (false, true) => fp += 1,
-            (false, false) => tn += 1,
-            (true, false) => fn_ += 1,
-        }
+        let positive = label == 1.0;
+        let classified_positive = value >= threshold;
+        actual_positive += usize::from(positive);
+        predicted_positive += usize::from(classified_positive);
+        tp += usize::from(positive & classified_positive);
         let clipped = value.clamp(LOG_LOSS_EPSILON, 1.0 - LOG_LOSS_EPSILON);
-        loss_sum.add(if label == 1.0 {
+        loss_sum.add(if positive {
             -clipped.ln()
         } else {
             -(-clipped).ln_1p()
@@ -160,8 +161,11 @@ pub fn binary_metrics(
         brier_sum.add(error * error);
     }
 
-    let n_positive = tp + fn_;
-    let n_negative = tn + fp;
+    let n_positive = actual_positive;
+    let n_negative = y_true.len() - n_positive;
+    let fn_ = n_positive - tp;
+    let fp = predicted_positive - tp;
+    let tn = n_negative - fp;
     let count = y_true.len() as f64;
     let mut brier = brier_sum.total() / count;
     // Do not use the smallest normal itself as the preliminary cutoff:
@@ -188,7 +192,7 @@ pub fn binary_metrics(
         f1: ratio(twice_tp, twice_tp + fp as f64 + fn_ as f64),
         log_loss: loss_sum.total() / count,
         brier,
-        roc_auc: ranked_auc(y_true, probability, n_positive, n_negative),
+        roc_auc: ranked_auc(y_true, probability, n_positive, n_negative, first_other.is_none()),
         n_positive,
         n_negative,
         tp,
@@ -284,9 +288,17 @@ fn ranked_auc(
     probability: &[f64],
     n_positive: usize,
     n_negative: usize,
+    endpoints_only: bool,
 ) -> Option<f64> {
     if n_positive == 0 || n_negative == 0 {
         return None;
+    }
+    // Hard 0/1 forecasts can mix arbitrarily in acquisition order.
+    // Count their two ties instead of allocating and sorting a row per score.
+    if endpoints_only {
+        let concordance = endpoint_concordance(y_true, probability, n_positive, n_negative);
+        let pairs = n_positive as f64 * n_negative as f64;
+        return Some((concordance / pairs).clamp(0.0, 1.0));
     }
     // A validated probability can have its sign bit set only for -0.0.
     // Shifting drops that sign (so both zeros tie), preserves all 63 score
@@ -313,6 +325,33 @@ fn ranked_auc(
     Some((concordance / pairs).clamp(0.0, 1.0))
 }
 
+fn endpoint_concordance(
+    y_true: &[f64],
+    probability: &[f64],
+    n_positive: usize,
+    n_negative: usize,
+) -> f64 {
+    let mut high = 0;
+    let mut high_positive = 0;
+    for (&score, &label) in probability.iter().zip(y_true) {
+        let one = score == 1.0;
+        high += usize::from(one);
+        high_positive += usize::from(one & (label == 1.0));
+    }
+    let high_negative = high - high_positive;
+    let low_negative = n_negative - high_negative;
+    let mut sum = CompensatedSum::default();
+    add_tie_group(&mut sum, n_positive - high_positive, low_negative, 0);
+    add_tie_group(&mut sum, high_positive, high_negative, low_negative);
+    sum.total()
+}
+
+fn add_tie_group(sum: &mut CompensatedSum, p: usize, n: usize, before: usize) {
+    // Each positive wins against earlier negatives and receives half
+    // credit for a same-score negative, or equivalently an average rank.
+    sum.add(p as f64 * (before as f64 + 0.5 * n as f64));
+}
+
 fn ordered_concordance(mut ranked: impl Iterator<Item = u64>) -> f64 {
     let first = match ranked.next() {
         Some(row) => row,
@@ -323,11 +362,6 @@ fn ordered_concordance(mut ranked: impl Iterator<Item = u64>) -> f64 {
     let mut negatives = 1 - positives;
     let mut negatives_before = 0_usize;
     let mut concordance = CompensatedSum::default();
-    let add_tie_group = |sum: &mut CompensatedSum, p: usize, n: usize, before: usize| {
-        // Each positive wins against earlier negatives and receives half
-        // credit for a same-score negative, or equivalently an average rank.
-        sum.add(p as f64 * (before as f64 + 0.5 * n as f64));
-    };
     for row in ranked {
         let next_key = row >> 1;
         if next_key != key {
