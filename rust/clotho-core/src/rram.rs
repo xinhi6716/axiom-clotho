@@ -151,31 +151,59 @@ pub fn extract_branch(b: &Branch, p: Settings) -> Result<Readpoint, RramError> {
     if s.is_empty() || s.len() > 1000 {
         return Err(RramError::ResourceLimit);
     }
-    let mut rows = BTreeSet::new();
-    if s.iter().any(|q| {
-        q.source_row < 2
-            || !rows.insert(q.source_row)
-            || !bounded(q.voltage_v)
-            || !bounded(q.current_a)
-    }) {
+    if s.iter().any(|q| q.source_row < 2 || !bounded(q.voltage_v) || !bounded(q.current_a)) {
         return Err(RramError::InvalidSample);
     }
-    if !(s.windows(2).all(|w| w[1].voltage_v > w[0].voltage_v)
-        || s.windows(2).all(|w| w[1].voltage_v < w[0].voltage_v))
-    {
+    // Monotone acquisition row numbers prove uniqueness without an index.
+    // Other orders remain valid; check their exact IDs in disposable scratch.
+    let rows_ascending = s[0].source_row <= s[s.len() - 1].source_row;
+    if !s.windows(2).all(|w| {
+        if rows_ascending {
+            w[0].source_row < w[1].source_row
+        } else {
+            w[0].source_row > w[1].source_row
+        }
+    }) {
+        let duplicate = if s.len() <= 8 {
+            // At most 28 comparisons, avoiding allocation for short sweeps.
+            s.iter().enumerate().any(|(i, sample)| {
+                s[..i].iter().any(|prior| prior.source_row == sample.source_row)
+            })
+        } else {
+            let mut rows: Vec<_> = s.iter().map(|q| q.source_row).collect();
+            rows.sort_unstable();
+            rows.windows(2).any(|w| w[0] == w[1])
+        };
+        if duplicate {
+            return Err(RramError::InvalidSample);
+        }
+    }
+    let voltage_ascending = s[0].voltage_v <= s[s.len() - 1].voltage_v;
+    if !s.windows(2).all(|w| {
+        if voltage_ascending {
+            w[0].voltage_v < w[1].voltage_v
+        } else {
+            w[0].voltage_v > w[1].voltage_v
+        }
+    }) {
         return Err(RramError::InvalidVoltageOrder);
     }
+    // Search the validated axis only. Keep adjacent endpoints in acquisition
+    // order so selected_source_rows never changes on descending sweeps.
+    let lookup = s.binary_search_by(|q| {
+        let order = q.voltage_v.partial_cmp(&c.read_voltage_v).unwrap();
+        if voltage_ascending { order } else { order.reverse() }
+    });
     let (current, span, selected) =
-        if let Some(q) = s.iter().find(|q| q.voltage_v == c.read_voltage_v) {
+        if let Ok(index) = lookup {
+            let q = &s[index];
             (q.current_a, 0.0, vec![q.source_row])
         } else {
-            let w = s
-                .windows(2)
-                .find(|w| {
-                    c.read_voltage_v > w[0].voltage_v.min(w[1].voltage_v)
-                        && c.read_voltage_v < w[0].voltage_v.max(w[1].voltage_v)
-                })
-                .ok_or(RramError::ReadVoltageNotBracketed)?;
+            let index = lookup.unwrap_err();
+            if index == 0 || index == s.len() {
+                return Err(RramError::ReadVoltageNotBracketed);
+            }
+            let w = &s[index - 1..=index];
             let hi = w[0].voltage_v.max(w[1].voltage_v);
             let lo = w[0].voltage_v.min(w[1].voltage_v);
             let span =

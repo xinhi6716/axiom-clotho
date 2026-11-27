@@ -500,3 +500,48 @@ fn readpoint_between_distinct_adjacent_currents_cannot_extrapolate() {
         }
     }
 }
+
+#[test]
+fn readpoint_lookup_preserves_literal_source_keys_and_error_precedence() {
+    let mut b = branch(State::Hrs, "1", 0.01, 2);
+    b.samples = [(17, 0.25), (2, 0.75), (usize::MAX, 1.25), (7, 1.75)]
+        .into_iter()
+        .map(|(source_row, voltage_v)| Sample {
+            source_row,
+            voltage_v,
+            current_a: 0.01,
+        })
+        .collect();
+    let between = extract_branch(&b, settings()).unwrap();
+    assert_eq!(between.selected_source_rows, [2, usize::MAX]);
+    assert_eq!(between.all_source_rows, [17, 2, usize::MAX, 7]);
+
+    b.samples.reverse();
+    let reversed = extract_branch(&b, settings()).unwrap();
+    assert_eq!(reversed.selected_source_rows, [usize::MAX, 2]);
+    assert_eq!(reversed.current_a.to_bits(), between.current_a.to_bits());
+
+    for (v, selected) in [(0.25, 17), (1.25, usize::MAX), (1.75, 7)] {
+        b.conditions.read_voltage_v = v;
+        let exact = extract_branch(&b, settings()).unwrap();
+        assert_eq!(exact.selected_source_rows, [selected]);
+        assert_eq!(exact.bracket_span_v.to_bits(), 0);
+    }
+    b.conditions.read_voltage_v = 2.0;
+    assert!(matches!(
+        extract_branch(&b, settings()),
+        Err(RramError::ReadVoltageNotBracketed)
+    ));
+
+    b.samples[1].voltage_v = b.samples[0].voltage_v;
+    b.samples[3].source_row = b.samples[1].source_row;
+    assert!(matches!(
+        extract_branch(&b, settings()),
+        Err(RramError::InvalidSample)
+    ));
+    b.samples[3].source_row = 17;
+    assert!(matches!(
+        extract_branch(&b, settings()),
+        Err(RramError::InvalidVoltageOrder)
+    ));
+}
