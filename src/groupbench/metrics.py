@@ -1286,3 +1286,66 @@ def paired_mse_shared_shift_profile(rows, *, expected_roster, shift_bounds):
         "equal_group": summarize(*(sum(Fraction(entry[j], entry[0]) for entry in groups.values())
                                   / len(groups) for j in (1, 2))),
     }
+
+
+def lower_tail_rank_floor_audit(calibration_scores, query_scores, *, alpha, score_lower_bound=None):
+    """Describe the operational floor of a conservative lower-tail rank rule.
+
+    The rule flags p=(1+# calibration scores <= query score)/(n+1) <= alpha.
+    Supply independent frozen sequences of finite binary64 scores and exact
+    integer or Fraction alpha in (0, 1); include every score including ties.
+    Algebraic attainability means some real score strictly below the reported
+    cutoff could flag, not that a particular scoring system can produce one.
+    If a certified score lower bound is declared, check all scores against it
+    and evaluate the best p-value over the closed domain at that bound.
+    This does not certify which scores the system actually emits.
+    No exchangeability, error control or population guarantee is evaluated.
+    """
+    from bisect import bisect_right
+
+    if not all(map(_bounded_paired_sequence, (calibration_scores, query_scores))):
+        raise ValueError("Calibration and query scores require bounded nonempty sequences.")
+    if type(alpha) not in (int, Fraction) or not 0 < alpha < 1:
+        raise ValueError("Alpha must be an exact Fraction in (0, 1).")
+
+    calibration = sorted(map(_paired_binary64_units, calibration_scores))
+    queries = tuple(map(_paired_binary64_units, query_scores))
+    lower = None if score_lower_bound is None else _paired_binary64_units(score_lower_bound)
+    if lower is not None and min(calibration[0], min(queries)) < lower:
+        raise ValueError("An observed score is below the declared score lower bound.")
+    n = len(calibration)
+    q = _BINARY64_QUANTUM_DENOMINATOR
+    def score(units):
+        return Fraction(units, q)
+
+    rank_budget = alpha * (n + 1)
+    maximum_count = rank_budget.numerator // rank_budget.denominator - 1
+    cutoff = calibration[maximum_count] if maximum_count >= 0 else None
+    minimum_score = calibration[0]
+    minimum_count = bisect_right(calibration, minimum_score)
+    query_ranks = tuple(bisect_right(calibration, value) for value in queries)
+    observed_minimum = min(queries)
+    domain_floor = Fraction(1 + bisect_right(calibration, lower), n + 1) if lower is not None else None
+    return {
+        "n_calibration": n,
+        "n_queries": len(queries),
+        "alpha": alpha,
+        "algebraic_p_floor": Fraction(1, n + 1),
+        "attainable_for_some_real_score": cutoff is not None,
+        "score_lower_bound": score(lower) if lower is not None else None,
+        "declared_domain_p_floor": domain_floor,
+        "attainable_in_declared_domain": domain_floor <= alpha if domain_floor is not None else None,
+        "calibration_minimum": score(minimum_score),
+        "calibration_minimum_count": minimum_count,
+        "calibration_minimum_fraction": Fraction(minimum_count, n),
+        "p_at_calibration_minimum": Fraction(1 + minimum_count, n + 1),
+        "query_minimum": score(observed_minimum),
+        "query_p_floor": Fraction(1 + min(query_ranks), n + 1),
+        "queries_tied_at_calibration_minimum": queries.count(minimum_score),
+        "queries_below_calibration_minimum": sum(value < minimum_score for value in queries),
+        "queries_flagged": sum(count <= maximum_count for count in query_ranks),
+        "strict_score_cutoff": score(cutoff) if cutoff is not None else None,
+        "query_minimum_minus_cutoff": (
+            score(observed_minimum - cutoff) if cutoff is not None else None),
+        "queries_at_cutoff": queries.count(cutoff) if cutoff is not None else None,
+    }
