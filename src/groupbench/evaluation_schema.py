@@ -1,4 +1,5 @@
 """Opt-in saved regression metric consistency; never proof of execution."""
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 import csv
 import io
@@ -152,6 +153,37 @@ def _check_standard_candidate_winners(audit, config, baselines):
         _fail("standard candidate winners differ from saved scores and candidate tie order.")
 
 
+def _check_duplicate_diagnostic_bounds(manifest, observed, groups):
+    if "data_diagnostics" not in manifest:
+        return
+    diagnostic = manifest["data_diagnostics"]
+    fields = ("identical_feature_target_rows", "identical_feature_target_rows_across_groups",
+              "cross_group_duplicate_patterns")
+    if not isinstance(diagnostic, dict) or any(
+            type(diagnostic.get(key)) is not int or not 0 <= diagnostic[key] <= len(observed)
+            for key in fields):
+        _fail("duplicate diagnostics must contain bounded nonnegative integer counts.")
+    duplicate_rows, across_rows, across_patterns = (diagnostic[key] for key in fields)
+    by_target = defaultdict(Counter)
+    for label, group in zip(observed, groups):
+        by_target[label][group] += 1
+    possible_rows = possible_across_rows = possible_patterns = 0
+    for counts in by_target.values():
+        total = sum(counts.values())
+        if total >= 2:
+            possible_rows += total
+        if len(counts) >= 2:
+            possible_across_rows += total
+            # Each distinct cross-group feature/target pattern consumes a
+            # disjoint pair from different groups with the same target.
+            possible_patterns += min(total // 2, total - max(counts.values()))
+    if (duplicate_rows == 1 or duplicate_rows > possible_rows
+            or across_rows > min(duplicate_rows, possible_across_rows)
+            or (across_rows == 0) != (across_patterns == 0)
+            or across_patterns > min(across_rows // 2, possible_patterns)):
+        _fail("duplicate diagnostics are impossible for the retained targets and groups.")
+
+
 def _check(manifest, summary, raw):
     version = manifest.get("schema_version")
     protocols = {"1.0": "nested-group-kfold-v1", "1.1": "nested-group-kfold-distinct-v2",
@@ -229,6 +261,7 @@ def _check(manifest, summary, raw):
         _fail("row/group/fold coverage differs.")
     # Validate literal text identities before reusing group scores across folds.
     validate_groups(groups, n)
+    _check_duplicate_diagnostic_bounds(manifest, observed, groups)
     membership, group_rows = {}, {}
     fold_rows = [[] for _ in range(nf)]
     fold_groups = [[] for _ in range(nf)]

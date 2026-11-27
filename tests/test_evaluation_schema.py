@@ -150,6 +150,40 @@ class EvaluationSchemaTests(unittest.TestCase):
         self.assertFalse(reply.stdout)
         self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
 
+    def test_cli_bounds_duplicate_diagnostics_by_retained_labels(self):
+        # Four equal targets but a 3:1 group imbalance: at most one
+        # cross-group duplicate pattern, even though four rows can be flagged.
+        frame = pd.DataFrame({"g": ["a", "a", "a", "b", "b", "c", "c", "d"],
+                              "x": [1., 1., 1., 1., 2., 3., 4., 5.],
+                              "y": [1., 1., 1., 1., 2., 3., 4., 5.]})
+        result = benchmark(frame, target="y", group="g", baselines=("dummy",),
+                           outer_splits=2, inner_splits=2)
+        result.write(self.root, overwrite=True)
+        command = [sys.executable, "-m", "groupbench.cli", "validate-evaluation-bundle", str(self.root)]
+        env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1] / "src"),
+                   OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1", PYTHONDONTWRITEBYTECODE="1")
+
+        def replay():
+            return subprocess.run(command, env=env, text=True, capture_output=True, timeout=30)
+
+        self.assertEqual(replay().returncode, 0)
+        source = result.manifest["data_diagnostics"]
+        self.assertEqual(source["identical_feature_target_rows"], 4)
+        self.assertEqual(source["identical_feature_target_rows_across_groups"], 4)
+        self.assertEqual(source["cross_group_duplicate_patterns"], 1)
+        for key, value in (("identical_feature_target_rows", 5),
+                           ("cross_group_duplicate_patterns", 2)):
+            with self.subTest(key=key):
+                result.write(self.root, overwrite=True)
+                self.mutate_json("manifest.json", lambda m: m["data_diagnostics"].update({key: value}))
+                self.assertEqual(verify_bundle(self.root).bundle_type, "evaluation")
+                before = {p.name: p.read_bytes() for p in self.root.iterdir()}
+                reply = replay()
+                self.assertEqual(reply.returncode, 2, reply.stderr)
+                self.assertIn("duplicate diagnostics", reply.stderr)
+                self.assertFalse(reply.stdout)
+                self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
+
     def test_cli_requires_selected_predictions_to_match_declared_family_refit(self):
         from groupbench.model import GroupBenchRegressor
 
