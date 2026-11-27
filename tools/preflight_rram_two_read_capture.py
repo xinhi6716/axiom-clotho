@@ -2,6 +2,7 @@
 import argparse
 import csv
 from decimal import Decimal
+import hashlib
 import io
 import json
 import os
@@ -23,7 +24,7 @@ def checked_integer(value):
     return int(value)
 
 
-def audit(path, seen_files):
+def audit(path, seen_files, seen_payloads):
     with os.fdopen(os.open(path, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0)
                            | getattr(os, "O_BINARY", 0)), "rb") as file:
         info = os.fstat(file.fileno())
@@ -36,6 +37,10 @@ def audit(path, seen_files):
         raw = file.read(MAX_BYTES + 1)
     if len(raw) > MAX_BYTES:
         raise ValueError("capture exceeds byte limit")
+    digest = hashlib.sha256(raw).digest()
+    if digest in seen_payloads:
+        raise ValueError("byte-identical capture payloads cannot support separate capture/chip identities")
+    seen_payloads.add(digest)
     reader = csv.reader(io.StringIO(raw.decode("utf-8-sig"), newline=""), strict=True)
     header = next(reader, [])
     if len(set(header)) != len(header) or not set(FIELDS).issubset(header):
@@ -76,6 +81,7 @@ def main():
     try:
         seen = set()
         files = set()
+        payloads = set()
         reports = []
         for capture_id, chip_id, filename in args.capture:
             if not CAPTURE_ID.fullmatch(capture_id) or not CAPTURE_ID.fullmatch(chip_id):
@@ -85,7 +91,7 @@ def main():
                 raise ValueError("duplicate capture/chip identity")
             seen.add(key)
             reports.append({"capture_id": capture_id, "chip_id": chip_id,
-                            **audit(Path(filename), files)})
+                            **audit(Path(filename), files, payloads)})
     except (OSError, UnicodeError, csv.Error):
         parser.exit(2, "error: capture could not be read as UTF-8 CSV\n")
     except ValueError as exc:

@@ -87,3 +87,29 @@ class TwoReadCapturePreflight(unittest.TestCase):
                 self.assertEqual(result.returncode, 2)
                 self.assertFalse(result.stdout)
                 self.assertIn(diagnostic, result.stderr)
+
+
+    def test_distinct_inodes_with_exact_copied_payload_do_not_support_two_chips(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            raw, copy = (Path(tmp) / part for part in ("raw.csv", "copy.csv"))
+            capture(raw, group())
+            copy.write_bytes(raw.read_bytes())
+            self.assertNotEqual(raw.stat().st_ino, copy.stat().st_ino)
+            args = ("--capture", "one", "chipA", str(raw), "--capture", "two", "chipB", str(copy))
+            rejected = cli(*args)
+            self.assertEqual(rejected.returncode, 2)
+            self.assertFalse(rejected.stdout)
+            self.assertIn("byte-identical capture payloads", rejected.stderr)
+            self.assertNotIn(str(raw), rejected.stderr)
+
+            # Identical coarse time and error summaries do not mean identical payload.
+            rows = group()
+            for row in rows:
+                row[4] += 1
+                row[5] += 1
+            capture(copy, rows)
+            accepted = cli(*args)
+            self.assertEqual(accepted.returncode, 0, accepted.stderr)
+            reports = json.loads(accepted.stdout)["captures"]
+            self.assertEqual([r["same_row_persistence_abs_error_sum_adc_codes"] for r in reports],
+                             [128, 128])
