@@ -917,3 +917,48 @@ def paired_threshold_decision_cost_bounds(rows, *, expected_roster, threshold,
             sum(Fraction(group[i], group[0] * quantum) for group in totals.values()) / len(totals)
             for i in (1, 2)),
     }
+
+
+def paired_quantile_pinball_loss(rows, *, expected_roster, quantile):
+    """Compare two forecasts explicitly intended for the same fixed quantile.
+
+    Supply (row_id, observed, quantile_forecast_a, quantile_forecast_b) tuples
+    and an independently declared (row_id, group_id) roster. A strictly
+    interior quantile must be fixed before comparisons. Missing rows and
+    either missing forecast reject; no calibration or model selection occurs.
+
+    This target-unit loss charges q times the magnitude of underprediction
+    and (1-q) times the magnitude of overprediction. Results use exact
+    arithmetic for represented binary64 values, with row and equal-group
+    weighting kept separate. A lower descriptive loss alone neither
+    verifies quantile calibration nor establishes future performance.
+    """
+    q = _paired_binary64_units(quantile)
+    unit = _BINARY64_QUANTUM_DENOMINATOR
+    if not 0 < q < unit:
+        raise ValueError("Pinball loss requires a quantile strictly between zero and one.")
+    totals = {}
+    for group, residual_a, residual_b in _paired_group_residual_units(rows, expected_roster):
+        sums = totals.setdefault(group, [0, 0, 0, 0, 0])
+        sums[0] += 1
+        sums[1] += max(-residual_a, 0)
+        sums[2] += max(residual_a, 0)
+        sums[3] += max(-residual_b, 0)
+        sums[4] += max(residual_b, 0)
+
+    def report(means):
+        def arm(under, over):
+            return {"underprediction_contribution": under,
+                    "overprediction_contribution": over, "pinball_loss": under + over}
+        a = arm(q * means[0], (unit - q) * means[1])
+        b = arm(q * means[2], (unit - q) * means[3])
+        return {"a": a, "b": b, "b_minus_a": {key: b[key] - a[key] for key in a}}
+
+    squared_unit = unit**2
+    return {
+        "n_rows": len(rows), "n_declared_groups": len(totals), "quantile_exact": Fraction(q, unit),
+        "row_weighted": report([Fraction(sum(state[i] for state in totals.values()),
+                                         len(rows) * squared_unit) for i in range(1, 5)]),
+        "equal_group": report([sum(Fraction(state[i], state[0] * squared_unit)
+                                   for state in totals.values()) / len(totals) for i in range(1, 5)]),
+    }
