@@ -252,3 +252,12 @@ distinct. This distinguishes equal-count slot mismatches in purportedly
 completed attempts from missing slots in declared threshold stops, without
 assuming whether either explains the missing rows or how often commands
 were actually issued.
+
+For archived replay, the independent controller log can be pinned with
+`--termination-dispositions-sha256 <trusted-lowercase-hex-digest>` against
+the exact archived metadata bytes. The plan receipt cannot protect this
+table: exchanging completed and threshold-stop classifications can put
+missing slots in the wrong stratum without changing the capture, planned
+slots, or number of declarations in each stratum. Save the disposition
+receipt when sealing the log, independently of the plan receipt. Matching
+bytes do not establish that the original declarations were accurate.

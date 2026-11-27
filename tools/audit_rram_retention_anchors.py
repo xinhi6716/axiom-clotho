@@ -441,10 +441,12 @@ def schedule_coverage(commands, observed, terminations=None):
     return dict(totals), {status: dict(counts) for status, counts in sorted(groups.items())}
 
 
-def termination_dispositions(path, roster):
+def termination_dispositions(path, roster, *, expected_sha256=None):
     allowed = {"completed", "value_threshold_stop", "instrument_abort", "operator_abort", "unknown"}
     dispositions = {}
-    for key, (reason,) in records(path, IDENTITY + ("termination_disposition",)):
+    for key, (reason,) in records(path, IDENTITY + ("termination_disposition",),
+                                  expected_sha256=expected_sha256,
+                                  digest_label="termination dispositions"):
         if key not in roster:
             raise ValueError("termination table contains a non-roster episode")
         if key in dispositions:
@@ -466,11 +468,15 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
           diagnose_terminal_alternatives=False, capture_sha256=None, readout_path_table=None,
           read_bias_table=None, aperture_table=None, diagnose_joint_aperture=False,
           diagnose_common_read_error_aperture=False, commanded_schedule_path=None,
-          termination_table_path=None, commanded_schedule_sha256=None):
+          termination_table_path=None, commanded_schedule_sha256=None,
+          termination_dispositions_sha256=None):
     validate_digest(roster_sha256, "frozen roster")
     validate_digest(capture_sha256, "timestamp capture")
     validate_digest(block_map_sha256, "acquisition block map")
     validate_digest(commanded_schedule_sha256, "commanded schedule")
+    validate_digest(termination_dispositions_sha256, "termination dispositions")
+    if termination_dispositions_sha256 is not None and termination_table_path is None:
+        raise ValueError("termination dispositions SHA-256 requires a termination dispositions table")
     if commanded_schedule_sha256 is not None and commanded_schedule_path is None:
         raise ValueError("commanded schedule SHA-256 requires a commanded schedule")
     if block_map_sha256 is not None and block_map_path is None:
@@ -494,7 +500,8 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
                                 expected_sha256=commanded_schedule_sha256)
                 if commanded_schedule_path is not None else None)
     observed_slots = defaultdict(Counter) if commands is not None else None
-    terminations = (termination_dispositions(termination_table_path, expected)
+    terminations = (termination_dispositions(termination_table_path, expected,
+                                             expected_sha256=termination_dispositions_sha256)
                     if termination_table_path is not None else None)
     termination_counts = defaultdict(Counter)
     present, unexpected = set(), set()
@@ -620,6 +627,8 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
         report["acquisition_block_map_byte_digest_verified"] = True
     if commanded_schedule_sha256 is not None:
         report["commanded_schedule_byte_digest_verified"] = True
+    if termination_dispositions_sha256 is not None:
+        report["termination_dispositions_byte_digest_verified"] = True
     if diagnose_anchors:
         by_anchor = {str(nominal): Counter() for nominal in ANCHORS}
         for slots in expected.values():
@@ -774,6 +783,8 @@ def main():
                         help="verify exact plan bytes against a previously trusted SHA-256")
     parser.add_argument("--termination-dispositions", type=Path,
                         help="optional episode-keyed controller/log termination dispositions")
+    parser.add_argument("--termination-dispositions-sha256",
+                        help="verify exact logged disposition bytes against a trusted archive SHA-256")
     args = parser.parse_args()
     try:
         report = audit(args.frozen_roster, args.capture, diagnose_anchors=args.diagnose_anchors,
@@ -789,7 +800,8 @@ def main():
                        diagnose_common_read_error_aperture=args.diagnose_common_read_error_aperture,
                        commanded_schedule_path=args.commanded_schedule,
                        commanded_schedule_sha256=args.commanded_schedule_sha256,
-                       termination_table_path=args.termination_dispositions)
+                       termination_table_path=args.termination_dispositions,
+                       termination_dispositions_sha256=args.termination_dispositions_sha256)
     except (OSError, UnicodeError, csv.Error):
         parser.exit(2, "error: input could not be read as UTF-8 CSV\n")
     except ValueError as exc:

@@ -904,6 +904,49 @@ class RetentionAnchorAudit(unittest.TestCase):
         self.assertEqual(joint["missing_declaration"]["episodes_with_exact_slot_coverage"], 0)
         self.assertNotIn("privateLot", result.stdout)
 
+    def test_termination_receipt_rejects_stratum_relabel_with_unchanged_schedule(self):
+        other = (*BASE[:4], "E2")
+        roster = [BASE, other]
+        rows = episode(BASE) + episode(other)[:2]
+        schedule = [(*key, tick) for key in roster for tick in (0, 1_000_000, 100_000_000_000)]
+        logged = [(*BASE, "completed"), (*other, "value_threshold_stop")]
+        swapped = [(*BASE, "value_threshold_stop"), (*other, "completed")]
+
+        def receipt(fields, entries):
+            text = ",".join(fields) + "\r\n" + "".join(
+                ",".join(map(str, row)) + "\r\n" for row in entries
+            )
+            return hashlib.sha256(text.encode()).hexdigest()
+
+        plan_flag = ("--commanded-schedule-sha256", receipt(IDS + ("nominal_us",), schedule))
+        status_flag = "--termination-dispositions-sha256"
+        digest = receipt(IDS + ("termination_disposition",), logged)
+        original = self.run_capture(roster, rows, schedule=schedule, terminations=logged, extra=plan_flag)
+        unpinned = self.run_capture(roster, rows, schedule=schedule, terminations=swapped, extra=plan_flag)
+        accepted = self.run_capture(roster, rows, schedule=schedule, terminations=logged,
+                                    extra=(*plan_flag, status_flag, digest))
+        self.assertEqual((original.returncode, unpinned.returncode, accepted.returncode), (1, 1, 1))
+        report, changed, verified = map(lambda r: json.loads(r.stdout), (original, unpinned, accepted))
+        self.assertIs(verified.pop("termination_dispositions_byte_digest_verified"), True)
+        self.assertEqual(verified, report)
+        group = "commanded_nominal_slot_coverage_by_declared_termination"
+        self.assertEqual(report[group]["completed"]["missing_commanded_slots"], 0)
+        self.assertEqual(changed[group]["completed"]["missing_commanded_slots"], 1)
+        self.assertIs(changed["commanded_schedule_byte_digest_verified"], True)
+        self.assertEqual(report["eligible_episodes"], changed["eligible_episodes"])
+        for payload, pin, message in (
+            (swapped, digest, "termination dispositions SHA-256 mismatch"),
+            (list(reversed(logged)), digest, "termination dispositions SHA-256 mismatch"),
+            (None, digest, "requires a termination dispositions table"),
+            (logged, digest.upper(), "64 lowercase hexadecimal"),
+        ):
+            bad = self.run_capture(roster, [], capture_header=("broken",), schedule=schedule,
+                                   terminations=payload, extra=(*plan_flag, status_flag, pin))
+            self.assertEqual(bad.returncode, 2)
+            self.assertFalse(bad.stdout)
+            self.assertIn(message, bad.stderr)
+            self.assertNotIn(digest, bad.stderr)
+
     def test_termination_declarations_validate_keys_and_vocabulary(self):
         valid = (*BASE, "instrument_abort")
         for mapping, diagnostic in (
