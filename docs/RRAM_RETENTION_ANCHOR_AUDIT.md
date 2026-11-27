@@ -385,3 +385,14 @@ and incomplete evidence is reported separately. Equal printed times need
 not be equal exact events. This tool never infers anchor identity from
 printed time, applies no correction to the capture, and does not change
 timing eligibility.
+
+Add `--diagnose-decimal-elapsed` to look at elapsed-window coverage rather
+than just source-time order. Using the declared origin and read intervals,
+subtract the origin upper bound from the read lower bound, and the origin
+lower bound from the read upper bound. These outer bounds require only a
+shared coordinate and the validity of each individual declared interval;
+partial overlap does not imply a feasible timing under any additional
+coupling constraints. Early coverage uses (0, 1.02] s and terminal coverage
+uses [80,000, 120,000] s: zero early is excluded, but both terminal edges
+are included. Missing origin or read evidence is counted separately. These
+secondary counts do not infer anchor identity or change timing admission.

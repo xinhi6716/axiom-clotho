@@ -214,6 +214,37 @@ class RetentionAnchorAudit(unittest.TestCase):
         self.assertIn("timestamp capture SHA-256 must be 64 lowercase", invalid.stderr)
         self.assertFalse(invalid.stdout)
 
+    def test_decimal_elapsed_windows_distinguish_origin_uncertainty_and_inclusive_edges(self):
+        keys = [(*BASE[:4], f"E{i}") for i in range(5)]
+        anchors = (0, 1_000_000, 100_000_000_000)
+        declared = (
+            (("2", "0"), ("3.02", "0"), ("80002", "0")),  # Upper early/lower terminal included.
+            (("2", "0"), ("2", "0"), ("120002", "0")),   # Early zero excluded; terminal upper included.
+            (("2", "0.002"), ("2.001", "0"), ("80002", "0")),  # Origin uncertainty alone straddles.
+            (("2", "0"), ("3.020000000000000000000000000001", "0"), ("80001.999", "0")),
+            (("2", "0"),),
+        )
+        tokens = [(*key, anchor, value, step) for key, row in zip(keys, declared)
+                  for anchor, (value, step) in zip(anchors, row)]
+        capture = sum((episode(key) for key in keys[:4]), []) + episode(keys[4])[:1]
+        flag = "--diagnose-decimal-elapsed"
+        ordinary = self.run_capture(keys, capture, time_tokens=tokens)
+        result = self.run_capture(keys, capture, time_tokens=tokens, extra=(flag,))
+        self.assertEqual((ordinary.returncode, result.returncode), (1, 1))
+        report = json.loads(result.stdout)
+        support = report.pop("conditional_decimal_elapsed_window_support_by_us")
+        for nominal, inside, outside in ((anchors[1], 1, 2), (anchors[2], 2, 1)):
+            expected = {"declared_elapsed_bounds_within_window": inside,
+                        "declared_elapsed_bounds_outside_window": outside,
+                        "declared_elapsed_bounds_partially_overlap_window": 1}
+            self.assertEqual(support[str(nominal)]["timing_eligible_by_status"], expected)
+            self.assertEqual(support[str(nominal)]["frozen_attempted_by_status"],
+                             expected | {"missing_origin_or_read_token": 1})
+        self.assertEqual(report, json.loads(ordinary.stdout))
+        invalid = self.run_capture(keys, capture, extra=(flag,))
+        self.assertEqual(invalid.returncode, 2)
+        self.assertIn("requires decimal time tokens", invalid.stderr)
+
     def test_declared_time_resolution_preserves_exact_order_and_unknown_ties(self):
         keys = [(*BASE[:4], f"E{i}") for i in range(7)]
         anchors = (0, 1_000_000, 100_000_000_000)

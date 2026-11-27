@@ -390,6 +390,21 @@ def decimal_time_order(evidence):
             else "strict_order_unresolved_by_declared_token_bounds")
 
 
+def decimal_elapsed_status(evidence, nominal):
+    if ANCHORS[0] not in evidence or nominal not in evidence:
+        return "missing_origin_or_read_token"
+    origin_lo, origin_hi = evidence[ANCHORS[0]]
+    read_lo, read_hi = evidence[nominal]
+    lo, hi = (read_lo - origin_hi) * 1_000_000, (read_hi - origin_lo) * 1_000_000
+    early = nominal == ANCHORS[1]
+    lower, upper = (0, EARLY_UPPER) if early else (TERMINAL_LOWER, TERMINAL_UPPER)
+    if (hi <= lower if early else hi < lower) or lo > upper:
+        return "declared_elapsed_bounds_outside_window"
+    if (lo > lower if early else lo >= lower) and hi <= upper:
+        return "declared_elapsed_bounds_within_window"
+    return "declared_elapsed_bounds_partially_overlap_window"
+
+
 def timing_envelope_windows(path, roster):
     windows = defaultdict(dict)
     fields = IDENTITY + ("clock", "epoch", "valid_from_tick_us", "valid_through_tick_us")
@@ -783,7 +798,10 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
           termination_dispositions_sha256=None, planned_path_table=None, native_read_table=None,
           planned_bias_table=None, planned_role_table=None, logged_role_table=None,
           planned_aperture_width_table=None, event_order_table=None,
-          diagnose_individual_read_counters=False, native_timer_segment_table=None, timing_envelope_table=None, decimal_time_token_table=None):
+          diagnose_individual_read_counters=False, native_timer_segment_table=None, timing_envelope_table=None, decimal_time_token_table=None,
+          diagnose_decimal_elapsed=False):
+    if diagnose_decimal_elapsed and decimal_time_token_table is None:
+        raise ValueError("decimal elapsed diagnosis requires decimal time tokens")
     if diagnose_individual_read_counters and (event_order_table is None or native_read_table is None):
         raise ValueError("individual-read counter diagnosis requires both event order and native read identities")
     if planned_aperture_width_table is not None and aperture_table is None:
@@ -868,6 +886,8 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
     decimal_tokens = (decimal_time_tokens(decimal_time_token_table, expected)
                       if decimal_time_token_table is not None else None)
     attempted_token_order, eligible_token_order = Counter(), Counter()
+    attempted_decimal_elapsed = {nominal: Counter() for nominal in ANCHORS[1:]}
+    eligible_decimal_elapsed = {nominal: Counter() for nominal in ANCHORS[1:]}
     envelope_windows = (timing_envelope_windows(timing_envelope_table, expected)
                         if timing_envelope_table is not None else None)
     attempted_envelopes = {nominal: Counter() for nominal in ANCHORS}
@@ -948,6 +968,13 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
             attempted_token_order[status] += 1
             if reason == "eligible":
                 eligible_token_order[status] += 1
+        if diagnose_decimal_elapsed:
+            evidence = decimal_tokens.get(key, {})
+            for nominal in ANCHORS[1:]:
+                status = decimal_elapsed_status(evidence, nominal)
+                attempted_decimal_elapsed[nominal][status] += 1
+                if reason == "eligible":
+                    eligible_decimal_elapsed[nominal][status] += 1
         if role_plans is not None:
             status = event_role_status(role_plans[key], logged_roles.get(key, {}))
             attempted_roles[status] += 1
@@ -1144,6 +1171,14 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
             "frozen_attempted_by_status": dict(sorted(attempted_token_order.items())),
             "timing_eligible_by_status": dict(sorted(eligible_token_order.items())),
         }
+    if diagnose_decimal_elapsed:
+        report["conditional_decimal_elapsed_window_support_by_us"] = {
+            str(nominal): {
+                "frozen_attempted_by_status": dict(sorted(attempted_decimal_elapsed[nominal].items())),
+                "timing_eligible_by_status": dict(sorted(eligible_decimal_elapsed[nominal].items())),
+            }
+            for nominal in ANCHORS[1:]
+        }
     if role_plans is not None:
         report["acquisition_event_role_agreement"] = {
             "frozen_attempted_by_status": dict(sorted(attempted_roles.items())),
@@ -1261,6 +1296,8 @@ def main():
                         help="independent validity windows for declared timestamp-error envelopes")
     parser.add_argument("--decimal-time-tokens", type=Path,
                         help="independent common-clock rounded time tokens and declared resolutions")
+    parser.add_argument("--diagnose-decimal-elapsed", action="store_true",
+                        help="conditional origin-to-read elapsed bounds under declared token intervals")
     args = parser.parse_args()
     try:
         report = audit(args.frozen_roster, args.capture, diagnose_anchors=args.diagnose_anchors,
@@ -1287,7 +1324,8 @@ def main():
                        diagnose_individual_read_counters=args.diagnose_individual_read_counters,
                        native_timer_segment_table=args.native_timer_segments,
                        timing_envelope_table=args.timing_envelope_windows,
-                       decimal_time_token_table=args.decimal_time_tokens)
+                       decimal_time_token_table=args.decimal_time_tokens,
+                       diagnose_decimal_elapsed=args.diagnose_decimal_elapsed)
     except (OSError, UnicodeError, csv.Error):
         parser.exit(2, "error: input could not be read as UTF-8 CSV\n")
     except ValueError as exc:
