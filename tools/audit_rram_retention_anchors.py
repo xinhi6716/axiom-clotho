@@ -122,7 +122,7 @@ def duplicate_anchor_status(rows):
     return "identical_usable_stamps"
 
 
-def repeat_request_support(path, capture_records):
+def repeat_request_support(path, capture_records, *, diagnose_cross_anchor=False):
     keys = {}
     fields = IDENTITY + ("nominal_us", "capture_record", "source_request_key")
     for identity, (nominal, ordinal, request_key) in records(path, fields):
@@ -160,8 +160,31 @@ def repeat_request_support(path, capture_records):
         else:
             status = "multiple_request_keys_nonidentical_timing_metadata"
         counts[status] += 1
-    return {"repeated_frozen_anchor_groups": sum(counts.values()),
-            "groups_by_status": dict(sorted(counts.items()))}
+    report = {"repeated_frozen_anchor_groups": sum(counts.values()),
+              "groups_by_status": dict(sorted(counts.items()))}
+    if diagnose_cross_anchor:
+        anchors_by_key = defaultdict(set)
+        for number, key in keys.items():
+            anchors_by_key[key].add(capture_records[number][0])
+        cross = Counter()
+        for anchors in anchors_by_key.values():
+            if len(anchors) == 1:
+                cross["one_frozen_anchor"] += 1
+            else:
+                identities = {episode for episode, _ in anchors}
+                nominals = {nominal for _, nominal in anchors}
+                status = ("multiple_anchors_within_one_episode" if len(identities) == 1 else
+                          "multiple_episodes_same_nominal_anchor" if len(nominals) == 1 else
+                          "multiple_episodes_multiple_nominal_anchors")
+                cross[status] += 1
+        report["conditional_single_anchor_request_key_support"] = {
+            "keys_with_at_least_one_declared_frozen_anchor": len(anchors_by_key),
+            "frozen_anchor_groups_without_full_key_evidence": sum(
+                any(key is None for key, _ in group) for group in groups.values()
+            ),
+            "keys_by_assignment_status": dict(sorted(cross.items())),
+        }
+    return report
 
 
 def terminal_alternative_status(slots, off_anchor_stamps):
@@ -841,7 +864,10 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
           planned_bias_table=None, planned_role_table=None, logged_role_table=None,
           planned_aperture_width_table=None, event_order_table=None,
           diagnose_individual_read_counters=False, native_timer_segment_table=None, timing_envelope_table=None, decimal_time_token_table=None,
-          diagnose_decimal_elapsed=False, diagnose_early_route_terminal=False, repeat_request_table=None):
+          diagnose_decimal_elapsed=False, diagnose_early_route_terminal=False, repeat_request_table=None,
+          diagnose_cross_anchor_requests=False):
+    if diagnose_cross_anchor_requests and repeat_request_table is None:
+        raise ValueError("cross-anchor request diagnosis requires repeat request keys")
     if repeat_request_table is not None and capture_sha256 is None:
         raise ValueError("repeat request reconciliation requires an expected capture SHA-256")
     if diagnose_early_route_terminal and (planned_path_table is None or readout_path_table is None):
@@ -1101,7 +1127,7 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
     }
     if repeat_request_table is not None:
         report["declared_repeat_request_support"] = repeat_request_support(
-            repeat_request_table, indexed_capture_records
+            repeat_request_table, indexed_capture_records, diagnose_cross_anchor=diagnose_cross_anchor_requests
         )
     if capture_sha256 is not None:
         report["timestamp_capture_byte_digest_verified"] = True
@@ -1366,6 +1392,8 @@ def main():
                         help="describe terminal support stratified by route agreement at the early anchor only")
     parser.add_argument("--repeat-request-keys", type=Path,
                         help="independent source request keys for exact capture CSV record ordinals")
+    parser.add_argument("--diagnose-cross-anchor-requests", action="store_true",
+                        help="assume source request keys globally identify a single frozen anchor")
     args = parser.parse_args()
     try:
         report = audit(args.frozen_roster, args.capture, diagnose_anchors=args.diagnose_anchors,
@@ -1395,7 +1423,8 @@ def main():
                        decimal_time_token_table=args.decimal_time_tokens,
                        diagnose_decimal_elapsed=args.diagnose_decimal_elapsed,
                        diagnose_early_route_terminal=args.diagnose_early_route_terminal,
-                       repeat_request_table=args.repeat_request_keys)
+                       repeat_request_table=args.repeat_request_keys,
+                       diagnose_cross_anchor_requests=args.diagnose_cross_anchor_requests)
     except (OSError, UnicodeError, csv.Error):
         parser.exit(2, "error: input could not be read as UTF-8 CSV\n")
     except ValueError as exc:

@@ -223,6 +223,37 @@ class RetentionAnchorAudit(unittest.TestCase):
         self.assertIn("timestamp capture SHA-256 must be 64 lowercase", invalid.stderr)
         self.assertFalse(invalid.stdout)
 
+    def test_global_single_anchor_request_contract_detects_reuse_without_duplicate_rows(self):
+        a, b, c = [(*BASE[:4], f"E{i}") for i in range(3)]
+        rows = episode(a) + episode(b) + episode(c)
+        early, terminal = 1_000_000, 100_000_000_000
+        declarations = [
+            (*a, 0, 1, "privateAcrossNominals"), (*a, early, 2, "privateAcrossNominals"),
+            (*a, terminal, 3, "acrossEpisodes"), (*b, terminal, 6, "acrossEpisodes"),
+            (*b, 0, 4, "bothAxes"), (*c, early, 8, "bothAxes"),
+            (*b, early, 5, "single"),
+        ]
+        flag = "--diagnose-cross-anchor-requests"
+        plain = self.run_capture([a, b, c], rows, repeat_keys=declarations, pin_repeat_capture=True)
+        result = self.run_capture([a, b, c], rows, repeat_keys=declarations, pin_repeat_capture=True, extra=(flag,))
+        self.assertEqual((plain.returncode, result.returncode), (0, 0))
+        report = json.loads(result.stdout)
+        repeat = report["declared_repeat_request_support"]
+        self.assertEqual(repeat["repeated_frozen_anchor_groups"], 0)
+        self.assertEqual(repeat.pop("conditional_single_anchor_request_key_support"), {
+            "keys_with_at_least_one_declared_frozen_anchor": 4,
+            "frozen_anchor_groups_without_full_key_evidence": 2,
+            "keys_by_assignment_status": {
+                "one_frozen_anchor": 1, "multiple_anchors_within_one_episode": 1,
+                "multiple_episodes_same_nominal_anchor": 1, "multiple_episodes_multiple_nominal_anchors": 1,
+            },
+        })
+        self.assertEqual(report, json.loads(plain.stdout))
+        self.assertNotIn("privateAcrossNominals", result.stdout)
+        denied = self.run_capture([a, b, c], rows, extra=(flag,))
+        self.assertEqual(denied.returncode, 2)
+        self.assertIn("requires repeat request keys", denied.stderr)
+
     def test_duplicate_request_keys_distinguish_retry_conflict_from_equal_distinct_requests(self):
         keys = [(*BASE[:4], f"E{i}") for i in range(5)]
         early = 1_000_000

@@ -419,3 +419,15 @@ conflicting timestamp metadata under one key and identical timestamps with
 distinct keys are separate findings. Missing keys and incomplete timing
 remain unresolved. No values are inspected, neither retry nor physical
 independence is proven, and duplicates are not repaired or admitted.
+
+When the source explicitly guarantees request keys are globally comparable
+after namespacing and each key belongs to exactly one anchor, add
+`--diagnose-cross-anchor-requests`. A batch, a fan-out trigger, or a local
+counter reset across trials does not meet this contract. The conditional
+report groups declared keys by distinct verified capture-anchor assignments:
+one anchor, multiple anchors of one episode, multiple episodes at one
+nominal, or multiple episodes across nominals. It can flag reuse even
+when no exact anchor has duplicate rows. Anchors with incomplete key
+evidence remain visible. Repeated rows at the same anchor do not by
+themselves imply a cross-anchor conflict, and this audit changes no
+timing eligibility.
