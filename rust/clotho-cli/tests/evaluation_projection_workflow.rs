@@ -271,3 +271,28 @@ fn cannot_project_fold_counts_incompatible_with_the_saved_group_sizes() {
         assert!(String::from_utf8_lossy(&out.stderr).contains("Evaluation fold sizes"));
     }
 }
+
+#[test]
+fn rejects_group_macro_mae_inconsistent_with_recomputed_pooled_mae() {
+    for claimed in [0.0, 0.125] {
+        let work = Work::new();
+        let bundle = evaluate(&work, false);
+        let original = inspect_success(&bundle);
+        assert!(original["pooled_row_weighted"]["mae"].as_f64().unwrap() > claimed);
+
+        // Each MAE is finite/nonnegative and the saved macro arithmetic
+        // is exact. It is the partition identity to the retained CSV that
+        // cannot be true.
+        alter(&bundle, |v| {
+            for group in v["groups"].as_array_mut().unwrap() {
+                group["mae"] = json!(claimed);
+            }
+            v["equal_group_weighted"]["mean_group_mae"] = json!(claimed);
+            v["equal_group_weighted"]["worst_group_mae"] = json!(claimed);
+        });
+        let out = inspect(&bundle);
+        assert!(!out.status.success());
+        assert!(out.stdout.is_empty());
+        assert!(String::from_utf8_lossy(&out.stderr).contains("Group MAE does not pool"));
+    }
+}
