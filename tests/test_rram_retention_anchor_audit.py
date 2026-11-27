@@ -197,6 +197,39 @@ class RetentionAnchorAudit(unittest.TestCase):
         self.assertIn("timestamp capture SHA-256 must be 64 lowercase", invalid.stderr)
         self.assertFalse(invalid.stdout)
 
+    def test_counter_reuse_requires_distinct_native_read_ids_in_comparable_namespace(self):
+        roster = [(*BASE[:4], f"E{i}") for i in range(8)]
+        rows = sum((episode(key) for key in roster), [])
+        early = 1_000_000
+        orders = [(*key, early, "privateStream", n // 2 + 10) for n, key in enumerate(roster)]
+        orders[-1] = (*roster[-1], early, "otherStream", 13)
+        native = [
+            (*roster[0], early, "logger", "id1"),
+            (*roster[1], early, "logger", "id2"),
+            (*roster[2], early, "logger", "same"),
+            (*roster[3], early, "logger", "same"),
+            (*roster[4], early, "logger", "pair"),
+            (*roster[5], early, "other", "distinctButNotComparable"),
+            (*roster[6], early, "logger", "s6"),
+            (*roster[7], early, "logger", "s7"),
+        ]
+        flag = "--diagnose-individual-read-counters"
+        plain = self.run_capture(roster, rows, native_reads=native, event_orders=orders)
+        checked = self.run_capture(roster, rows, native_reads=native, event_orders=orders, extra=(flag,))
+        self.assertEqual((plain.returncode, checked.returncode), (0, 0))
+        result = json.loads(checked.stdout)
+        self.assertEqual(result.pop("conditional_individual_read_counter_support"), {
+            "cross_episode_shared_stream_counter_groups": 3,
+            "groups_by_status": {"same_counter_for_distinct_logged_reads": 1,
+                "same_counter_for_same_logged_read": 1, "same_counter_with_unresolved_read_identity": 1},
+        })
+        self.assertEqual(result, json.loads(plain.stdout))
+        self.assertNotIn("privateStream", checked.stdout)
+        self.assertNotIn("distinctButNotComparable", checked.stdout)
+        denied = self.run_capture(roster, rows, event_orders=orders, extra=(flag,))
+        self.assertEqual(denied.returncode, 2)
+        self.assertIn("requires both event order and native read identities", denied.stderr)
+
     def test_independent_event_sequence_distinguishes_valid_timing_from_valid_order(self):
         roster = [(*BASE[:4], f"E{i}") for i in range(6)]
         to, early, end = 0, 1_000_000, 100_000_000_000

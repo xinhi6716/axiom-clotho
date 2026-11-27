@@ -334,3 +334,15 @@ nominal anchor order, even when another anchor is missing or uses a
 different stream. Evidence of full order needs all anchors in one stream;
 otherwise order is unresolved. This does not synchronize clocks, assume
 comparability across streams, or change the frozen timing gate.
+
+Only where the source's stream counter identifies one individual read,
+not a shared trigger or frame, combine `--logged-event-order` and
+`--native-read-identities` with `--diagnose-individual-read-counters`.
+Among stream/counter groups shared by multiple frozen episodes at read
+anchors (not the time origin), this separates groups just re-attributing
+one logged native read from groups assigning the counter to distinct logged
+read IDs in one comparable native namespace. Missing identities, or IDs
+only in incomparable namespaces, leave the distinction unresolved. This
+conditional diagnostic reports counts, does not authenticate read IDs,
+and cannot diagnose distinct physical reads from counters alone. Timing
+eligibility remains unchanged.

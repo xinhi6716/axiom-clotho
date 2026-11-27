@@ -315,7 +315,41 @@ def native_read_identity_statuses(path, roster):
             statuses[key] = "all_anchors_have_distinct_logged_native_reads"
         else:
             statuses[key] = "missing_or_ambiguous_native_read_assignment"
-    return statuses
+    return statuses, reads_by_anchor
+
+
+def cross_episode_event_identity_support(orders, reads):
+    """Compare counters only for independently identified distinct individual reads."""
+    assignments = defaultdict(list)
+    for key, ordered_anchors in orders.items():
+        for nominal, event in ordered_anchors.items():
+            if nominal in ANCHORS[1:]:
+                assignments[event].append((key, reads.get((key, nominal))))
+
+    support = Counter()
+    for group in assignments.values():
+        if len({key for key, _ in group}) < 2:
+            continue
+        by_namespace = defaultdict(lambda: defaultdict(set))
+        for key, identity in group:
+            if identity is not None:
+                namespace, read_id = identity
+                by_namespace[namespace][key].add(read_id)
+        # Different IDs are comparable only inside a native read namespace;
+        # different episodes must participate in the conflicting evidence.
+        if any(len(episodes) > 1 and len(set().union(*episodes.values())) > 1
+               for episodes in by_namespace.values()):
+            support["same_counter_for_distinct_logged_reads"] += 1
+        else:
+            labels = {identity for _, identity in group}
+            if len(labels) == 1 and None not in labels:
+                support["same_counter_for_same_logged_read"] += 1
+            else:
+                support["same_counter_with_unresolved_read_identity"] += 1
+    return {
+        "cross_episode_shared_stream_counter_groups": sum(support.values()),
+        "groups_by_status": dict(sorted(support.items())),
+    }
 
 
 def logged_event_order(path, roster):
@@ -653,7 +687,10 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
           termination_table_path=None, commanded_schedule_sha256=None,
           termination_dispositions_sha256=None, planned_path_table=None, native_read_table=None,
           planned_bias_table=None, planned_role_table=None, logged_role_table=None,
-          planned_aperture_width_table=None, event_order_table=None):
+          planned_aperture_width_table=None, event_order_table=None,
+          diagnose_individual_read_counters=False):
+    if diagnose_individual_read_counters and (event_order_table is None or native_read_table is None):
+        raise ValueError("individual-read counter diagnosis requires both event order and native read identities")
     if planned_aperture_width_table is not None and aperture_table is None:
         raise ValueError("planned aperture widths require a read aperture table")
     if (planned_role_table is None) != (logged_role_table is None):
@@ -725,8 +762,8 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
     attempted_plan_paths, eligible_plan_paths = Counter(), Counter()
     paths = readout_paths(readout_path_table, expected) if readout_path_table is not None else None
     attempted_paths, eligible_paths = Counter(), Counter()
-    native_reads = (native_read_identity_statuses(native_read_table, expected)
-                    if native_read_table is not None else None)
+    native_reads, native_read_assignments = (native_read_identity_statuses(native_read_table, expected)
+                                               if native_read_table is not None else (None, None))
     attempted_native_reads, eligible_native_reads = Counter(), Counter()
     event_orders = logged_event_order(event_order_table, expected) if event_order_table is not None else None
     attempted_event_orders, eligible_event_orders = Counter(), Counter()
@@ -964,6 +1001,10 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
             "frozen_attempted_by_status": dict(sorted(attempted_event_orders.items())),
             "timing_eligible_by_status": dict(sorted(eligible_event_orders.items())),
         }
+    if diagnose_individual_read_counters:
+        report["conditional_individual_read_counter_support"] = cross_episode_event_identity_support(
+            event_orders, native_read_assignments
+        )
     if role_plans is not None:
         report["acquisition_event_role_agreement"] = {
             "frozen_attempted_by_status": dict(sorted(attempted_roles.items())),
@@ -1073,6 +1114,8 @@ def main():
                         help="independent allowed aperture durations at frozen read anchors")
     parser.add_argument("--logged-event-order", type=Path,
                         help="independent event sequence for captured anchors on monotone streams")
+    parser.add_argument("--diagnose-individual-read-counters", action="store_true",
+                        help="assume one stream counter per individual read, not a fan-out trigger")
     args = parser.parse_args()
     try:
         report = audit(args.frozen_roster, args.capture, diagnose_anchors=args.diagnose_anchors,
@@ -1095,7 +1138,8 @@ def main():
                        planned_bias_table=args.planned_read_bias,
                        planned_role_table=args.planned_event_roles, logged_role_table=args.logged_event_roles,
                        planned_aperture_width_table=args.planned_aperture_widths,
-                       event_order_table=args.logged_event_order)
+                       event_order_table=args.logged_event_order,
+                       diagnose_individual_read_counters=args.diagnose_individual_read_counters)
     except (OSError, UnicodeError, csv.Error):
         parser.exit(2, "error: input could not be read as UTF-8 CSV\n")
     except ValueError as exc:
