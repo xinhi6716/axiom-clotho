@@ -441,6 +441,12 @@ def score(run_dir, outcomes_csv, output_dir):
         expected = [{"device": r["device"], "group": identifier(r["group"])} for r in rows]
         if metadata["future_cohort"] != expected or {r["group"] for r in rows} & set(groups):
             raise WorkflowError("saved prediction identities or group boundary are inconsistent")
+        # Per-device grouping has an exact identity rule. Merely matching
+        # a rehashed cohort list does not make pooled group aliases valid.
+        if config["group_by"] == "device" and (
+                len(groups) != metadata["training_rows"]
+                or any(row["group"] != row["device"] for row in rows)):
+            raise WorkflowError("saved per-device groups do not match physical device identities")
         _check_saved_prediction_provenance(payloads, metadata, hashes, len(rows))
         engine = parse_csv(payloads["prediction/predictions.csv"], ("row_position", "prediction"))
         mismatch = "keyed predictions differ from the unchanged calculator prediction bundle"

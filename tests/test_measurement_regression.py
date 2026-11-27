@@ -639,6 +639,38 @@ class MeasurementRegressionTests(unittest.TestCase):
         self.assertFalse(self.score_dir.exists())
         self.assertEqual(tree(self.run_dir), saved)
 
+    def test_saved_score_checks_declared_per_device_groups(self):
+        self.config(group_by="device")
+        self.prepare()
+        flow.run(self.prepared, self.run_dir)
+        outcomes = self.inputs / "later_outcomes.csv"
+        args = ("score", "--run-dir", self.run_dir, "--outcomes", outcomes, "--output-dir")
+        self.assertEqual(self.command(*args, self.root / "control-score", no_site=True).returncode, 0)
+        columns = ("device", "group", "prediction")
+        prediction_rows = self.run_dir / "prediction_rows.csv"
+        rows = c.parse_csv(prediction_rows.read_bytes(), columns)
+        self.assertTrue(all(r["device"] == r["group"] for r in rows))
+        for r in rows:
+            r["group"] = "wrong-pool"
+        metadata = self.run_dir / "run.json"
+        doc = c.parse_json(metadata.read_bytes())
+        doc["future_cohort"] = [{k: r[k] for k in ("device", "group")} for r in rows]
+        prediction_rows.write_bytes(c.csv_bytes(columns, rows))
+        metadata.write_bytes(c.json_bytes(doc))
+        receipt = self.run_dir / "COMPLETE.json"
+        checks = c.parse_json(receipt.read_bytes())
+        for path in (prediction_rows, metadata):
+            checks["files_sha256"][path.name] = c.sha(path.read_bytes())
+        receipt.write_bytes(c.json_bytes(checks))
+        c.load_bundle(self.run_dir, "run")
+        original = tree(self.run_dir)
+        result = self.command(*args, self.score_dir, no_site=True)
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn("saved per-device groups", result.stderr)
+        self.assertFalse(result.stdout)
+        self.assertFalse(self.score_dir.exists())
+        self.assertEqual(tree(self.run_dir), original)
+
     def test_report_escapes_endpoint_markup_and_has_no_external_assets(self):
         config = self.config(endpoint_name="<script>alert(1)</script>")
         report = flow._report("<unsafe>", config, ["<script>bad</script>"], [("scores.json", "<metrics>")]).decode()
