@@ -20,7 +20,7 @@ from .splitting import GroupKFold
 from .prediction_schema import (_manifest, _DECIMAL, _optional_selection_metadata, _extension_families,
     _DOMAIN_FIELDS, _domain_config, _domain_selection, _reject_domain_audits, _domain_candidates,
     _same_declaration, _extension_families_v2, _extended_selection_v2, _reject_ridge_v2_markers,
-    _EXTENDED_FAMILIES_V2, _GROUP_FIT_AUDIT_V2)
+    _EXTENDED_FAMILIES_V2, _GROUP_FIT_AUDIT_V2, _check_package_source_digest)
 from .verification import (EVALUATION_FILES, MAX_CHECKSUM_BYTES, MAX_PAYLOAD_BYTES,
                            _checksum_records, _open_run_directory, _read_file, _signature)
 
@@ -330,6 +330,9 @@ def _check(manifest, summary, raw):
                  "1.4": "nested-group-kfold-extended-families-v2"}
     if not isinstance(version, str) or version not in protocols or manifest.get("protocol") != protocols[version] or "schema_id" in manifest or "schema_id" in summary:
         _fail("only supported regression evaluation schemas/protocols are accepted.")
+    # Reconcile this optional writer declaration using only retained bytes.
+    # Matching self-reported hashes is not proof of executed source.
+    _check_package_source_digest(manifest.get("package_source"))
     config = manifest.get("config")
     if not isinstance(config, dict):
         _fail("missing configuration.")

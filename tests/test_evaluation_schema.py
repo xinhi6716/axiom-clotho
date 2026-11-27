@@ -56,6 +56,39 @@ class EvaluationSchemaTests(unittest.TestCase):
                 self.assertEqual((checked.n_rows, checked.n_groups, checked.n_models), (12, 6, 2))
                 self.assertEqual(before, {p.name: p.read_bytes() for p in Path(temp).iterdir()})
 
+    def test_rehashed_evaluation_package_source_map_must_match_declared_aggregate(self):
+        from groupbench.package_source import _source_map_digest
+
+        written = json.loads((self.root / "manifest.json").read_text())["package_source"]
+        if written.get("status") != "available":
+            self.skipTest("genuine writer could not observe its package source")
+        self.assertEqual(validate_evaluation_bundle(self.root).n_rows, 12)
+
+        def modify_map(manifest):
+            declaration = manifest["package_source"]
+            path = next(iter(declaration["files"]))
+            previous = declaration["files"][path]
+            declaration["files"][path] = ("0" if previous[0] != "0" else "1") + previous[1:]
+
+        self.mutate_json("manifest.json", modify_map)
+        self.assertEqual(verify_bundle(self.root).bundle_type, "evaluation")
+        before = {p.name: p.read_bytes() for p in self.root.iterdir()}
+        with self.assertRaisesRegex(ValueError, "package source-map aggregate digest"):
+            validate_evaluation_bundle(self.root)
+        self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
+
+        def reconcile_declaration(manifest):
+            source = manifest["package_source"]
+            source["sha256"] = _source_map_digest(source["files"])
+
+        self.mutate_json("manifest.json", reconcile_declaration)
+        with patch("groupbench.package_source.observe_package_source", side_effect=AssertionError):
+            self.assertEqual(validate_evaluation_bundle(self.root).n_rows, 12)
+        self.mutate_json("manifest.json", lambda m: m["package_source"].update(scope="historic-opaque"))
+        self.assertEqual(validate_evaluation_bundle(self.root).n_rows, 12)
+        self.mutate_json("manifest.json", lambda m: m.pop("package_source"))
+        self.assertEqual(validate_evaluation_bundle(self.root).n_rows, 12)
+
     def test_rehashed_false_metrics_fail_but_byte_contract_unchanged(self):
         self.mutate_json('summary.json', lambda d: d['models']['selected']['overall'].update(mae=123456.))
         self.assertEqual(verify_bundle(self.root).bundle_type, 'evaluation')
