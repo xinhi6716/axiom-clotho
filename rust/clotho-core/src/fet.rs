@@ -163,12 +163,11 @@ pub fn extract_branch(a: &Acquisition, s: &[Sample], p: Settings) -> Result<Feat
             return Err(FetError::InvalidCurrent);
         }
     }
-    if !(s
-        .windows(2)
-        .all(|w| w[1].gate_voltage_v > w[0].gate_voltage_v)
-        || s.windows(2)
-            .all(|w| w[1].gate_voltage_v < w[0].gate_voltage_v))
-    {
+    let ascending = s[0].gate_voltage_v < s[s.len() - 1].gate_voltage_v;
+    if !s.windows(2).all(|w| {
+        if ascending { w[0].gate_voltage_v < w[1].gate_voltage_v }
+        else { w[0].gate_voltage_v > w[1].gate_voltage_v }
+    }) {
         return Err(FetError::InvalidGateOrder);
     }
     let mut exact = s.iter().filter(|q| q.drain_current_a == p.criterion_a);
@@ -226,10 +225,26 @@ pub fn extract_branch(a: &Acquisition, s: &[Sample], p: Settings) -> Result<Feat
         // bracket. Roundoff in the weighted sum must not extrapolate.
         (estimate.clamp(lo, hi), span, vec![w[0].source_row, w[1].source_row])
     };
-    let mut selected: Vec<_> = s
-        .iter()
-        .filter(|q| q.gate_voltage_v >= p.window_min_v && q.gate_voltage_v <= p.window_max_v)
-        .collect();
+    // Strict gate order makes the closed window a single borrowed slice.
+    let inside = |q: &Sample| q.gate_voltage_v >= p.window_min_v && q.gate_voltage_v <= p.window_max_v;
+    let (start, end) = if inside(&s[0]) && inside(&s[s.len() - 1]) {
+        (0, s.len())
+    } else if s.len() <= 8 {
+        let start = s.iter().position(inside).unwrap_or(s.len());
+        let end = s.iter().rposition(inside).map_or(start, |i| i + 1);
+        (start, end)
+    } else if ascending {
+        (
+            s.partition_point(|q| q.gate_voltage_v < p.window_min_v),
+            s.partition_point(|q| q.gate_voltage_v <= p.window_max_v),
+        )
+    } else {
+        (
+            s.partition_point(|q| q.gate_voltage_v > p.window_max_v),
+            s.partition_point(|q| q.gate_voltage_v >= p.window_min_v),
+        )
+    };
+    let selected = &s[start..end];
     if selected.len() < 3 {
         return Err(FetError::InsufficientWindow);
     }
@@ -237,24 +252,21 @@ pub fn extract_branch(a: &Acquisition, s: &[Sample], p: Settings) -> Result<Feat
         return Err(FetError::InvalidCurrent);
     }
     let log_selected_source_rows = selected.iter().map(|q| q.source_row).collect();
-    // Use one traversal for arithmetic only; provenance stays in the
-    // original acquisition order.
-    if selected[0].gate_voltage_v > selected[selected.len() - 1].gate_voltage_v {
-        selected.reverse();
-    }
-    let logs: Vec<_> = selected
-        .iter()
-        .map(|q| (q.drain_current_a * sign).log10())
+    // Traverse gates in increasing order for arithmetic. Keep the original
+    // source ordering in the provenance above.
+    let last = selected.len() - 1;
+    let sample = |i| &selected[if ascending { i } else { last - i }];
+    let logs: Vec<_> = (0..selected.len())
+        .map(|i| (sample(i).drain_current_a * sign).log10())
         .collect();
-    validate_distinct_current_logs(&selected, &logs)?;
+    validate_distinct_current_logs(&logs, |i| sample(i).drain_current_a)?;
     let n = selected.len() as f64;
-    let lo = selected[0].gate_voltage_v;
-    let hi = selected[selected.len() - 1].gate_voltage_v;
+    let lo = sample(0).gate_voltage_v;
+    let hi = sample(last).gate_voltage_v;
     let scale = hi - lo;
     let normalize = |origin| {
-        selected
-            .iter()
-            .map(|q| (q.gate_voltage_v - origin) / scale)
+        (0..selected.len())
+            .map(|i| (sample(i).gate_voltage_v - origin) / scale)
             .collect::<Vec<_>>()
     };
     let has_collision = |xs: &[f64]| xs.windows(2).any(|w| w[0] == w[1]);
@@ -308,13 +320,13 @@ pub fn extract_branch(a: &Acquisition, s: &[Sample], p: Settings) -> Result<Feat
     })
 }
 
-fn validate_distinct_current_logs(selected: &[&Sample], logs: &[f64]) -> Result<(), FetError> {
+fn validate_distinct_current_logs(logs: &[f64], current: impl Fn(usize) -> f64) -> Result<(), FetError> {
     // Check that the rounded logarithms themselves are ordered, rather
     // than relying on the platform's libm to preserve monotonicity. Equal
     // values in an ordered column are contiguous, including both zeros.
     let logs_ascending = logs[0] <= logs[logs.len() - 1];
-    for (w, pair) in logs.windows(2).zip(selected.windows(2)) {
-        if w[0] == w[1] && pair[0].drain_current_a != pair[1].drain_current_a {
+    for (i, w) in logs.windows(2).enumerate() {
+        if w[0] == w[1] && current(i) != current(i + 1) {
             return Err(FetError::NumericalRange);
         }
         let ordered = if logs_ascending { w[0] <= w[1] } else { w[0] >= w[1] };
@@ -322,9 +334,10 @@ fn validate_distinct_current_logs(selected: &[&Sample], logs: &[f64]) -> Result<
             // Preserve validation when a math implementation supplies
             // unordered rounded values with nonadjacent collisions.
             let mut currents_by_log = BTreeMap::new();
-            for (sample, &log) in selected.iter().zip(logs) {
+            for (i, &log) in logs.iter().enumerate() {
                 let key = if log == 0.0 { 0 } else { log.to_bits() };
-                if *currents_by_log.entry(key).or_insert(sample.drain_current_a) != sample.drain_current_a {
+                let amps = current(i);
+                if *currents_by_log.entry(key).or_insert(amps) != amps {
                     return Err(FetError::NumericalRange);
                 }
             }
@@ -351,14 +364,14 @@ mod tests {
         let a = sample(1.0);
         let b = sample(f64::from_bits(1.0_f64.to_bits() + 1));
         let c = sample(2.0);
-        assert_eq!(validate_distinct_current_logs(&[&a, &a, &c], &[-0.0, 0.0, 1.0]), Ok(()));
-        assert_eq!(validate_distinct_current_logs(&[&a, &c, &a], &[-0.0, 1.0, 0.0]), Ok(()));
+        assert_eq!(validate_distinct_current_logs(&[-0.0, 0.0, 1.0], |i| [&a, &a, &c][i].drain_current_a), Ok(()));
+        assert_eq!(validate_distinct_current_logs(&[-0.0, 1.0, 0.0], |i| [&a, &c, &a][i].drain_current_a), Ok(()));
         for (selected, logs) in [
             ([&a, &b, &c], [-0.0, 0.0, 1.0]),
             ([&c, &a, &b], [1.0, 0.0, -0.0]),
             ([&a, &c, &b], [-0.0, 1.0, 0.0]),
         ] {
-            assert_eq!(validate_distinct_current_logs(&selected, &logs), Err(FetError::NumericalRange));
+            assert_eq!(validate_distinct_current_logs(&logs, |i| selected[i].drain_current_a), Err(FetError::NumericalRange));
         }
     }
 }

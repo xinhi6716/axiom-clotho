@@ -448,3 +448,33 @@ fn criterion_bracket_uses_exact_represented_width_in_both_directions() {
         }
     }
 }
+
+#[test]
+fn borrowed_fit_window_includes_endpoints_and_preserves_acquisition_provenance() {
+    let mut sweep: Vec<_> = (0..16)
+        .map(|i| Sample {
+            source_row: i + 2,
+            temperature_k: 300.0,
+            drain_voltage_v: 1.0,
+            body_voltage_v: 0.0,
+            gate_voltage_v: i as f64 - 5.0,
+            drain_current_a: 10_f64.powi(i as i32 - 12),
+        })
+        .collect();
+    let mut p = settings();
+    p.criterion_a = sweep[6].drain_current_a;
+    p.window_min_v = -0.0;
+    p.window_max_v = 2.0;
+    let forward = extract_branch(&acquisition(), &sweep, p).unwrap();
+    assert_eq!(forward.log_selected_source_rows, [7, 8, 9]);
+    sweep.reverse();
+    let reverse = extract_branch(&acquisition(), &sweep, p).unwrap();
+    assert_eq!(reverse.log_selected_source_rows, [9, 8, 7]);
+    assert_eq!(forward.log_slope_decades_per_v.to_bits(), reverse.log_slope_decades_per_v.to_bits());
+    assert_eq!(forward.log_intercept.to_bits(), reverse.log_intercept.to_bits());
+    assert_eq!(forward.log_rmse_decades.to_bits(), reverse.log_rmse_decades.to_bits());
+
+    p.window_min_v = 50.0;
+    p.window_max_v = 60.0;
+    assert_eq!(extract_branch(&acquisition(), &sweep, p).unwrap_err(), FetError::InsufficientWindow);
+}
