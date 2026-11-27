@@ -1731,3 +1731,55 @@ def paired_mae_held_label_offset_oracle(rows, *, expected_roster):
     a, b = map(model, (0, 1))
     return {"n_rows": len(rows), "n_groups": len(groups), "a": a, "b": b,
             "b_minus_a": {key: b[key] - a[key] for key in a}}
+
+
+def paired_window_slope_mae(rows, *, expected_roster):
+    """Score exact change per elapsed time for paired two-endpoint forecasts.
+
+    Rows contain (window ID, start time, end time, observed start, observed
+    end, A start, A end, B start, B end). Both models must use the same
+    units, targets, timestamps and windows. The independently frozen roster
+    contains (window ID, group ID); use only forecasts created at the agreed
+    forecast origin. Slope MAE is descriptive, discounts a common intercept
+    within a window and does not assume windows are independent. Error on
+    the levels remains a different metric.
+    """
+    if not all(map(_bounded_paired_sequence, (rows, expected_roster))):
+        raise ValueError("Rows and expected roster must be bounded nonempty sequences.")
+    roster, seen, groups = {}, set(), {}
+    for entry in expected_roster:
+        if type(entry) is not tuple or len(entry) != 2 or not all(map(_paired_roster_id, entry)):
+            raise ValueError("Frozen roster entries require valid (window ID, group ID) tuples.")
+        key, group = entry
+        if key in roster:
+            raise ValueError("Frozen window IDs must be unique.")
+        roster[key] = group
+    for row in rows:
+        if type(row) is not tuple or len(row) != 9 or not _paired_roster_id(row[0]):
+            raise ValueError("Each row requires a window ID, two times and three endpoint pairs.")
+        key = row[0]
+        if key not in roster or key in seen:
+            raise ValueError("Rows must match the frozen window roster exactly.")
+        seen.add(key)
+        start, end, y0, y1, a0, a1, b0, b1 = map(_paired_binary64_units, row[1:])
+        elapsed = end - start
+        if elapsed <= 0:
+            raise ValueError("The window time must increase strictly.")
+        observed = y1 - y0
+        item = groups.setdefault(roster[key], [0, Fraction(), Fraction()])
+        item[0] += 1
+        item[1] += Fraction(abs(a1 - a0 - observed), elapsed)
+        item[2] += Fraction(abs(b1 - b0 - observed), elapsed)
+    if len(seen) != len(roster):
+        raise ValueError("Rows must match the frozen window roster exactly.")
+
+    def summarize(a, b):
+        return {"a_slope_mae": a, "b_slope_mae": b, "slope_mae_b_minus_a": b - a}
+
+    return {
+        "n_windows": len(seen),
+        "n_groups": len(groups),
+        "micro": summarize(*(sum(g[i] for g in groups.values()) / len(rows) for i in (1, 2))),
+        "equal_group": summarize(*(sum(g[i] / g[0] for g in groups.values()) / len(groups)
+                                   for i in (1, 2))),
+    }
