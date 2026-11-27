@@ -74,6 +74,118 @@ fn decode(chunk: &[u8]) -> f64 {
     f64::from_le_bytes(bytes)
 }
 
+fn summarize_training(
+    bytes: &[u8],
+    rows: usize,
+) -> Result<(usize, Option<(f64, f64)>), NumericBytesError> {
+    let mut missing = 0;
+    let mut minimum = f64::INFINITY;
+    let mut maximum = f64::NEG_INFINITY;
+    for chunk in bytes.chunks_exact(8) {
+        let value = decode(chunk);
+        if value.is_finite() {
+            minimum = minimum.min(value);
+            maximum = maximum.max(value);
+        } else if value.is_nan() {
+            missing += 1;
+        } else {
+            return Err(NumericBytesError::InfiniteNumeric);
+        }
+    }
+    Ok((missing, (missing != rows).then_some((minimum, maximum))))
+}
+
+#[inline]
+fn compare_bounded<const BRANCHLESS: bool>(
+    bytes: &[u8],
+    minimum: f64,
+    maximum: f64,
+    flags: &mut [u8],
+) -> Result<(usize, usize, usize), NumericBytesError> {
+    let mut missing = 0;
+    let mut below = 0;
+    let mut above = 0;
+    for (chunk, flag) in bytes.chunks_exact(8).zip(flags.iter_mut()) {
+        let value = decode(chunk);
+        if value.is_finite() {
+            if BRANCHLESS {
+                let low = value < minimum;
+                let high = value > maximum;
+                below += usize::from(low);
+                above += usize::from(high);
+                *flag |= u8::from(low | high) * OUTSIDE;
+            } else if value < minimum {
+                below += 1;
+                *flag |= OUTSIDE;
+            } else if value > maximum {
+                above += 1;
+                *flag |= OUTSIDE;
+            }
+        } else if value.is_nan() {
+            missing += 1;
+            *flag |= MISSING;
+        } else {
+            return Err(NumericBytesError::InfiniteNumeric);
+        }
+    }
+    Ok((missing, below, above))
+}
+
+fn compare_column(
+    bytes: &[u8],
+    bounds: Option<(f64, f64)>,
+    flags: &mut [u8],
+) -> Result<(usize, usize, FeatureCounts), NumericBytesError> {
+    let mut missing = 0;
+    let mut unsupported = 0;
+    let mut below = 0;
+    let mut above = 0;
+    // Training support is column-level state. Dispatch once per column rather
+    // than checking it on every finite query value.
+    if let Some((minimum, maximum)) = bounds {
+        // Most deployment inputs fall inside the training bounds. Retain the
+        // no-write loop for that case and only use branchless counts when a
+        // cheap, evenly spaced probe finds frequently out-of-range values.
+        // It chooses the kernel only; both loops still validate every value.
+        let rows = bytes.len() / 8;
+        let mixed = rows >= 1024
+            && (0..32)
+                .filter(|i| {
+                    let start = i * (rows / 32) * 8;
+                    let value = decode(&bytes[start..start + 8]);
+                    value.is_finite() && ((value < minimum) | (value > maximum))
+                })
+                .take(5)
+                .count() == 5;
+        (missing, below, above) = if mixed {
+            compare_bounded::<true>(bytes, minimum, maximum, flags)?
+        } else {
+            compare_bounded::<false>(bytes, minimum, maximum, flags)?
+        };
+    } else {
+        for (chunk, flag) in bytes.chunks_exact(8).zip(flags.iter_mut()) {
+            let value = decode(chunk);
+            if value.is_finite() {
+                unsupported += 1;
+                *flag |= UNSUPPORTED;
+            } else if value.is_nan() {
+                missing += 1;
+                *flag |= MISSING;
+            } else {
+                return Err(NumericBytesError::InfiniteNumeric);
+            }
+        }
+    }
+    Ok((
+        missing,
+        unsupported,
+        FeatureCounts::Numeric {
+            below_training_min_count: bounds.map(|_| below),
+            above_training_max_count: bounds.map(|_| above),
+        },
+    ))
+}
+
 /// Compare numeric source-feature support without modifying inputs.
 ///
 /// Both tables must contain 1..=100 uniquely named columns and 1..=20,000
@@ -95,60 +207,20 @@ pub fn prediction_input_support_bytes(
     let mut flags = vec![0u8; n_prediction_rows];
     let mut features = Vec::with_capacity(training.len());
     for source in training {
-        let mut training_missing_count = 0;
-        let mut minimum = f64::INFINITY;
-        let mut maximum = f64::NEG_INFINITY;
-        for chunk in source.values.chunks_exact(8) {
-            let value = decode(chunk);
-            if value.is_nan() {
-                training_missing_count += 1;
-            } else if value.is_finite() {
-                minimum = minimum.min(value);
-                maximum = maximum.max(value);
-            } else {
-                return Err(NumericBytesError::InfiniteNumeric);
-            }
-        }
-        let all_missing = training_missing_count == n_training_rows;
-        let mut prediction_missing_count = 0;
-        let mut unsupported = 0;
-        let mut below = 0;
-        let mut above = 0;
-        for (chunk, flag) in by_name[source.name].chunks_exact(8).zip(flags.iter_mut()) {
-            let value = decode(chunk);
-            if value.is_nan() {
-                prediction_missing_count += 1;
-                *flag |= MISSING;
-            } else if !value.is_finite() {
-                return Err(NumericBytesError::InfiniteNumeric);
-            } else if all_missing {
-                unsupported += 1;
-                *flag |= UNSUPPORTED;
-            } else {
-                if value < minimum {
-                    below += 1;
-                    *flag |= OUTSIDE;
-                }
-                if value > maximum {
-                    above += 1;
-                    *flag |= OUTSIDE;
-                }
-            }
-        }
+        let (training_missing_count, bounds) = summarize_training(source.values, n_training_rows)?;
+        let (prediction_missing_count, unsupported, counts) =
+            compare_column(by_name[source.name], bounds, &mut flags)?;
         features.push(FeatureSupport {
             name: source.name.to_owned(),
             training_missing_count,
-            training_support: if all_missing {
+            training_support: if bounds.is_none() {
                 TrainingSupport::UnavailableAllMissing
             } else {
                 TrainingSupport::ObservedNonMissingValues
             },
             prediction_missing_count,
             prediction_non_missing_without_training_values_count: unsupported,
-            counts: FeatureCounts::Numeric {
-                below_training_min_count: if all_missing { None } else { Some(below) },
-                above_training_max_count: if all_missing { None } else { Some(above) },
-            },
+            counts,
         });
     }
     let (rows_with_any_flag, row_flag_counts) = summarize_row_flags(&flags);
@@ -187,28 +259,11 @@ impl NumericSupportReference {
         let n_training_rows = validate_table(training)?;
         let mut features = Vec::with_capacity(training.len());
         for source in training {
-            let mut missing = 0;
-            let mut minimum = f64::INFINITY;
-            let mut maximum = f64::NEG_INFINITY;
-            for chunk in source.values.chunks_exact(8) {
-                let value = decode(chunk);
-                if value.is_nan() {
-                    missing += 1;
-                } else if value.is_finite() {
-                    minimum = minimum.min(value);
-                    maximum = maximum.max(value);
-                } else {
-                    return Err(NumericBytesError::InfiniteNumeric);
-                }
-            }
+            let (missing, bounds) = summarize_training(source.values, n_training_rows)?;
             features.push(NumericReferenceFeature {
                 name: source.name.to_owned(),
                 missing,
-                bounds: if missing == n_training_rows {
-                    None
-                } else {
-                    Some((minimum, maximum))
-                },
+                bounds,
             });
         }
         Ok(Self {
@@ -239,34 +294,8 @@ impl NumericSupportReference {
         let mut flags = vec![0u8; n_prediction_rows];
         let mut features = Vec::with_capacity(self.features.len());
         for source in &self.features {
-            let mut prediction_missing_count = 0;
-            let mut unsupported = 0;
-            let mut below = 0;
-            let mut above = 0;
-            for (chunk, flag) in by_name[source.name.as_str()]
-                .chunks_exact(8)
-                .zip(flags.iter_mut())
-            {
-                let value = decode(chunk);
-                if value.is_nan() {
-                    prediction_missing_count += 1;
-                    *flag |= MISSING;
-                } else if !value.is_finite() {
-                    return Err(NumericBytesError::InfiniteNumeric);
-                } else if let Some((minimum, maximum)) = source.bounds {
-                    if value < minimum {
-                        below += 1;
-                        *flag |= OUTSIDE;
-                    }
-                    if value > maximum {
-                        above += 1;
-                        *flag |= OUTSIDE;
-                    }
-                } else {
-                    unsupported += 1;
-                    *flag |= UNSUPPORTED;
-                }
-            }
+            let (prediction_missing_count, unsupported, counts) =
+                compare_column(by_name[source.name.as_str()], source.bounds, &mut flags)?;
             features.push(FeatureSupport {
                 name: source.name.clone(),
                 training_missing_count: source.missing,
@@ -277,10 +306,7 @@ impl NumericSupportReference {
                 },
                 prediction_missing_count,
                 prediction_non_missing_without_training_values_count: unsupported,
-                counts: FeatureCounts::Numeric {
-                    below_training_min_count: source.bounds.map(|_| below),
-                    above_training_max_count: source.bounds.map(|_| above),
-                },
+                counts,
             });
         }
         let (rows_with_any_flag, row_flag_counts) = summarize_row_flags(&flags);
