@@ -524,6 +524,60 @@ def bound_paired_aggregate_bias(rows, *, expected_roster):
             "row_weighted": summary(*micro), "equal_group": summary(*macro)}
 
 
+def bound_paired_window_direction_accuracy(rows, *, expected_roster, deadband):
+    """Sharp B-minus-A direction accuracy bounds for two censored anchors.
+
+    Rows are (window ID, start truth low/high, end truth low/high, A start,
+    A end, B start, B end). The roster freezes (window ID, group ID).
+    Changes within the inclusive [-deadband, deadband] interval are flat.
+    The two observed anchors can vary independently in their stated limits;
+    each resulting direction is shared by both forecasts. Across windows
+    endpoint uncertainty must also be uncoupled. Repeated physical anchors
+    with a common unknown value are not supported by these sharp bounds.
+    No causality, error control or population accuracy is implied.
+    """
+    deadband = _number(deadband)
+    if deadband < 0:
+        raise ValueError("The direction deadband must be nonnegative.")
+    if (type(rows) not in (list, tuple) or not 1 <= len(rows) <= MAX_ROWS
+            or any(type(row) is not tuple or len(row) != 9 for row in rows)):
+        raise ValueError("Each row requires one ID, two closed truth intervals and both forecast endpoints.")
+
+    def direction(change):
+        return -1 if change < -deadband else 1 if change > deadband else 0
+
+    # Normalize all arithmetic before constructing the derived intervals.
+    # Pass original decimal/float endpoints through the shared roster validator,
+    # rather than casting exact derived endpoints back to a supported scalar.
+    starts = [(key, slo, shi, a0, a0, b0, b0)
+              for key, slo, shi, _, _, a0, _, b0, _ in rows]
+    ends = [(key, elo, ehi, a1, a1, b1, b1)
+            for key, _, _, elo, ehi, _, a1, _, b1 in rows]
+    groups = {}
+    n_ambiguous = 0
+    for start, end in zip(_paired_bounded_interval_rows(starts, expected_roster),
+                          _paired_bounded_interval_rows(ends, expected_roster), strict=True):
+        group, slo, shi, a0, _, b0, _ = start
+        _, elo, ehi, a1, _, b1, _ = end
+        possible = range(direction(elo - shi), direction(ehi - slo) + 1)
+        n_ambiguous += len(possible) > 1
+        a, b = direction(a1 - a0), direction(b1 - b0)
+        contrasts = [int(b == y) - int(a == y) for y in possible]
+        stats = groups.setdefault(group, [0, 0, 0])
+        stats[0] += 1
+        stats[1] += min(contrasts)
+        stats[2] += max(contrasts)
+
+    return {
+        "n_windows": len(rows), "n_groups": len(groups),
+        "n_direction_ambiguous_windows": n_ambiguous,
+        "row_weighted_accuracy_b_minus_a_bounds": tuple(
+            Fraction(sum(stats[i] for stats in groups.values()), len(rows)) for i in (1, 2)),
+        "equal_group_accuracy_b_minus_a_bounds": tuple(
+            _mean([Fraction(stats[i], stats[0]) for stats in groups.values()]) for i in (1, 2)),
+    }
+
+
 def diagnose_saved_interval_reference(document):
     """Return an opt-in descriptive sidecar, without changing normal evaluation.
 
