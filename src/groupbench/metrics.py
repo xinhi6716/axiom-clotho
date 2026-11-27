@@ -1618,3 +1618,39 @@ def paired_lower_tail_rank_alerts(calibration, queries, *, expected_calibration,
         "equal_group_alert_rate_b_minus_a": (
             sum(g["alert_rate_b_minus_a"] for g in groups.values()) / len(groups)),
     }
+
+
+def paired_group_mae_upper_tail(rows, *, expected_roster, tail_mass):
+    """Describe the worst equal-group tail of paired B-minus-A MAE.
+
+    Average each group's complete paired rows before sorting group effects.
+    A strictly positive tail mean indicates higher B loss in the worst part
+    of the declared group distribution. A fractional boundary group is
+    weighted only by its remaining mass; when effects tie at the boundary
+    the result is invariant to the choice of tied groups. This empirical
+    tail statistic is not a confidence bound or a population percentile.
+    """
+    if type(tail_mass) is not Fraction or not 0 < tail_mass <= 1:
+        raise ValueError("Tail mass must be an exact Fraction in (0, 1].")
+    totals = {}
+    for group, a, b in _paired_group_error_units(rows, expected_roster):
+        entry = totals.setdefault(group, [0, 0])
+        entry[0] += 1
+        entry[1] += b - a
+    unit = _BINARY64_QUANTUM_DENOMINATOR
+    effects = sorted((Fraction(delta, n * unit) for n, delta in totals.values()), reverse=True)
+    mass = len(effects) * tail_mass
+    whole = mass.numerator // mass.denominator
+    remainder = mass - whole
+    tail_sum = sum(effects[:whole])
+    if remainder:
+        tail_sum += remainder * effects[whole]
+    boundary = effects[whole if remainder else whole - 1]
+    return {
+        "n_rows": len(rows), "n_groups": len(effects), "tail_mass": tail_mass,
+        "equal_group_mae_b_minus_a": sum(effects) / len(effects),
+        "upper_tail_mean_mae_b_minus_a": tail_sum / mass,
+        "boundary_mae_b_minus_a": boundary,
+        "n_groups_above_boundary": sum(value > boundary for value in effects),
+        "n_groups_at_boundary": sum(value == boundary for value in effects),
+    }
