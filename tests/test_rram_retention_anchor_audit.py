@@ -24,7 +24,7 @@ def episode(key=BASE, early=1_000_000, final=100_000_000_000, error=0):
 
 
 class RetentionAnchorAudit(unittest.TestCase):
-    def run_capture(self, roster, rows, capture_header=IDS + TIMES, *, extra=(), block_map=None, stress=None, readout_paths=None, read_bias=None, apertures=None, schedule=None, terminations=None):
+    def run_capture(self, roster, rows, capture_header=IDS + TIMES, *, extra=(), block_map=None, stress=None, readout_paths=None, read_bias=None, apertures=None, schedule=None, terminations=None, planned_paths=None):
         with tempfile.TemporaryDirectory() as tmp:
             folder = Path(tmp)
             for name, header, payload in (
@@ -46,6 +46,12 @@ class RetentionAnchorAudit(unittest.TestCase):
                 with paths.open("w", newline="", encoding="utf-8") as stream:
                     csv.writer(stream).writerows((IDS + ("nominal_us", "readout_path"), *readout_paths))
                 extra = (*extra, "--readout-paths", str(paths))
+            if planned_paths is not None:
+                plan = folder / "route_plan.csv"
+                with plan.open("w", newline="", encoding="utf-8") as stream:
+                    cols = IDS + ("nominal_us", "planned_readout_path")
+                    csv.writer(stream).writerows((cols, *planned_paths))
+                extra = (*extra, "--planned-readout-paths", str(plan))
             if read_bias is not None:
                 bias_path = folder / "bias.csv"
                 with bias_path.open("w", newline="", encoding="utf-8") as stream:
@@ -159,6 +165,46 @@ class RetentionAnchorAudit(unittest.TestCase):
         self.assertEqual(invalid.returncode, 2)
         self.assertIn("timestamp capture SHA-256 must be 64 lowercase", invalid.stderr)
         self.assertFalse(invalid.stdout)
+
+    def test_planned_paths_detect_same_wrong_route_but_accept_planned_change(self):
+        roster = [(*BASE[:4], f"E{i}") for i in range(5)]
+        anchor = (0, 1_000_000, 100_000_000_000)
+        route = ("privateRouteA", "privateRouteA", "privateRouteB")
+        plan = [(*key, tick, path) for key in roster for tick, path in zip(anchor, route)]
+        observed = [(*key, tick, path) for key, paths in zip(roster, (
+            route, ("privateRouteA",) * 3, ("", "", ""), (),
+            ("", "privateRouteB"),
+        )) for tick, path in zip(anchor, paths)]
+        rows = sum((episode(key) for key in roster[:3]), []) + episode(roster[4])[:2]
+        plain = self.run_capture(roster, rows, readout_paths=observed)
+        checked = self.run_capture(roster, rows, readout_paths=observed, planned_paths=plan)
+        self.assertEqual((plain.returncode, checked.returncode), (1, 1))
+        self.assertNotIn("privateRoute", checked.stdout)
+        report = json.loads(checked.stdout)
+        self.assertEqual(report.pop("planned_readout_path_agreement"), {
+            "frozen_attempted_by_status": {"all_logged_routes_match_plan": 1,
+                "logged_route_differs_from_plan": 2, "unresolved_route": 2},
+            "timing_eligible_by_status": {"all_logged_routes_match_plan": 1,
+                "logged_route_differs_from_plan": 1, "unresolved_route": 1},
+        })
+        self.assertEqual(report, json.loads(plain.stdout))
+        self.assertEqual(report["declared_readout_path_support"]["timing_eligible_by_status"]
+                         ["same_declared_path_at_all_anchors"], 1)
+
+    def test_planned_paths_require_independent_complete_anchor_recipe(self):
+        plan = [(*BASE, tick, "declared") for tick in (0, 1_000_000, 100_000_000_000)]
+        observed = [(*BASE, 0, "declared")]
+        for mapping, log, diagnostic in (
+            (plan, None, "require observed readout paths"),
+            (plan[:-1], observed, "must cover all anchors"),
+            (plan + [plan[0]], observed, "duplicate planned readout path"),
+            (plan + [(*BASE, 1, "declared")], observed, "does not identify a frozen anchor"),
+            (plan[:-1] + [(*BASE, 100_000_000_000, "")], observed, "invalid planned readout path"),
+        ):
+            r = self.run_capture([BASE], episode(), readout_paths=log, planned_paths=mapping)
+            self.assertEqual(r.returncode, 2)
+            self.assertFalse(r.stdout)
+            self.assertIn(diagnostic, r.stderr)
 
     def test_complete_interleaved_episodes_use_physical_die_keys(self):
         other = ("privateLot", "W2", "D1", "C1", "E1")

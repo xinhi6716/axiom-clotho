@@ -261,3 +261,15 @@ missing slots in the wrong stratum without changing the capture, planned
 slots, or number of declarations in each stratum. Save the disposition
 receipt when sealing the log, independently of the plan receipt. Matching
 bytes do not establish that the original declarations were accurate.
+
+To check per-anchor route agreement with an independently defined recipe,
+use `--planned-readout-paths route_plan.csv` together with `--readout-paths`.
+The plan fields are `lot,wafer,die,cell,episode,nominal_us,planned_readout_path`.
+It must name one nonblank route for every frozen episode and each of its
+three anchors, including episodes that later lack capture. A constant wrong
+route and a planned route switch therefore do not look equivalent. Any
+logged mismatch at an unambiguous anchor rules out agreement; otherwise
+missing/ambiguous capture or unknown route leaves agreement unresolved. The
+audit returns aggregates for all frozen and timing-eligible attempts only.
+It compares opaque labels in the same namespace, does not establish
+electrical equivalence, and does not change timing eligibility.

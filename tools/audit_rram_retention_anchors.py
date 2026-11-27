@@ -229,6 +229,34 @@ def readout_path_status(slots, metadata):
     return "missing_or_unknown_path_without_observed_change"
 
 
+def planned_readout_paths(path, roster):
+    plans = defaultdict(dict)
+    fields = IDENTITY + ("nominal_us", "planned_readout_path")
+    for key, (raw_nominal, route) in records(path, fields):
+        nominal = integer(raw_nominal)
+        if key not in roster or nominal not in ANCHORS:
+            raise ValueError("planned readout path does not identify a frozen anchor")
+        if not KEY.fullmatch(route):
+            raise ValueError("invalid planned readout path label")
+        if nominal in plans[key]:
+            raise ValueError("duplicate planned readout path for a frozen anchor")
+        plans[key][nominal] = route
+    if len(plans) != len(roster) or any(len(plan) != len(ANCHORS) for plan in plans.values()):
+        raise ValueError("planned readout paths must cover all anchors of the frozen roster")
+    return plans
+
+
+def planned_path_status(slots, observed, plan):
+    unresolved = False
+    for nominal in ANCHORS:
+        path = observed.get(nominal)
+        if len(slots.get(nominal, ())) != 1 or not path:
+            unresolved = True
+        elif path != plan[nominal]:
+            return "logged_route_differs_from_plan"
+    return "unresolved_route" if unresolved else "all_logged_routes_match_plan"
+
+
 def read_bias_intervals(path, expected):
     biases = defaultdict(dict)
     fields = IDENTITY + ("nominal_us", "observed_read_bias_uV", "read_bias_error_uV")
@@ -469,7 +497,9 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
           read_bias_table=None, aperture_table=None, diagnose_joint_aperture=False,
           diagnose_common_read_error_aperture=False, commanded_schedule_path=None,
           termination_table_path=None, commanded_schedule_sha256=None,
-          termination_dispositions_sha256=None):
+          termination_dispositions_sha256=None, planned_path_table=None):
+    if planned_path_table is not None and readout_path_table is None:
+        raise ValueError("planned readout paths require observed readout paths")
     validate_digest(roster_sha256, "frozen roster")
     validate_digest(capture_sha256, "timestamp capture")
     validate_digest(block_map_sha256, "acquisition block map")
@@ -529,6 +559,8 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
             continue
         expected[key].setdefault(nominal, []).append(stamp)
 
+    plans = planned_readout_paths(planned_path_table, expected) if planned_path_table is not None else None
+    attempted_plan_paths, eligible_plan_paths = Counter(), Counter()
     paths = readout_paths(readout_path_table, expected) if readout_path_table is not None else None
     attempted_paths, eligible_paths = Counter(), Counter()
     biases = read_bias_intervals(read_bias_table, expected) if read_bias_table is not None else None
@@ -565,6 +597,11 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
             attempted_paths[path_status] += 1
             if reason == "eligible":
                 eligible_paths[path_status] += 1
+        if plans is not None:
+            status = planned_path_status(slots, paths.get(key, {}), plans[key])
+            attempted_plan_paths[status] += 1
+            if reason == "eligible":
+                eligible_plan_paths[status] += 1
         if biases is not None:
             status = read_bias_status(slots, biases.get(key, {}))
             attempted_bias[status] += 1
@@ -708,6 +745,11 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
             "frozen_attempted_by_status": dict(sorted(attempted_paths.items())),
             "timing_eligible_by_status": dict(sorted(eligible_paths.items())),
         }
+    if plans is not None:
+        report["planned_readout_path_agreement"] = {
+            "frozen_attempted_by_status": dict(sorted(attempted_plan_paths.items())),
+            "timing_eligible_by_status": dict(sorted(eligible_plan_paths.items())),
+        }
     if biases is not None:
         report["reported_read_bias_support"] = {
             "frozen_attempted_by_status": dict(sorted(attempted_bias.items())),
@@ -785,6 +827,8 @@ def main():
                         help="optional episode-keyed controller/log termination dispositions")
     parser.add_argument("--termination-dispositions-sha256",
                         help="verify exact logged disposition bytes against a trusted archive SHA-256")
+    parser.add_argument("--planned-readout-paths", type=Path,
+                        help="independently declared expected route for each frozen anchor")
     args = parser.parse_args()
     try:
         report = audit(args.frozen_roster, args.capture, diagnose_anchors=args.diagnose_anchors,
@@ -801,7 +845,8 @@ def main():
                        commanded_schedule_path=args.commanded_schedule,
                        commanded_schedule_sha256=args.commanded_schedule_sha256,
                        termination_table_path=args.termination_dispositions,
-                       termination_dispositions_sha256=args.termination_dispositions_sha256)
+                       termination_dispositions_sha256=args.termination_dispositions_sha256,
+                       planned_path_table=args.planned_readout_paths)
     except (OSError, UnicodeError, csv.Error):
         parser.exit(2, "error: input could not be read as UTF-8 CSV\n")
     except ValueError as exc:
