@@ -242,11 +242,11 @@ def _extension_families(value, config, *, allow_empty=False):
     return optional
 
 
-def _check_prediction_v13_group_identities(audits):
+def _check_prediction_inner_group_identities(audits, prefix="extended"):
     """Tie retained group names across folds, without authenticating the source."""
     if not any("train_groups" in fold or "test_groups" in fold for fold in audits):
-        return  # Early narrow extension receipts retain only the counts.
-    error = "extended inner group identities must partition one roster and hold each group out once."
+        return  # Narrow historical receipts can retain only the counts.
+    error = f"{prefix} inner group identities must partition one roster and hold each group out once."
     population, held = None, set()
     for fold in audits:
         train, test = fold.get("train_groups"), fold.get("test_groups")
@@ -267,12 +267,9 @@ def _check_prediction_v13_group_identities(audits):
         _fail(error)
 
 
-def _optional_selection_metadata(value, rows, groups, inner_splits, seed, optional):
-    """Check saved extension details/counts, never authenticate or replay fits."""
-    _count(seed, 2**32 - 1)
-    audits = value.get("inner_folds")
+def _check_prediction_inner_fold_counts(audits, rows, groups, inner_splits, prefix="extended"):
     if not isinstance(audits, list) or len(audits) != inner_splits:
-        _fail("extended inner fold coverage differs.")
+        _fail(f"{prefix} inner fold coverage differs.")
     held_rows = held_groups = 0
     for fold, audit in enumerate(audits):
         audit = _object(audit)
@@ -281,15 +278,22 @@ def _optional_selection_metadata(value, rows, groups, inner_splits, seed, option
         train_groups = _count(audit.get("train_group_count"), min(train, groups), positive=True)
         test_groups = _count(audit.get("test_group_count"), min(test, groups), positive=True)
         if train_groups + test_groups != groups:
-            _fail("extended inner fold group counts differ.")
+            _fail(f"{prefix} inner fold group counts differ.")
         if type(audit.get("fold")) is not int or audit["fold"] != fold or train + test != rows:
-            _fail("extended inner fold row counts differ.")
+            _fail(f"{prefix} inner fold row counts differ.")
         held_rows += test
         held_groups += test_groups
     # A complete grouped-validation schedule holds out every original
     # training row and group once. Per-fold complements alone are weaker.
     if (held_rows, held_groups) != (rows, groups):
-        _fail("extended inner held coverage differs from the declared training population.")
+        _fail(f"{prefix} inner held coverage differs from the declared training population.")
+
+
+def _optional_selection_metadata(value, rows, groups, inner_splits, seed, optional):
+    """Check saved extension details/counts, never authenticate or replay fits."""
+    _count(seed, 2**32 - 1)
+    audits = value.get("inner_folds")
+    _check_prediction_inner_fold_counts(audits, rows, groups, inner_splits)
     records = value.get("inner_selection")
     if not isinstance(records, list) or any(not isinstance(record, dict) for record in records):
         _fail("extended selection records are missing or invalid.")
@@ -862,6 +866,13 @@ def _metadata(manifest):
     n_train = _count(manifest.get("n_training_rows"), MAX_ROWS, positive=True)
     _count(manifest.get("n_training_groups"), n_train, positive=True)
     n_pred = _count(manifest.get("n_predictions"), MAX_ROWS, positive=True)
+    if version in ("1.1", "1.2") and "inner_folds" in manifest:
+        audits, n_groups = manifest["inner_folds"], manifest["n_training_groups"]
+        inner = config.get("inner_splits")
+        if type(inner) is not int or not 2 <= inner <= n_groups:
+            _fail("prediction inner fold count is missing or invalid.")
+        _check_prediction_inner_fold_counts(audits, n_train, n_groups, inner, "prediction")
+        _check_prediction_inner_group_identities(audits, "prediction")
     if version in ("1.3", "1.4", "1.5"):
         inner = _count(config.get("inner_splits"), manifest["n_training_groups"], positive=True)
         if inner < 2:
@@ -872,7 +883,7 @@ def _metadata(manifest):
         elif optional:
             _optional_selection_metadata(manifest, n_train, manifest["n_training_groups"], inner, config.get("random_state"), optional)
         if version == "1.3":
-            _check_prediction_v13_group_identities(manifest["inner_folds"])
+            _check_prediction_inner_group_identities(manifest["inner_folds"])
             _check_prediction_v13_selected_candidate(manifest, config)
         if version == "1.4":
             mapping = _domain_config(config, manifest["n_training_groups"])

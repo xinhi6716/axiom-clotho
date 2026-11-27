@@ -258,6 +258,51 @@ class PredictionSchemaTests(unittest.TestCase):
                 self.assertFalse(reply.stdout)
                 self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
 
+    def test_cli_validates_ordinary_prediction_inner_receipts(self):
+        import pandas as pd
+        from groupbench import fit_predict
+
+        frame = pd.DataFrame({"g": list("abcdef") * 3, "voltage": range(18), "y": range(18)})
+        env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1] / "src"),
+                   PYTHONDONTWRITEBYTECODE="1", OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1")
+        cmd = [sys.executable, "-m", "groupbench", "validate-prediction-bundle", str(self.root)]
+
+        def replay():
+            return subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=30)
+
+        for encoding, version in (("legacy-v1", "1.1"), ("distinct-v2", "1.2")):
+            with self.subTest(version=version):
+                fit = fit_predict(frame, frame[["voltage"]].head(2), target="y", group="g",
+                                  baselines=("dummy",), inner_splits=3, categorical_encoding=encoding)
+                fit.write(self.root, overwrite=True)
+                self.assertEqual(fit.manifest["schema_version"], version)
+                raw = (self.root / "predictions.csv").read_bytes()
+                self.assertEqual(replay().returncode, 0)
+
+                for change in ("rows", "group_ids"):
+                    with self.subTest(change=change):
+                        altered = copy.deepcopy(fit.manifest)
+                        first, second, _ = altered["inner_folds"]
+                        if change == "rows":
+                            first["test_rows"] -= 1
+                            first["train_rows"] += 1
+                        else:
+                            for key in ("train_groups", "test_groups"):
+                                second[key] = first[key][:]
+                        write_bundle(self.root, altered, csv=raw)
+                        self.assertEqual(verify_bundle(self.root).bundle_type, "prediction")
+                        before = {p.name: p.read_bytes() for p in self.root.iterdir()}
+                        reply = replay()
+                        self.assertEqual(reply.returncode, 2, reply.stderr)
+                        self.assertIn("prediction inner", reply.stderr)
+                        self.assertFalse(reply.stdout)
+                        self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
+
+                legacy = copy.deepcopy(fit.manifest)
+                legacy.pop("inner_folds")
+                write_bundle(self.root, legacy, csv=raw)
+                self.assertEqual(replay().returncode, 0)
+
     def test_count_types_and_bounds(self):
         for key in ("n_training_rows", "n_training_groups", "n_predictions"):
             for bad in (True, False, 0, -1, 1.0, "2", None, 20001):
