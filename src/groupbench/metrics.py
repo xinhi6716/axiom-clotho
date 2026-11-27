@@ -1119,3 +1119,70 @@ def paired_quantile_pinball_bounds(rows, *, expected_roster, quantile):
             sum(Fraction(pool[i], pool[0] * quantum_squared) for pool in totals.values()) / len(totals)
             for i in (1, 2)),
     }
+
+
+def paired_mae_group_weight_bounds(rows, *, expected_roster, group_weight_bounds):
+    """Bound B-minus-A MAE over a predeclared target group composition.
+
+    Supply complete (row_id, observed, forecast_a, forecast_b) tuples on a
+    separately frozen (row_id, group_id) roster. The weight-bound dictionary
+    assigns a closed interval in [0, 1] to every declared group. These are
+    marginal lower/upper bounds; weights jointly sum to exactly one.
+    Forecasts, truth and the within-group equal-row means are held fixed.
+
+    Inputs are interpreted at their represented binary64 values, so a
+    closed point-weight specification must sum to one *exactly*. Returned
+    Fractions are descriptive sharp sensitivity bounds, not transport or
+    independence evidence. Groups may have weight zero if declared, but
+    still require their complete paired truth and forecast roster.
+    """
+    if type(group_weight_bounds) is not dict or not 1 <= len(group_weight_bounds) <= 20_000:
+        raise ValueError("Group weights require one bounded dict of closed ranges.")
+    unit = _BINARY64_QUANTUM_DENOMINATOR
+    declared = {}
+    for group, limits in group_weight_bounds.items():
+        if not _paired_roster_id(group) or type(limits) is not tuple or len(limits) != 2:
+            raise ValueError("Group weight entries require a valid group ID and two closed endpoints.")
+        lower, upper = map(_paired_binary64_units, limits)
+        if not 0 <= lower <= upper <= unit:
+            raise ValueError("Group weight endpoints must be ordered and within [0, 1].")
+        declared[group] = lower, upper
+    low_sum = sum(lo for lo, _ in declared.values())
+    high_sum = sum(hi for _, hi in declared.values())
+    if not low_sum <= unit <= high_sum:
+        raise ValueError("Declared group weight intervals cannot sum to exactly one.")
+
+    group_totals = {}
+    for group, a, b in _paired_group_error_units(rows, expected_roster):
+        totals = group_totals.setdefault(group, [0, 0])
+        totals[0] += 1
+        totals[1] += b - a
+    if declared.keys() != group_totals.keys():
+        raise ValueError("Group weights must cover the frozen roster groups exactly.")
+    delta = {group: Fraction(gap, n * unit) for group, (n, gap) in group_totals.items()}
+    starting_score = sum(delta[group] * lower for group, (lower, _) in declared.items())
+
+    def allocate(order):
+        remaining = unit - low_sum
+        score = starting_score
+        for group in order:
+            if remaining == 0:
+                break
+            lower, upper = declared[group]
+            extra = min(remaining, upper - lower)
+            score += extra * delta[group]
+            remaining -= extra
+        return score / unit
+
+    # From each weight's lower bound, allocate all remaining mass to groups
+    # in order of fixed contrasts. Shifting mass from a worse ordered group
+    # with free capacity to a better one cannot worsen the chosen extremum.
+    ordered = sorted(delta, key=delta.__getitem__)
+    n_groups = len(group_totals)
+    return {
+        "n_rows": len(rows), "n_declared_groups": n_groups,
+        "equal_group_b_minus_a": sum(delta.values()) / n_groups,
+        "equal_group_composition_feasible": all(
+            lower * n_groups <= unit <= upper * n_groups for lower, upper in declared.values()),
+        "target_group_weighted_mae_b_minus_a_bounds": (allocate(ordered), allocate(reversed(ordered))),
+    }
