@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from fractions import Fraction
+
 import numpy as np
 import pandas as pd
 
@@ -492,3 +494,23 @@ def audit_numeric_group_range_support(training, query, *, training_groups,
         "n_query_rows_with_group_support_below_threshold": below_threshold,
         "n_query_rows_with_group_support_at_threshold_or_above": meets_threshold,
     }
+
+
+def quantize_positive_operand(value: Fraction, step: Fraction) -> Fraction | None:
+    """Snap a positive exact-rational operand to the zero-origin uniform lattice.
+
+    Exact halfway ties go to the larger code. A zero code is returned as
+    None: the operand is unscorable for a downstream positive/log transform,
+    not a normal-coverage row. Floats are rejected so callers must declare
+    how original numeric tokens were converted before applying a lattice.
+    The step is caller-supplied (e.g. estimated on frozen reference only);
+    this function does not see calibration, outcomes or the query roster.
+    """
+    if not isinstance(value, Fraction) or not isinstance(step, Fraction):
+        raise TypeError("value and step must be exact Fraction operands")
+    if value <= 0 or step <= 0:
+        raise ValueError("value and step must be strictly positive")
+    ratio = value / step
+    whole, rem = divmod(ratio.numerator, ratio.denominator)
+    code = whole + (2 * rem >= ratio.denominator)
+    return code * step if code else None
