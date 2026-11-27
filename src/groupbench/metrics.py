@@ -962,3 +962,76 @@ def paired_quantile_pinball_loss(rows, *, expected_roster, quantile):
         "equal_group": report([sum(Fraction(state[i], state[0] * squared_unit)
                                    for state in totals.values()) / len(totals) for i in range(1, 5)]),
     }
+
+
+def paired_quantile_pinball_bounds(rows, *, expected_roster, quantile):
+    """Sharp same-truth B-minus-A pinball bounds on a frozen grouped cohort.
+
+    Give one (row_id, truth_lower, truth_upper, qforecast_a, qforecast_b)
+    tuple per independently frozen (row_id, group_id) pair. Closed finite
+    truth limits may coincide for observed labels. Both forecasts target the
+    same predeclared interior quantile. This function evaluates the two
+    losses at the *same* admissible truth, not independent labels per arm.
+
+    Conditional on fixed forecasts, positive weighting and independent
+    admissibility across rows, extrema sum exactly. No label is imputed and
+    no row is dropped. These are descriptive sensitivity bounds, not a
+    calibration claim, confidence interval or selection rule.
+    """
+    if not all(map(_bounded_paired_sequence, (rows, expected_roster))):
+        raise ValueError("Rows and frozen roster must be bounded nonempty lists or tuples.")
+    unit = _BINARY64_QUANTUM_DENOMINATOR
+    q = _paired_binary64_units(quantile)
+    if not 0 < q < unit:
+        raise ValueError("Pinball loss requires a quantile strictly between zero and one.")
+    roster = {}
+    for entry in expected_roster:
+        if type(entry) is not tuple or len(entry) != 2 or not all(map(_paired_roster_id, entry)):
+            raise ValueError("Frozen roster entries require valid (row ID, group ID) tuples.")
+        row_id, group = entry
+        if row_id in roster:
+            raise ValueError("Frozen roster row IDs must be unique.")
+        roster[row_id] = group
+
+    def difference(y, a, b):
+        return (q * (max(y - b, 0) - max(y - a, 0))
+                + (unit - q) * (max(b - y, 0) - max(a - y, 0)))
+
+    seen, totals = set(), {}
+    n_interval = n_uncertain = 0
+    for row in rows:
+        if type(row) is not tuple or len(row) != 5 or not _paired_roster_id(row[0]):
+            raise ValueError("Each row requires an ID, two truth endpoints and both quantile forecasts.")
+        row_id = row[0]
+        if row_id not in roster or row_id in seen:
+            raise ValueError("Paired rows must match the frozen roster exactly.")
+        seen.add(row_id)
+        lo, hi, a, b = map(_paired_binary64_units, row[1:])
+        if lo > hi:
+            raise ValueError("Closed truth limits must be ordered.")
+        n_interval += lo < hi
+        # Slopes in y outside the two forecasts cancel. Between the two
+        # forecasts the difference has constant slope -1 or +1 independent
+        # of q, so the truth endpoints suffice even if an internal knot exists.
+        at_low, at_high = difference(lo, a, b), difference(hi, a, b)
+        n_uncertain += at_low != at_high
+        pool = totals.setdefault(roster[row_id], [0, 0, 0])
+        pool[0] += 1
+        pool[1] += min(at_low, at_high)
+        pool[2] += max(at_low, at_high)
+    if len(seen) != len(roster):
+        raise ValueError("Paired rows must match the frozen roster exactly.")
+
+    quantum_squared = unit**2
+    return {
+        "n_rows": len(seen), "n_declared_groups": len(totals),
+        "n_nondegenerate_truth_intervals": n_interval,
+        "n_nondegenerate_paired_cost_intervals": n_uncertain,
+        "quantile_exact": Fraction(q, unit),
+        "row_weighted_pinball_b_minus_a_bounds": tuple(
+            Fraction(sum(pool[i] for pool in totals.values()), len(seen) * quantum_squared)
+            for i in (1, 2)),
+        "equal_group_pinball_b_minus_a_bounds": tuple(
+            sum(Fraction(pool[i], pool[0] * quantum_squared) for pool in totals.values()) / len(totals)
+            for i in (1, 2)),
+    }
