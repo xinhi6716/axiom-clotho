@@ -464,7 +464,20 @@ pub(crate) fn grouped_kfold_labels<'a>(
 
     let mut loads = vec![0; n_splits];
     let mut group_folds = vec![0; ordered.len()];
-    if n_splits <= 8 {
+    if n_splits > 8 && ordered[0].1 == ordered[ordered.len() - 1].1 {
+        // All increments are equal, so the lowest-index lightest fold
+        // cycles through 0..n_splits for each lexical group in order.
+        let count = ordered[0].1 as usize;
+        let mut fold = 0;
+        for (_, _, id) in ordered {
+            group_folds[id as usize] = fold as u16;
+            loads[fold] += count;
+            fold += 1;
+            if fold == n_splits {
+                fold = 0;
+            }
+        }
+    } else if n_splits <= 8 {
         // A short direct scan avoids heap overhead on ordinary small folds.
         for (_, count, id) in ordered {
             let mut fold = 0;

@@ -513,3 +513,27 @@ fn rmse_direct_subtraction_preserves_subnormals_and_rejects_range_loss() {
         Err(EvaluationError::NumericOverflow)
     );
 }
+
+#[test]
+fn equal_size_groups_use_lexical_round_robin_above_and_below_heap_cutoff() {
+    // Unequivocal bytewise lexical order, including empty and Unicode keys.
+    let names = ["", "A", "a", "aa", "b", "c", "d", "e", "f", "g", "é", "晶"];
+    let groups: Vec<_> = (0..3 * names.len())
+        .map(|i| names[(i * 5 + i / names.len()) % names.len()].to_owned())
+        .collect();
+    for splits in [2, 3, 8, 9, 12] {
+        let folds = grouped_kfold(&groups, splits).unwrap();
+        assert_partition(&groups, &folds);
+        for (fold_index, fold) in folds.iter().enumerate() {
+            let expected: Vec<_> = groups
+                .iter()
+                .enumerate()
+                .filter_map(|(i, label)| {
+                    let order = names.iter().position(|name| *name == label).unwrap();
+                    (order % splits == fold_index).then_some(i)
+                })
+                .collect();
+            assert_eq!(fold.test_indices, expected);
+        }
+    }
+}
