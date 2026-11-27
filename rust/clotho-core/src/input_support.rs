@@ -167,6 +167,35 @@ fn validate_table(columns: &[FeatureColumn]) -> Result<usize, SupportError> {
     Ok(rows)
 }
 
+enum CategorySupport<'a> {
+    Single(&'a str),
+    Set(HashSet<&'a str>),
+}
+
+fn summarize_categories(values: &[Option<String>]) -> (CategorySupport<'_>, usize) {
+    let mut observed = values.iter().flatten().map(String::as_str);
+    let Some(first) = observed.next() else {
+        return (CategorySupport::Set(HashSet::new()), 0);
+    };
+    let mut non_missing = 1;
+    while let Some(value) = observed.next() {
+        non_missing += 1;
+        if value != first {
+            // Only materialize a vocabulary once a second category exists.
+            // Earlier observations were identical to the first category.
+            let mut categories = HashSet::new();
+            categories.insert(first);
+            categories.insert(value);
+            for value in observed {
+                non_missing += 1;
+                categories.insert(value);
+            }
+            return (CategorySupport::Set(categories), non_missing);
+        }
+    }
+    (CategorySupport::Single(first), non_missing)
+}
+
 /// Compare source-feature support without changing inputs or making predictions.
 ///
 /// Names must match exactly; incoming columns may be reordered. An entirely
@@ -253,32 +282,46 @@ pub fn prediction_input_support(
                 }
             }
             FeatureValues::Categorical(values) => {
-                let mut observed = HashSet::new();
-                let mut non_missing = 0;
-                for value in values.iter().flatten() {
-                    non_missing += 1;
-                    observed.insert(value.as_str());
-                }
+                let (support, non_missing) = summarize_categories(values);
                 source_missing = n_training_rows - non_missing;
                 let mut unseen = 0;
                 if let FeatureValues::Categorical(query_values) = query {
-                    for (value, flag) in query_values.iter().zip(&mut flags) {
-                        match value {
-                            None => {
-                                prediction_missing_count += 1;
-                                *flag |= MISSING;
+                    match support {
+                        CategorySupport::Single(category) => {
+                            for (value, flag) in query_values.iter().zip(&mut flags) {
+                                match value {
+                                    None => {
+                                        prediction_missing_count += 1;
+                                        *flag |= MISSING;
+                                    }
+                                    Some(value) if value != category => {
+                                        unseen += 1;
+                                        *flag |= UNSEEN;
+                                    }
+                                    Some(_) => {}
+                                }
                             }
-                            Some(_) if observed.is_empty() => {
-                                // An unseen category can also lack training support.
-                                unsupported_count += 1;
-                                unseen += 1;
-                                *flag |= UNSUPPORTED | UNSEEN;
+                        }
+                        CategorySupport::Set(observed) => {
+                            for (value, flag) in query_values.iter().zip(&mut flags) {
+                                match value {
+                                    None => {
+                                        prediction_missing_count += 1;
+                                        *flag |= MISSING;
+                                    }
+                                    Some(_) if observed.is_empty() => {
+                                        // An unseen category can also lack training support.
+                                        unsupported_count += 1;
+                                        unseen += 1;
+                                        *flag |= UNSUPPORTED | UNSEEN;
+                                    }
+                                    Some(value) if !observed.contains(value.as_str()) => {
+                                        unseen += 1;
+                                        *flag |= UNSEEN;
+                                    }
+                                    Some(_) => {}
+                                }
                             }
-                            Some(value) if !observed.contains(value.as_str()) => {
-                                unseen += 1;
-                                *flag |= UNSEEN;
-                            }
-                            Some(_) => {}
                         }
                     }
                 } else {

@@ -405,3 +405,43 @@ fn reordered_mixed_columns_preserve_all_overlapping_row_flags() {
     assert_eq!(result.features[2].training_missing_count, 1);
     assert_eq!(result.features[3].prediction_missing_count, 4);
 }
+
+#[test]
+fn singleton_and_late_second_categories_match_literal_bytes() {
+    let single = [None, Some("Å"), Some("Å"), None];
+    let second_last = [None, Some("Å"), Some("Å"), Some("A\u{030a}")];
+    let absent = [None; 4];
+    let query = [Some("Å"), Some("A\u{030a}"), None, Some("")];
+    let training = [
+        categorical("single", &single),
+        categorical("multiple", &second_last),
+        categorical("absent", &absent),
+    ];
+    let incoming = [
+        categorical("absent", &query),
+        categorical("multiple", &query),
+        categorical("single", &query),
+    ];
+    let result = prediction_input_support(&training, &incoming).unwrap();
+    for (i, (train_missing, unseen, unsupported)) in [(2, 2, 0), (1, 1, 0), (4, 3, 3)]
+        .into_iter()
+        .enumerate()
+    {
+        assert_eq!(result.features[i].training_missing_count, train_missing);
+        assert_eq!(result.features[i].prediction_missing_count, 1);
+        assert_eq!(
+            result.features[i].prediction_non_missing_without_training_values_count,
+            unsupported
+        );
+        assert_eq!(
+            result.features[i].counts,
+            FeatureCounts::Categorical {
+                unseen_category_count: unseen
+            }
+        );
+    }
+    assert_eq!(result.rows_with_any_flag, 4);
+    assert_eq!(result.row_flag_counts.missing_value, 1);
+    assert_eq!(result.row_flag_counts.unseen_category, 3);
+    assert_eq!(result.row_flag_counts.non_missing_value_in_all_missing_training_feature, 3);
+}
