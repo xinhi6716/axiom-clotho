@@ -102,7 +102,7 @@ def _union(union, components, population):
         _fail("aggregate union count is inconsistent with component counts.")
 
 
-def _support(support, names, n_train, n_pred):
+def _support(support, feature_schema, n_train, n_pred):
     support = _object(support)
     if (support.get("schema_version") != "1.0"
             or support.get("reference") != "full_training_features_before_imputation"
@@ -118,15 +118,20 @@ def _support(support, names, n_train, n_pred):
     any_flag = _count(support.get("rows_with_any_flag"), n_pred)
     _union(any_flag, list(counts.values()), n_pred)
     features = support.get("features")
-    if not isinstance(features, list) or len(features) != len(names):
+    if not isinstance(features, list) or len(features) != len(feature_schema):
         _fail("input-support feature count differs from feature schema.")
     components = {key: [] for key in _FLAGS}
     per_feature_flagged = []
     numeric_unsupported = 0
-    for name, item in zip(names, features):
+    for spec, item in zip(feature_schema, features):
         item = _object(item)
-        if item.get("name") != name or item.get("kind") not in ("numeric", "categorical"):
+        if item.get("name") != spec["name"] or item.get("kind") not in ("numeric", "categorical"):
             _fail("input-support feature names/order or kind are inconsistent.")
+        # These normalized dtype spellings have a fixed meaning in the
+        # writer. Do not infer the meaning of other historical declarations.
+        expected_kind = {"float64": "numeric", "object": "categorical"}.get(spec["dtype"])
+        if expected_kind is not None and item["kind"] != expected_kind:
+            _fail("input-support kind differs from the retained feature dtype.")
         train_missing = _count(item.get("training_missing_count"), n_train)
         missing = _count(item.get("prediction_missing_count"), n_pred)
         unsupported = _count(item.get("prediction_non_missing_without_training_values_count"), n_pred)
@@ -799,7 +804,7 @@ def _metadata(manifest):
             _fail("schema 1.0 does not declare the input-support contract.")
         support_status = "unavailable"
     else:
-        _support(manifest.get("input_support"), names, n_train, n_pred)
+        _support(manifest.get("input_support"), features, n_train, n_pred)
         support_status = "count_consistency_checked_not_recomputed"
     return version, n_pred, len(names), support_status
 

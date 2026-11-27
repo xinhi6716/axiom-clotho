@@ -105,6 +105,45 @@ class PredictionSchemaTests(unittest.TestCase):
         value["input_support"] = manifest()["input_support"]; self.reject(value)
         value = manifest(); del value["input_support"]; self.reject(value)
 
+    def test_cli_binds_support_kind_to_retained_feature_dtype(self):
+        import pandas as pd
+        from groupbench import fit_predict
+
+        frame = pd.DataFrame({"g": ["a", "a", "b", "b", "c", "c"],
+                              "voltage": [1., 2., 3., 4., 5., 6.],
+                              "material": ["a", "b"] * 3, "y": range(6)})
+        incoming = pd.DataFrame({"voltage": [2., 3.], "material": ["a", "b"]})
+        result = fit_predict(frame, incoming, target="y", group="g", baselines=("dummy",),
+                             inner_splits=2)
+        command = [sys.executable, "-m", "groupbench.cli", "validate-prediction-bundle", str(self.root)]
+        env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1] / "src"),
+                   OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1", PYTHONDONTWRITEBYTECODE="1")
+
+        def replay():
+            return subprocess.run(command, env=env, text=True, capture_output=True, timeout=30)
+
+        result.write(self.root, overwrite=True)
+        self.assertEqual(replay().returncode, 0)
+        csv = (self.root / "predictions.csv").read_bytes()
+        for index, wrong_dtype in ((0, "object"), (1, "float64")):
+            with self.subTest(dtype=wrong_dtype):
+                altered = copy.deepcopy(result.manifest)
+                altered["feature_schema"][index]["dtype"] = wrong_dtype
+                write_bundle(self.root, altered, csv=csv)
+                self.assertEqual(verify_bundle(self.root).bundle_type, "prediction")
+                before = {p.name: p.read_bytes() for p in self.root.iterdir()}
+                reply = replay()
+                self.assertEqual(reply.returncode, 2, reply.stderr)
+                self.assertIn("support kind differs from the retained feature dtype", reply.stderr)
+                self.assertFalse(reply.stdout)
+                self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
+
+        # Preserve the narrow schema check for unfamiliar historical dtypes.
+        legacy = copy.deepcopy(result.manifest)
+        legacy["feature_schema"][0]["dtype"] = "historical numeric type"
+        write_bundle(self.root, legacy, csv=csv)
+        self.assertEqual(replay().returncode, 0)
+
     def test_count_types_and_bounds(self):
         for key in ("n_training_rows", "n_training_groups", "n_predictions"):
             for bad in (True, False, 0, -1, 1.0, "2", None, 20001):
@@ -215,6 +254,7 @@ class PredictionSchemaTests(unittest.TestCase):
             if kind == "numeric":
                 item.update(below_training_min_count=None, above_training_max_count=None)
             else:
+                value["feature_schema"][0]["dtype"] = "object"
                 del item["below_training_min_count"]; del item["above_training_max_count"]
                 item["unseen_category_count"] = 1; support["row_flag_counts"]["unseen_category"] = 1
             self.check(value)
@@ -235,6 +275,7 @@ class PredictionSchemaTests(unittest.TestCase):
             if kind == "numeric":
                 item.update(below_training_min_count=None, above_training_max_count=None)
             else:
+                value["feature_schema"][0]["dtype"] = "object"
                 del item["below_training_min_count"]; del item["above_training_max_count"]
                 item["unseen_category_count"] = 1; support["row_flag_counts"]["unseen_category"] = 1
             self.reject(value)  # all rows missing or unsupported, union cannot be one
