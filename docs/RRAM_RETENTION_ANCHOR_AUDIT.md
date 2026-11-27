@@ -405,3 +405,17 @@ route unresolved. The report uses the full frozen roster as the denominator
 and counts terminal nominal absence separately from duplicate or unusable
 terminal metadata. These counts characterize selection and do not imply
 that route disagreement caused non-observation or alter the timing gate.
+
+Use `--repeat-request-keys` with a previously trusted `--capture-sha256`
+to reconcile duplicate frozen anchors against independently logged request
+keys. The sidecar fields are
+`lot,wafer,die,cell,episode,nominal_us,capture_record,source_request_key`.
+The ordinal counts parsed CSV data records from 1 across the entire pinned
+capture, not file lines or just repeated rows. The identity and nominal
+slot must agree with that exact row. Use source request keys comparable
+within each declared anchor, not a key inferred from timestamp equality.
+Identical complete timestamps under one key are consistent with a retry;
+conflicting timestamp metadata under one key and identical timestamps with
+distinct keys are separate findings. Missing keys and incomplete timing
+remain unresolved. No values are inspected, neither retry nor physical
+independence is proven, and duplicates are not repaired or admitted.

@@ -122,6 +122,48 @@ def duplicate_anchor_status(rows):
     return "identical_usable_stamps"
 
 
+def repeat_request_support(path, capture_records):
+    keys = {}
+    fields = IDENTITY + ("nominal_us", "capture_record", "source_request_key")
+    for identity, (nominal, ordinal, request_key) in records(path, fields):
+        anchor = identity, integer(nominal)
+        number = integer(ordinal)
+        if number not in capture_records or capture_records[number][0] != anchor:
+            raise ValueError("repeat request entry does not identify the declared capture record and anchor")
+        if number in keys:
+            raise ValueError("duplicate repeat request declaration for a capture record")
+        if not KEY.fullmatch(request_key):
+            raise ValueError("invalid source request key")
+        keys[number] = request_key
+    groups = defaultdict(list)
+    for number, (anchor, metadata) in capture_records.items():
+        groups[anchor].append((keys.get(number), metadata))
+    counts = Counter()
+    for group in groups.values():
+        if len(group) < 2:
+            continue
+        by_key = defaultdict(set)
+        for key, metadata in group:
+            if key is not None:
+                by_key[key].add(metadata)
+        if any(len(content) > 1 for content in by_key.values()):
+            status = "same_request_key_conflicting_timing_metadata"
+        elif any(key is None for key, _ in group):
+            status = "missing_request_key_evidence"
+        elif any(not clock or not epoch or tick is None or error is None
+                 for _, (clock, epoch, tick, error) in group):
+            status = "incomplete_timing_metadata"
+        elif len(by_key) == 1:
+            status = "same_request_key_same_timing_metadata"
+        elif len(set().union(*by_key.values())) == 1:
+            status = "distinct_request_keys_equal_timing_metadata"
+        else:
+            status = "multiple_request_keys_nonidentical_timing_metadata"
+        counts[status] += 1
+    return {"repeated_frozen_anchor_groups": sum(counts.values()),
+            "groups_by_status": dict(sorted(counts.items()))}
+
+
 def terminal_alternative_status(slots, off_anchor_stamps):
     if not off_anchor_stamps:
         return "no_nonscheduled_rows"
@@ -799,7 +841,9 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
           planned_bias_table=None, planned_role_table=None, logged_role_table=None,
           planned_aperture_width_table=None, event_order_table=None,
           diagnose_individual_read_counters=False, native_timer_segment_table=None, timing_envelope_table=None, decimal_time_token_table=None,
-          diagnose_decimal_elapsed=False, diagnose_early_route_terminal=False):
+          diagnose_decimal_elapsed=False, diagnose_early_route_terminal=False, repeat_request_table=None):
+    if repeat_request_table is not None and capture_sha256 is None:
+        raise ValueError("repeat request reconciliation requires an expected capture SHA-256")
     if diagnose_early_route_terminal and (planned_path_table is None or readout_path_table is None):
         raise ValueError("early route/terminal diagnosis requires both planned and observed readout paths")
     if diagnose_decimal_elapsed and decimal_time_token_table is None:
@@ -853,7 +897,8 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
     off_anchor_stamps = defaultdict(list) if diagnose_terminal_alternatives else None
     observations = records(capture_path, IDENTITY + TIMING, expected_sha256=capture_sha256,
                            digest_label="timestamp capture")
-    for key, (nominal, clock, epoch, tick, error) in observations:
+    indexed_capture_records = {} if repeat_request_table is not None else None
+    for ordinal, (key, (nominal, clock, epoch, tick, error)) in enumerate(observations, 1):
         nominal = integer(nominal)
         if any(value and not KEY.fullmatch(value) for value in (clock, epoch)):
             raise ValueError("invalid clock identity")
@@ -872,6 +917,8 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
                 off_anchor_stamps[key].append(stamp)
             continue
         expected[key].setdefault(nominal, []).append(stamp)
+        if indexed_capture_records is not None:
+            indexed_capture_records[ordinal] = ((key, nominal), (clock, epoch, tick, error))
 
     plans = planned_readout_paths(planned_path_table, expected) if planned_path_table is not None else None
     attempted_plan_paths, eligible_plan_paths = Counter(), Counter()
@@ -1052,6 +1099,10 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
         "nonscheduled_rows_in_frozen_episodes": off_anchor_rows,
         "frozen_episodes_by_primary_reason": dict(sorted(classifications.items())),
     }
+    if repeat_request_table is not None:
+        report["declared_repeat_request_support"] = repeat_request_support(
+            repeat_request_table, indexed_capture_records
+        )
     if capture_sha256 is not None:
         report["timestamp_capture_byte_digest_verified"] = True
     if roster_sha256 is not None:
@@ -1313,6 +1364,8 @@ def main():
                         help="conditional origin-to-read elapsed bounds under declared token intervals")
     parser.add_argument("--diagnose-early-route-terminal", action="store_true",
                         help="describe terminal support stratified by route agreement at the early anchor only")
+    parser.add_argument("--repeat-request-keys", type=Path,
+                        help="independent source request keys for exact capture CSV record ordinals")
     args = parser.parse_args()
     try:
         report = audit(args.frozen_roster, args.capture, diagnose_anchors=args.diagnose_anchors,
@@ -1341,7 +1394,8 @@ def main():
                        timing_envelope_table=args.timing_envelope_windows,
                        decimal_time_token_table=args.decimal_time_tokens,
                        diagnose_decimal_elapsed=args.diagnose_decimal_elapsed,
-                       diagnose_early_route_terminal=args.diagnose_early_route_terminal)
+                       diagnose_early_route_terminal=args.diagnose_early_route_terminal,
+                       repeat_request_table=args.repeat_request_keys)
     except (OSError, UnicodeError, csv.Error):
         parser.exit(2, "error: input could not be read as UTF-8 CSV\n")
     except ValueError as exc:

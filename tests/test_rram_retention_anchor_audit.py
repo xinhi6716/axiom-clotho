@@ -24,7 +24,7 @@ def episode(key=BASE, early=1_000_000, final=100_000_000_000, error=0):
 
 
 class RetentionAnchorAudit(unittest.TestCase):
-    def run_capture(self, roster, rows, capture_header=IDS + TIMES, *, extra=(), block_map=None, stress=None, readout_paths=None, read_bias=None, apertures=None, schedule=None, terminations=None, planned_paths=None, native_reads=None, planned_bias=None, planned_roles=None, logged_roles=None, aperture_widths=None, event_orders=None, timer_segments=None, envelopes=None, time_tokens=None):
+    def run_capture(self, roster, rows, capture_header=IDS + TIMES, *, extra=(), block_map=None, stress=None, readout_paths=None, read_bias=None, apertures=None, schedule=None, terminations=None, planned_paths=None, native_reads=None, planned_bias=None, planned_roles=None, logged_roles=None, aperture_widths=None, event_orders=None, timer_segments=None, envelopes=None, time_tokens=None, repeat_keys=None, pin_repeat_capture=False):
         with tempfile.TemporaryDirectory() as tmp:
             folder = Path(tmp)
             for name, header, payload in (
@@ -112,6 +112,15 @@ class RetentionAnchorAudit(unittest.TestCase):
                     cols = IDS + ("nominal_us", "token_s", "declared_resolution_s")
                     csv.writer(stream).writerows((cols, *time_tokens))
                 extra = (*extra, "--decimal-time-tokens", str(path))
+            if repeat_keys is not None:
+                path = folder / "repeat_keys.csv"
+                with path.open("w", newline="", encoding="utf-8") as stream:
+                    cols = IDS + ("nominal_us", "capture_record", "source_request_key")
+                    csv.writer(stream).writerows((cols, *repeat_keys))
+                extra = (*extra, "--repeat-request-keys", str(path))
+            if pin_repeat_capture:
+                digest = hashlib.sha256((folder / "capture.csv").read_bytes()).hexdigest()
+                extra = (*extra, "--capture-sha256", digest)
             if schedule is not None:
                 schedule_path = folder / "schedule.csv"
                 with schedule_path.open("w", newline="", encoding="utf-8") as stream:
@@ -213,6 +222,51 @@ class RetentionAnchorAudit(unittest.TestCase):
         self.assertEqual(invalid.returncode, 2)
         self.assertIn("timestamp capture SHA-256 must be 64 lowercase", invalid.stderr)
         self.assertFalse(invalid.stdout)
+
+    def test_duplicate_request_keys_distinguish_retry_conflict_from_equal_distinct_requests(self):
+        keys = [(*BASE[:4], f"E{i}") for i in range(5)]
+        early = 1_000_000
+        capture, sidecar = [], []
+        for i, key in enumerate(keys):
+            rows = episode(key)
+            doubled = rows[1].copy()
+            if i == 1:
+                doubled[-2] += 1
+            if i == 4:
+                rows[1][-2] = doubled[-2] = ""
+            sidecar.append((*key, early, len(capture) + 2, "privateRequest"))
+            if i != 3:
+                sidecar.append((*key, early, len(capture) + 4, "otherRequest" if i == 2 else "privateRequest"))
+            capture.extend([*rows, doubled])
+        ordinary = self.run_capture(keys, capture, pin_repeat_capture=True)
+        result = self.run_capture(keys, capture, repeat_keys=sidecar, pin_repeat_capture=True)
+        self.assertEqual((ordinary.returncode, result.returncode), (1, 1))
+        report = json.loads(result.stdout)
+        self.assertEqual(report.pop("declared_repeat_request_support"), {
+            "repeated_frozen_anchor_groups": 5,
+            "groups_by_status": {
+                "same_request_key_same_timing_metadata": 1,
+                "same_request_key_conflicting_timing_metadata": 1,
+                "distinct_request_keys_equal_timing_metadata": 1,
+                "missing_request_key_evidence": 1,
+                "incomplete_timing_metadata": 1,
+            },
+        })
+        self.assertEqual(report, json.loads(ordinary.stdout))
+        self.assertNotIn("privateRequest", result.stdout)
+
+    def test_repeat_request_keys_require_pinned_capture_and_exact_record_anchor(self):
+        early = 1_000_000
+        good = (*BASE, early, 2, "req")
+        for keys, pin, diagnostic in (
+            ([good], False, "requires an expected capture SHA-256"),
+            ([(*BASE, early, 1, "req")], True, "does not identify the declared capture record"),
+            ([good, good], True, "duplicate repeat request declaration"),
+        ):
+            r = self.run_capture([BASE], episode(), repeat_keys=keys, pin_repeat_capture=pin)
+            self.assertEqual(r.returncode, 2)
+            self.assertFalse(r.stdout)
+            self.assertIn(diagnostic, r.stderr)
 
     def test_terminal_missingness_is_stratified_by_early_route_only(self):
         roster = [(*BASE[:4], f"E{i}") for i in range(6)]
