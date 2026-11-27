@@ -318,6 +318,35 @@ def native_read_identity_statuses(path, roster):
     return statuses
 
 
+def logged_event_order(path, roster):
+    records_by_episode = defaultdict(dict)
+    fields = IDENTITY + ("nominal_us", "ordered_stream", "event_counter")
+    for key, (raw_nominal, stream, raw_counter) in records(path, fields):
+        nominal = integer(raw_nominal)
+        if key not in roster or nominal not in ANCHORS or len(roster[key].get(nominal, ())) != 1:
+            raise ValueError("event order does not identify one captured frozen anchor")
+        if nominal in records_by_episode[key]:
+            raise ValueError("duplicate event order declaration at one anchor")
+        if not KEY.fullmatch(stream) or not INTEGER.fullmatch(raw_counter):
+            raise ValueError("event order requires a stream identity and unsigned integral counter")
+        records_by_episode[key][nominal] = stream, int(raw_counter)
+    return records_by_episode
+
+
+def event_order_status(evidence):
+    seen = {}
+    for nominal in ANCHORS:
+        if nominal not in evidence:
+            continue
+        stream, counter = evidence[nominal]
+        if stream in seen and counter <= seen[stream]:
+            return "logged_order_conflicts_with_anchor_sequence"
+        seen[stream] = counter
+    if len(evidence) == len(ANCHORS) and len(seen) == 1:
+        return "all_anchor_events_in_increasing_logged_order"
+    return "logged_order_not_established"
+
+
 def read_bias_intervals(path, expected):
     biases = defaultdict(dict)
     fields = IDENTITY + ("nominal_us", "observed_read_bias_uV", "read_bias_error_uV")
@@ -624,7 +653,7 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
           termination_table_path=None, commanded_schedule_sha256=None,
           termination_dispositions_sha256=None, planned_path_table=None, native_read_table=None,
           planned_bias_table=None, planned_role_table=None, logged_role_table=None,
-          planned_aperture_width_table=None):
+          planned_aperture_width_table=None, event_order_table=None):
     if planned_aperture_width_table is not None and aperture_table is None:
         raise ValueError("planned aperture widths require a read aperture table")
     if (planned_role_table is None) != (logged_role_table is None):
@@ -699,6 +728,8 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
     native_reads = (native_read_identity_statuses(native_read_table, expected)
                     if native_read_table is not None else None)
     attempted_native_reads, eligible_native_reads = Counter(), Counter()
+    event_orders = logged_event_order(event_order_table, expected) if event_order_table is not None else None
+    attempted_event_orders, eligible_event_orders = Counter(), Counter()
     role_plans = (acquisition_event_roles(planned_role_table, expected, planned=True)
                   if planned_role_table is not None else None)
     logged_roles = (acquisition_event_roles(logged_role_table, expected, planned=False)
@@ -754,6 +785,11 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
             attempted_native_reads[status] += 1
             if reason == "eligible":
                 eligible_native_reads[status] += 1
+        if event_orders is not None:
+            status = event_order_status(event_orders.get(key, {}))
+            attempted_event_orders[status] += 1
+            if reason == "eligible":
+                eligible_event_orders[status] += 1
         if role_plans is not None:
             status = event_role_status(role_plans[key], logged_roles.get(key, {}))
             attempted_roles[status] += 1
@@ -923,6 +959,11 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
             "frozen_attempted_by_status": dict(sorted(attempted_native_reads.items())),
             "timing_eligible_by_status": dict(sorted(eligible_native_reads.items())),
         }
+    if event_orders is not None:
+        report["logged_event_order_support"] = {
+            "frozen_attempted_by_status": dict(sorted(attempted_event_orders.items())),
+            "timing_eligible_by_status": dict(sorted(eligible_event_orders.items())),
+        }
     if role_plans is not None:
         report["acquisition_event_role_agreement"] = {
             "frozen_attempted_by_status": dict(sorted(attempted_roles.items())),
@@ -1030,6 +1071,8 @@ def main():
                         help="independent acquisition log of roles at existing unique anchors")
     parser.add_argument("--planned-aperture-widths", type=Path,
                         help="independent allowed aperture durations at frozen read anchors")
+    parser.add_argument("--logged-event-order", type=Path,
+                        help="independent event sequence for captured anchors on monotone streams")
     args = parser.parse_args()
     try:
         report = audit(args.frozen_roster, args.capture, diagnose_anchors=args.diagnose_anchors,
@@ -1051,7 +1094,8 @@ def main():
                        native_read_table=args.native_read_identities,
                        planned_bias_table=args.planned_read_bias,
                        planned_role_table=args.planned_event_roles, logged_role_table=args.logged_event_roles,
-                       planned_aperture_width_table=args.planned_aperture_widths)
+                       planned_aperture_width_table=args.planned_aperture_widths,
+                       event_order_table=args.logged_event_order)
     except (OSError, UnicodeError, csv.Error):
         parser.exit(2, "error: input could not be read as UTF-8 CSV\n")
     except ValueError as exc:

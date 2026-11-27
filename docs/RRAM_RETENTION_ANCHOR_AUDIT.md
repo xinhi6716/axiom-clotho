@@ -323,3 +323,14 @@ An aperture can fit the elapsed-time window but be too long for the recipe,
 or have the right duration while straddling the time limit. Unknown offsets
 remain unresolved. This checks reported integration duration, not electrical
 exposure or independent endpoint calibration, and changes no timing gate.
+
+Use `--logged-event-order order.csv` for an independent strict acquisition
+sequence (not CSV row order or timestamp sort). Its exact fields are
+`lot,wafer,die,cell,episode,nominal_us,ordered_stream,event_counter`.
+The stream identity must include a reset/wrap epoch and provide one
+strictly increasing integer counter per distinct event. Logs must attach
+to unique captured anchors. Within a stream, ties or reversals contradict
+nominal anchor order, even when another anchor is missing or uses a
+different stream. Evidence of full order needs all anchors in one stream;
+otherwise order is unresolved. This does not synchronize clocks, assume
+comparability across streams, or change the frozen timing gate.

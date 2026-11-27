@@ -24,7 +24,7 @@ def episode(key=BASE, early=1_000_000, final=100_000_000_000, error=0):
 
 
 class RetentionAnchorAudit(unittest.TestCase):
-    def run_capture(self, roster, rows, capture_header=IDS + TIMES, *, extra=(), block_map=None, stress=None, readout_paths=None, read_bias=None, apertures=None, schedule=None, terminations=None, planned_paths=None, native_reads=None, planned_bias=None, planned_roles=None, logged_roles=None, aperture_widths=None):
+    def run_capture(self, roster, rows, capture_header=IDS + TIMES, *, extra=(), block_map=None, stress=None, readout_paths=None, read_bias=None, apertures=None, schedule=None, terminations=None, planned_paths=None, native_reads=None, planned_bias=None, planned_roles=None, logged_roles=None, aperture_widths=None, event_orders=None):
         with tempfile.TemporaryDirectory() as tmp:
             folder = Path(tmp)
             for name, header, payload in (
@@ -89,6 +89,12 @@ class RetentionAnchorAudit(unittest.TestCase):
                     fields = IDS + ("nominal_us", "min_aperture_width_us", "max_aperture_width_us")
                     csv.writer(stream).writerows((fields, *aperture_widths))
                 extra = (*extra, "--planned-aperture-widths", str(width_file))
+            if event_orders is not None:
+                order = folder / "order.csv"
+                with order.open("w", newline="", encoding="utf-8") as stream:
+                    fields = IDS + ("nominal_us", "ordered_stream", "event_counter")
+                    csv.writer(stream).writerows((fields, *event_orders))
+                extra = (*extra, "--logged-event-order", str(order))
             if schedule is not None:
                 schedule_path = folder / "schedule.csv"
                 with schedule_path.open("w", newline="", encoding="utf-8") as stream:
@@ -190,6 +196,51 @@ class RetentionAnchorAudit(unittest.TestCase):
         self.assertEqual(invalid.returncode, 2)
         self.assertIn("timestamp capture SHA-256 must be 64 lowercase", invalid.stderr)
         self.assertFalse(invalid.stdout)
+
+    def test_independent_event_sequence_distinguishes_valid_timing_from_valid_order(self):
+        roster = [(*BASE[:4], f"E{i}") for i in range(6)]
+        to, early, end = 0, 1_000_000, 100_000_000_000
+        rows = sum((episode(key) for key in roster[:5]), [])
+        evidence = [
+            (*roster[0], to, "privateStream", 10),
+            (*roster[0], early, "privateStream", 11),
+            (*roster[0], end, "privateStream", 20),
+            (*roster[1], to, "stream1", 11),
+            (*roster[1], early, "stream1", 10),
+            (*roster[2], to, "stream1", 11),
+            (*roster[2], early, "stream2", 100),
+            (*roster[2], end, "stream1", 11),
+            (*roster[3], to, "stream1", 11),
+            (*roster[3], early, "stream2", 0),
+            (*roster[3], end, "stream2", 1),
+            (*roster[4], to, "stream", 11),
+            (*roster[4], end, "stream", 12),
+        ]
+        ordinary = self.run_capture(roster, rows)
+        audited = self.run_capture(roster, rows, event_orders=list(reversed(evidence)))
+        self.assertEqual((ordinary.returncode, audited.returncode), (1, 1))
+        result = json.loads(audited.stdout)
+        self.assertEqual(result.pop("logged_event_order_support"), {
+            "frozen_attempted_by_status": {"all_anchor_events_in_increasing_logged_order": 1,
+                "logged_order_conflicts_with_anchor_sequence": 2, "logged_order_not_established": 3},
+            "timing_eligible_by_status": {"all_anchor_events_in_increasing_logged_order": 1,
+                "logged_order_conflicts_with_anchor_sequence": 2, "logged_order_not_established": 2},
+        })
+        self.assertEqual(result, json.loads(ordinary.stdout))
+        self.assertNotIn("privateStream", audited.stdout)
+
+    def test_event_order_metadata_only_attaches_to_unique_frozen_captured_anchor(self):
+        row = (*BASE, 0, "stream", 0)
+        for capture, evidence, diagnostic in (
+            (episode(), [row, row], "duplicate event order"),
+            (episode() + episode()[:1], [row], "does not identify one captured"),
+            (episode(), [(*BASE, 1, "same", 1)], "does not identify one captured"),
+            (episode(), [(*BASE, 0, "same", -1)], "unsigned integral counter"),
+        ):
+            result = self.run_capture([BASE], capture, event_orders=evidence)
+            self.assertEqual(result.returncode, 2)
+            self.assertFalse(result.stdout)
+            self.assertIn(diagnostic, result.stderr)
 
     def test_planned_aperture_width_is_independent_of_timing_window_fit(self):
         roster = [(*BASE[:4], f"E{i}") for i in range(4)]
