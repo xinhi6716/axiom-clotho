@@ -765,6 +765,41 @@ class RetentionAnchorAudit(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn("requires a read aperture table", result.stderr)
 
+    def test_trusted_commanded_plan_prevents_post_capture_schedule_rewrite(self):
+        rows = episode()[:2]
+        declared = [(*BASE, tick) for tick in (0, 1_000_000, 100_000_000_000)]
+        original = (",".join(IDS + ("nominal_us",)) + "\r\n"
+                    + "".join(",".join(map(str, row)) + "\r\n" for row in declared)).encode()
+        digest = hashlib.sha256(original).hexdigest()
+        flag = "--commanded-schedule-sha256"
+        plain = self.run_capture([BASE], rows, schedule=declared)
+        verified = self.run_capture([BASE], rows, schedule=declared, extra=(flag, digest))
+        self.assertEqual((plain.returncode, verified.returncode), (1, 1))
+        report = json.loads(verified.stdout)
+        self.assertIs(report.pop("commanded_schedule_byte_digest_verified"), True)
+        self.assertEqual(report, json.loads(plain.stdout))
+        self.assertNotIn(digest, verified.stdout)
+        rewritten = self.run_capture([BASE], rows, schedule=declared[:2])
+        self.assertEqual(json.loads(rewritten.stdout)["commanded_nominal_slot_coverage"]
+                         ["episodes_with_exact_slot_coverage"], 1)
+        for changed in (declared[:2], list(reversed(declared))):
+            with self.subTest(changed=changed):
+                # Fail before attempting to parse even a malformed capture.
+                rejected = self.run_capture([BASE], [], capture_header=("broken",),
+                                            schedule=changed, extra=(flag, digest))
+                self.assertEqual(rejected.returncode, 2)
+                self.assertEqual(rejected.stdout, "")
+                self.assertIn("commanded schedule SHA-256 mismatch", rejected.stderr)
+                self.assertNotIn(digest, rejected.stderr)
+        for schedule, supplied, message in (
+            (None, digest, "requires a commanded schedule"),
+            (declared, digest.upper(), "64 lowercase hexadecimal"),
+        ):
+            invalid = self.run_capture([BASE], rows, schedule=schedule, extra=(flag, supplied))
+            self.assertEqual(invalid.returncode, 2)
+            self.assertEqual(invalid.stdout, "")
+            self.assertIn(message, invalid.stderr)
+
     def test_equal_counts_do_not_prove_commanded_slot_completeness(self):
         roster = [(*BASE[:4], f"E{i}") for i in range(4)]
         ref = (0, 1_000_000, 100_000_000_000)

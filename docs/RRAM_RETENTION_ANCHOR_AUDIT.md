@@ -222,6 +222,15 @@ only: a captured row can have unknown timing or unusable measurements.
 It does not establish that commands were issued, repair repeats, or modify
 the primary timestamp gate.
 
+For replay against a previously frozen plan, add
+`--commanded-schedule-sha256 <trusted-lowercase-hex-digest>`. Supply the
+receipt from the independently saved pre-capture plan, not a new digest of
+the current file. Exact byte verification precedes capture parsing; it
+rejects edited plans even when the same frozen episodes still join. For
+example, removing the terminal slot after acquisition can turn a missing
+command into apparent exact nominal coverage without changing the capture.
+The digest flag cannot prove pre-capture custody or actual command issuance.
+
 If a controller or independent run log records how attempts ended, add
 `--termination-dispositions terminations.csv` with exact fields
 `lot,wafer,die,cell,episode,termination_disposition`. Acceptable declared

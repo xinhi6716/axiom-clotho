@@ -378,9 +378,10 @@ def joint_aperture_status(slots, metadata, *, common_read_error=False):
     return "joint_fit_possible_under_read_residual_box"
 
 
-def commanded_slots(path, roster):
+def commanded_slots(path, roster, *, expected_sha256=None):
     commands = defaultdict(set)
-    for key, (raw_nominal,) in records(path, IDENTITY + ("nominal_us",)):
+    for key, (raw_nominal,) in records(path, IDENTITY + ("nominal_us",),
+                                       expected_sha256=expected_sha256, digest_label="commanded schedule"):
         nominal = integer(raw_nominal)
         if key not in roster:
             raise ValueError("commanded schedule contains a non-roster episode")
@@ -465,10 +466,13 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
           diagnose_terminal_alternatives=False, capture_sha256=None, readout_path_table=None,
           read_bias_table=None, aperture_table=None, diagnose_joint_aperture=False,
           diagnose_common_read_error_aperture=False, commanded_schedule_path=None,
-          termination_table_path=None):
+          termination_table_path=None, commanded_schedule_sha256=None):
     validate_digest(roster_sha256, "frozen roster")
     validate_digest(capture_sha256, "timestamp capture")
     validate_digest(block_map_sha256, "acquisition block map")
+    validate_digest(commanded_schedule_sha256, "commanded schedule")
+    if commanded_schedule_sha256 is not None and commanded_schedule_path is None:
+        raise ValueError("commanded schedule SHA-256 requires a commanded schedule")
     if block_map_sha256 is not None and block_map_path is None:
         raise ValueError("acquisition block map SHA-256 requires an acquisition block map")
     if diagnose_die_stress and stress_history_path is None:
@@ -486,7 +490,8 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
     blocks = (acquisition_blocks(block_map_path, expected, expected_sha256=block_map_sha256)
               if block_map_path is not None else None)
     stress = stress_history(stress_history_path, expected) if stress_history_path is not None else None
-    commands = (commanded_slots(commanded_schedule_path, expected)
+    commands = (commanded_slots(commanded_schedule_path, expected,
+                                expected_sha256=commanded_schedule_sha256)
                 if commanded_schedule_path is not None else None)
     observed_slots = defaultdict(Counter) if commands is not None else None
     terminations = (termination_dispositions(termination_table_path, expected)
@@ -613,6 +618,8 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
         report["frozen_roster_byte_digest_verified"] = True
     if block_map_sha256 is not None:
         report["acquisition_block_map_byte_digest_verified"] = True
+    if commanded_schedule_sha256 is not None:
+        report["commanded_schedule_byte_digest_verified"] = True
     if diagnose_anchors:
         by_anchor = {str(nominal): Counter() for nominal in ANCHORS}
         for slots in expected.values():
@@ -763,6 +770,8 @@ def main():
                         help="conditional joint fit if both read corrections must be equal")
     parser.add_argument("--commanded-schedule", type=Path,
                         help="independent exact nominal-slot declaration per frozen episode")
+    parser.add_argument("--commanded-schedule-sha256",
+                        help="verify exact plan bytes against a previously trusted SHA-256")
     parser.add_argument("--termination-dispositions", type=Path,
                         help="optional episode-keyed controller/log termination dispositions")
     args = parser.parse_args()
@@ -779,6 +788,7 @@ def main():
                        diagnose_joint_aperture=args.diagnose_joint_aperture,
                        diagnose_common_read_error_aperture=args.diagnose_common_read_error_aperture,
                        commanded_schedule_path=args.commanded_schedule,
+                       commanded_schedule_sha256=args.commanded_schedule_sha256,
                        termination_table_path=args.termination_dispositions)
     except (OSError, UnicodeError, csv.Error):
         parser.exit(2, "error: input could not be read as UTF-8 CSV\n")
