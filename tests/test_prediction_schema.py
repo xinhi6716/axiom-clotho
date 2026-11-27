@@ -221,6 +221,43 @@ class PredictionSchemaTests(unittest.TestCase):
                 self.assertFalse(reply.stdout)
                 self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
 
+    def test_cli_binds_v13_optional_preprocessing_to_shared_training_slice(self):
+        import pandas as pd
+        from groupbench import fit_predict
+
+        frame = pd.DataFrame({"g": list("abcdef") * 3, "x": range(18),
+                              "material": list("aab") * 6, "y": range(18)})
+        fit = fit_predict(frame, frame[["x", "material"]].head(2), target="y", group="g",
+                          baselines=("group_median", "nystroem_ridge"), inner_splits=3)
+        fit.write(self.root)
+        self.assertEqual(fit.manifest["schema_version"], "1.3")
+        raw = (self.root / "predictions.csv").read_bytes()
+        env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1] / "src"),
+                   OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1", PYTHONDONTWRITEBYTECODE="1")
+        cmd = [sys.executable, "-m", "groupbench", "validate-prediction-bundle", str(self.root)]
+
+        def replay():
+            return subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=30)
+
+        self.assertEqual(replay().returncode, 0)
+        for stage in ("inner", "final"):
+            with self.subTest(stage=stage):
+                altered = copy.deepcopy(fit.manifest)
+                if stage == "inner":
+                    candidate = next(r for r in altered["inner_selection"] if r["family"] == "group_median")
+                    details = candidate["inner_fit_details"][0]["details"]
+                else:
+                    details = altered["family_fit_details"]["group_median"]
+                details["transformed_features"] += 1
+                write_bundle(self.root, altered, csv=raw)
+                self.assertEqual(verify_bundle(self.root).bundle_type, "prediction")
+                before = {p.name: p.read_bytes() for p in self.root.iterdir()}
+                reply = replay()
+                self.assertEqual(reply.returncode, 2, reply.stderr)
+                self.assertIn("preprocessing widths differ", reply.stderr)
+                self.assertFalse(reply.stdout)
+                self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
+
     def test_count_types_and_bounds(self):
         for key in ("n_training_rows", "n_training_groups", "n_predictions"):
             for bad in (True, False, 0, -1, 1.0, "2", None, 20001):

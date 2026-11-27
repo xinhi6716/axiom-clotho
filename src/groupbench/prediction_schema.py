@@ -293,6 +293,7 @@ def _optional_selection_metadata(value, rows, groups, inner_splits, seed, option
     records = value.get("inner_selection")
     if not isinstance(records, list) or any(not isinstance(record, dict) for record in records):
         _fail("extended selection records are missing or invalid.")
+    inner_widths = {}
     for family in optional:
         family_records = [record for record in records if record.get("family") == family]
         if family == "nystroem_ridge":
@@ -325,6 +326,11 @@ def _optional_selection_metadata(value, rows, groups, inner_splits, seed, option
                         _fail("kernel basis differs across alpha candidates in one fold.")
                 elif family == "group_median":
                     _median_details(item.get("details"), audit["train_rows"], audit["train_group_count"])
+                # GroupMedian and Nyström use the same fitted preprocessing
+                # on this exact training slice. No feature values are needed.
+                width = item["details"]["transformed_features"]
+                if inner_widths.setdefault(fold, width) != width:
+                    _fail("extended preprocessing widths differ for the same inner training slice.")
     final = _object(value.get("family_fit_details"))
     if set(final) != set(optional):
         _fail("extended final-refit coverage differs.")
@@ -344,6 +350,8 @@ def _optional_selection_metadata(value, rows, groups, inner_splits, seed, option
             _median_details(final[family], rows, groups)
         else:
             _fail("unknown optional family in the v1 detail contract.")
+    if len({final[family]["transformed_features"] for family in optional}) > 1:
+        _fail("extended preprocessing widths differ for the same final training slice.")
 
 
 _DOMAIN_FIELDS = {"inner_strategy", "domain", "domain_values_sha256", "group_domains", "n_domains", "inner_splits_per_outer"}
