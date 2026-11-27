@@ -556,3 +556,91 @@ def positive_quantized_change_signs(
         (0, max(a_lo, b_lo) < min(a_hi, b_hi)),
         (1, a_lo < b_hi),
     ) if feasible)
+
+
+def audit_numeric_interval_group_support(training, query_intervals, *, training_groups,
+                                         minimum_training_groups: int) -> dict:
+    """Bound simultaneous group-range support over each closed query interval.
+
+    One vote per declared group's source range. All values use the same
+    units; query intervals and threshold are fixed independently of outcomes.
+    Distinguish coverage throughout an interval from coverage at some common
+    point. Counting every group touching any part can overstate the latter.
+    The knots and the open gaps between them are examined separately, so
+    singleton source ranges and touching endpoints retain their exact meaning.
+    Only aggregate row counts are returned, not extra source values or IDs.
+    This is geometry of declared ranges, not independence, density, or risk.
+    """
+    from bisect import bisect_left, bisect_right
+
+    from .data import MAX_ROWS, validate_groups
+    from .metrics import _validated_paired_float
+
+    if any(type(v) not in (list, tuple) or not 1 <= len(v) <= MAX_ROWS
+           for v in (training, query_intervals)):
+        raise ValueError("Training and query intervals require bounded nonempty sequences.")
+    if type(minimum_training_groups) is not int or not 1 <= minimum_training_groups <= MAX_ROWS:
+        raise ValueError("The minimum training group count must be a bounded positive integer.")
+    groups = validate_groups(training_groups, len(training))
+    ranges = {}
+    for value, group in zip(training, groups):
+        x = _validated_paired_float(value)
+        old = ranges.get(group)
+        ranges[group] = (x, x) if old is None else (min(x, old[0]), max(x, old[1]))
+    knots = sorted({x for pair in ranges.values() for x in pair})
+    # Cell 2*i+1 is knot i; even cells are gaps including both unbounded tails.
+    positions = {x: 2 * i + 1 for i, x in enumerate(knots)}
+    cells = 2 * len(knots) + 1
+    delta = [0] * (cells + 1)
+    for lo, hi in ranges.values():
+        delta[positions[lo]] += 1
+        delta[positions[hi] + 1] -= 1
+
+    # Segment tree over the threshold predicate. Open gaps never need a
+    # representative float (none may lie between adjacent binary64 knots).
+    size = 1 << (cells - 1).bit_length()
+    minima, maxima = [False] * (2 * size), [False] * (2 * size)
+    active = 0
+    for i in range(cells):
+        active += delta[i]
+        minima[size + i] = maxima[size + i] = active >= minimum_training_groups
+    for i in range(size - 1, 0, -1):
+        minima[i] = minima[i * 2] and minima[i * 2 + 1]
+        maxima[i] = maxima[i * 2] or maxima[i * 2 + 1]
+
+    everywhere = some_only = nowhere = 0
+    for interval in query_intervals:
+        if type(interval) is not tuple or len(interval) != 2:
+            raise ValueError("Each query interval must be an ordered endpoint tuple.")
+        lo, hi = map(_validated_paired_float, interval)
+        if lo > hi:
+            raise ValueError("Query interval endpoints must be ordered.")
+        left = size + bisect_left(knots, lo) + bisect_right(knots, lo)
+        right = size + bisect_left(knots, hi) + bisect_right(knots, hi) + 1
+        all_cells, any_cell = True, False
+        while left < right:
+            if left % 2:
+                all_cells = all_cells and minima[left]
+                any_cell = any_cell or maxima[left]
+                left += 1
+            if right % 2:
+                right -= 1
+                all_cells = all_cells and minima[right]
+                any_cell = any_cell or maxima[right]
+            left //= 2
+            right //= 2
+        if all_cells:
+            everywhere += 1
+        elif any_cell:
+            some_only += 1
+        else:
+            nowhere += 1
+    return {
+        "n_training_rows": len(training),
+        "n_query_intervals": len(query_intervals),
+        "n_declared_training_groups": len(ranges),
+        "minimum_training_groups": minimum_training_groups,
+        "n_queries_meeting_threshold_everywhere": everywhere,
+        "n_queries_meeting_threshold_only_somewhere": some_only,
+        "n_queries_meeting_threshold_nowhere": nowhere,
+    }

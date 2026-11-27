@@ -81,3 +81,46 @@ class QuantizedChangeSignsTests(unittest.TestCase):
         for step, error in ((1, TypeError), (F(0), ValueError), (F(-1), ValueError)):
             with self.subTest(step=step), self.assertRaises(error):
                 signs(None, None, first_step=F(1), second_step=step)
+
+
+class IntervalGroupSupportTests(unittest.TestCase):
+    def test_disjoint_range_touches_are_not_simultaneous(self):
+        from groupbench.input_support import audit_numeric_interval_group_support as audit
+        result = audit([0, 1, 2, 3], [(0, 3), (1, 2)], training_groups=[0, 0, 1, 1],
+                       minimum_training_groups=2)
+        self.assertEqual(result["n_queries_meeting_threshold_nowhere"], 2)
+        result = audit([0, 1, 1, 3], [(0, 3), (1, 1)], training_groups=[0, 0, 1, 1],
+                       minimum_training_groups=2)
+        self.assertEqual(result["n_queries_meeting_threshold_only_somewhere"], 1)
+        self.assertEqual(result["n_queries_meeting_threshold_everywhere"], 1)
+
+    def test_sweep_matches_direct_point_and_gap_witnesses(self):
+        from itertools import combinations_with_replacement, product
+        from groupbench.input_support import audit_numeric_interval_group_support as audit
+        groups = [0, 0, 1, 1, 2, 2]
+        source = tuple(combinations_with_replacement(range(3), 2))
+        queries = tuple(combinations_with_replacement((-1., 0., .5, 1., 2., 3.), 2))
+        keys = ["n_queries_meeting_threshold_" + s for s in ("everywhere", "only_somewhere", "nowhere")]
+        for roster in product(source, repeat=3):
+            training = [x for interval in roster for x in interval]
+            for k in (1, 2, 3, 4):
+                expected = [0, 0, 0]
+                for lo, hi in queries:
+                    knots = sorted({lo, hi, *(x for x in training if lo <= x <= hi)})
+                    points = knots + [(a + b) / 2 for a, b in zip(knots, knots[1:])]
+                    hit = [sum(a <= x <= b for a, b in roster) >= k for x in points]
+                    expected[0 if all(hit) else 1 if any(hit) else 2] += 1
+                result = audit(training, queries, training_groups=groups, minimum_training_groups=k)
+                self.assertEqual([result[field] for field in keys], expected)
+
+    def test_adjacent_binary64_singletons_do_not_cover_the_open_interval(self):
+        from math import nextafter
+        from groupbench.input_support import audit_numeric_interval_group_support as audit
+        b = nextafter(1., 2.)
+        result = audit([1., b], [(1., b), (1., 1.)], training_groups=[0, 1],
+                       minimum_training_groups=1)
+        self.assertEqual(result["n_queries_meeting_threshold_only_somewhere"], 1)
+        self.assertEqual(result["n_queries_meeting_threshold_everywhere"], 1)
+        for interval in ((2., 1.), (False, 1.), [0., 1.], (float("nan"), 1.)):
+            with self.subTest(interval=interval), self.assertRaises(ValueError):
+                audit([1.], [interval], training_groups=[0], minimum_training_groups=1)
