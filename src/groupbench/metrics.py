@@ -1240,3 +1240,49 @@ def paired_mae_group_sign_stability(rows, *, expected_roster):
         "without_group": tuple(omissions),
         "changes": {weighting: classify(weighting) for weighting in full},
     }
+
+
+def paired_mse_shared_shift_profile(rows, *, expected_roster, shift_bounds):
+    """Exact paired MSE contrast under a single shared target offset.
+
+    Supply (row ID, observed target, forecast A, forecast B) tuples, an
+    independently frozen (row ID, group ID) roster, and a closed pair of
+    finite shift endpoints. Shift every target by the same amount but keep
+    forecasts fixed. Micro weights rows equally; equal-group weights group
+    row means equally. For residuals a and b the B-minus-A squared contrast
+    is (b² - a²) - 2s(b - a); the common s² cancels. This is a finite-roster
+    sensitivity analysis, not an estimated offset or confidence interval.
+    """
+    if type(shift_bounds) is not tuple or len(shift_bounds) != 2:
+        raise ValueError("Shift bounds must be a finite ordered pair.")
+    low, high = map(_paired_binary64_units, shift_bounds)
+    if low > high:
+        raise ValueError("Shift bounds must be a finite ordered pair.")
+    groups = {}
+    for group, a, b in _paired_group_residual_units(rows, expected_roster):
+        entry = groups.setdefault(group, [0, 0, 0])
+        entry[0] += 1
+        entry[1] += (b - a) * (b + a)
+        entry[2] -= 2 * (b - a)
+    q = _BINARY64_QUANTUM_DENOMINATOR
+
+    def summarize(intercept, slope):
+        low_value = (intercept + slope * low) / (q * q)
+        high_value = (intercept + slope * high) / (q * q)
+        zero = -intercept / slope if slope else None
+        return {
+            "at_lower_shift_mse_b_minus_a": low_value,
+            "at_upper_shift_mse_b_minus_a": high_value,
+            "mse_b_minus_a_bounds": (min(low_value, high_value), max(low_value, high_value)),
+            "tie_shift": zero / q if zero is not None and low <= zero <= high else None,
+            "tied_throughout": low_value == high_value == 0,
+        }
+
+    return {
+        "n_rows": len(rows),
+        "n_groups": len(groups),
+        "micro": summarize(*(Fraction(sum(entry[j] for entry in groups.values()), len(rows))
+                            for j in (1, 2))),
+        "equal_group": summarize(*(sum(Fraction(entry[j], entry[0]) for entry in groups.values())
+                                  / len(groups) for j in (1, 2))),
+    }
