@@ -187,22 +187,31 @@ impl Preprocessor {
         incoming: &[FeatureColumn],
     ) -> Result<Vec<Vec<f64>>, PreprocessingError> {
         let rows = validate_table(incoming)?;
-        let query_by_name: HashMap<_, _> = incoming
-            .iter()
-            .map(|column| (column.name.as_str(), &column.values))
-            .collect();
-        if incoming.len() != self.columns.len()
-            || self
-                .columns
-                .iter()
-                .any(|column| !query_by_name.contains_key(column.name.as_str()))
-        {
+        if incoming.len() != self.columns.len() {
             return Err(PreprocessingError::SchemaMismatch);
         }
+        // Native fit/evaluation usually constructs query columns in fitted order.
+        // Borrow that order directly; preserve name alignment on reordered input.
+        let ordered = self.columns.iter().zip(incoming).all(|(fit, query)| fit.name == query.name);
+        let query_by_name = if ordered {
+            None
+        } else {
+            let by_name: HashMap<_, _> = incoming
+                .iter()
+                .map(|column| (column.name.as_str(), &column.values))
+                .collect();
+            if self.columns.iter().any(|column| !by_name.contains_key(column.name.as_str())) {
+                return Err(PreprocessingError::SchemaMismatch);
+            }
+            Some(by_name)
+        };
         // Validate every type before allocating a potentially large dense table.
         let mut matched = Vec::with_capacity(self.columns.len());
-        for column in &self.columns {
-            let query = query_by_name[column.name.as_str()];
+        for (column, original) in self.columns.iter().zip(incoming) {
+            let query = match &query_by_name {
+                None => &original.values,
+                Some(by_name) => by_name[column.name.as_str()],
+            };
             let same_type = matches!(
                 (&column.values, query),
                 (FittedValues::Numeric { .. }, FeatureValues::Numeric(_))
@@ -455,6 +464,35 @@ fn midpoint(lower: f64, upper: f64) -> f64 {
     } else {
         lower * 0.5 + upper * 0.5
     }
+}
+
+#[test]
+fn ordered_and_reordered_transform_preserve_bits_and_validation() {
+    let ordered = vec![
+        FeatureColumn {
+            name: "axis".into(),
+            values: FeatureValues::Numeric(vec![Some(-0.0), None, Some(2.0)]),
+        },
+        FeatureColumn {
+            name: "condition".into(),
+            values: FeatureValues::Categorical(vec![Some("a".into()), None, Some("b".into())]),
+        },
+    ];
+    let pre = Preprocessor::fit(&ordered).unwrap();
+    let mut reordered = ordered.clone();
+    reordered.reverse();
+    let bits = |rows: Vec<Vec<f64>>| -> Vec<u64> {
+        rows.into_iter().flatten().map(f64::to_bits).collect()
+    };
+    let a = bits(pre.transform(&ordered).unwrap());
+    assert_eq!(a[0], (-0.0_f64).to_bits());
+    assert_eq!(bits(pre.transform(&reordered).unwrap()), a);
+    reordered[1].values = FeatureValues::Categorical(vec![None, None, Some("x".into())]);
+    assert_eq!(pre.transform(&reordered), Err(PreprocessingError::TypeMismatch));
+    reordered[0].name = "unknown".into();
+    assert_eq!(pre.transform(&reordered), Err(PreprocessingError::SchemaMismatch));
+    reordered[1].values = FeatureValues::Numeric(vec![Some(f64::NAN); 3]);
+    assert_eq!(pre.transform(&reordered), Err(PreprocessingError::NonFiniteNumeric));
 }
 
 #[cfg(test)]
