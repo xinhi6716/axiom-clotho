@@ -351,6 +351,10 @@ def _check(manifest, summary, raw):
                 value = float(token)
                 if not math.isfinite(value):
                     _fail("predictions and observations must be finite decimal numbers.")
+                # Bare integer tokens retain exact integer semantics. Decimal
+                # and scientific tokens keep the binary64 writer's roundtrip.
+                if token.lstrip("+-").isdigit() and int(token) != int(value):
+                    _fail("an observed or predicted integer is not exactly representable in binary64.")
                 if value == 0.0:
                     mantissa = token.lower().split("e", 1)[0]
                     if any("1" <= digit <= "9" for digit in mantissa):

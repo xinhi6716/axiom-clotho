@@ -310,6 +310,55 @@ class EvaluationSchemaTests(unittest.TestCase):
                 self.assertFalse(reply.stdout)
                 self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
 
+    def test_cli_rejects_lossy_literal_integer_observations_and_predictions(self):
+        command = [sys.executable, "-m", "groupbench.cli", "validate-evaluation-bundle", str(self.root)]
+        env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1] / "src"),
+                   OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1", PYTHONDONTWRITEBYTECODE="1")
+
+        def replay():
+            return subprocess.run(command, env=env, text=True, capture_output=True, timeout=30)
+
+        path = self.root / "predictions.csv"
+        for sign in (1, -1):
+            exact = sign * 2**53
+            frame = pd.DataFrame({"g": ["a", "b", "c", "d"] * 2,
+                                  "x": range(8), "y": [exact] * 8})
+            result = benchmark(frame, target="y", group="g", baselines=("dummy",),
+                               outer_splits=2, inner_splits=2)
+            result.write(self.root, overwrite=True)
+            self.assertEqual(replay().returncode, 0)
+            header, first, *rest = path.read_text().splitlines()
+            original = first.split(",")
+            indexes = [header.split(",").index(name) for name in ("observed", "prediction_dummy")]
+            for index in indexes:
+                self.assertEqual(str(result.predictions.iloc[:, index].dtype), "float64")
+                self.assertEqual(float(original[index]), exact)
+
+            def write(fields):
+                path.write_text("\n".join([header, ",".join(fields), *rest]) + "\n")
+                self.rehash()
+
+            for representation in (f"{exact:+d}", f"{exact:+.15e}"):
+                with self.subTest(representation=representation):
+                    fields = original.copy()
+                    for index in indexes:
+                        fields[index] = representation
+                    write(fields)
+                    self.assertEqual(replay().returncode, 0)
+
+            for index in indexes:
+                with self.subTest(sign=sign, column=index):
+                    fields = original.copy()
+                    fields[index] = f"{exact + sign:+d}"
+                    write(fields)
+                    self.assertEqual(verify_bundle(self.root).bundle_type, "evaluation")
+                    before = {p.name: p.read_bytes() for p in self.root.iterdir()}
+                    reply = replay()
+                    self.assertEqual(reply.returncode, 2, reply.stderr)
+                    self.assertIn("integer is not exactly representable", reply.stderr)
+                    self.assertFalse(reply.stdout)
+                    self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
+
     def test_cli_requires_selected_predictions_to_match_declared_family_refit(self):
         from groupbench.model import GroupBenchRegressor
 
