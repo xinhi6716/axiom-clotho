@@ -1,6 +1,7 @@
 //! Native numeric and explicitly mixed modelling. No Python runtime is used.
 #![forbid(unsafe_code)]
 mod device_csv;
+mod evaluation_projection;
 mod fet_command;
 mod prepare_command;
 mod predict_saved;
@@ -29,7 +30,8 @@ use std::path::Path;
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 const MAX_BYTES: u64 = 64 * 1024 * 1024;
-const HELP: &str = "Clotho native modelling (experimental)\n\npool-saved --manifest REPORTS.json --out NEW.json (scalar pooling; no roster verification)\nprepare-observed --query QUERY.csv --observed LABELS.csv --row-id NAME --saved-contract CONTRACT.json --out NEW.json\ncompare-saved --observed SERIES.json --model SERIES.json --baseline SERIES.json --out NEW.json [--query QUERY] [--groups GROUPS.json] (declared keys; optional v2 query byte binding; no fitting or provenance verification)\nprepare-measurements --csv FILE --partitions FILE --training-targets FILE --identity lot,wafer,device --features A,B --group-prefix 1 --out NEW_DIRECTORY\nextract-rram --csv FILE --max-bracket-v V --accept-assumptions true --out NEW_DIRECTORY [--feature-row-unit device|device-condition] [--require-sampled-readpoints true] [--include-source-locations true]\nextract-fet --csv FILE --criterion-a A --polarity positive|negative --max-bracket-v V --window-min-v V --window-max-v V --accept-assumptions true --out NEW_DIRECTORY\nfit --csv FILE --target NAME --features A,B --model knn|ridge|mean|logistic|majority --out MODEL.json [--k 5] [--alpha 1] [--preprocess mixed] [--categorical A,B] [--large-training true] [--mean-inference true (mean only)]\npredict --artifact MODEL.json --csv FILE --out PREDICTIONS.csv [--mean-inference true] [--threshold 0.5] [--row-id NAME --saved-contract CONTRACT.json (regression v2 JSON output)]\nevaluate --csv FILE --target NAME --features A,B --group NAME --model knn|ridge|mean|logistic|majority --folds 5 --out NEW_DIRECTORY [--k 5] [--alpha 1] [--threshold 0.5] [--preprocess mixed] [--categorical A,B]\ncompare --csv FILE --target NAME --features A,B --group NAME --candidates mean,ridge:1,knn:3 --outer-folds 5 --inner-folds 3 --max-fits 200 --out NEW_DIRECTORY\n\nStrict finite numeric features are the default. Mixed mode imputes empty numeric cells\nand encodes explicitly named categorical features using training rows only. All other\nfeatures remain numeric; NA and null are literal categorical strings, not missing.\nEvaluation holds out whole groups and fits preprocessing inside each training fold.\nAt most 100 encoded features per estimator. No Python, downloads or telemetry.\nOutputs must not already exist. Default model files contain private raw training data; opt-in mean inference files contain a summary, not a confidentiality guarantee.\n";
+const MAX_ESTIMATOR_FEATURES: usize = 100;
+const HELP: &str = "Clotho native modelling (experimental)\n\npool-saved --manifest REPORTS.json --out NEW.json (scalar pooling; no roster verification)\nprepare-observed --query QUERY.csv --observed LABELS.csv --row-id NAME --saved-contract CONTRACT.json --out NEW.json\ncompare-saved --observed SERIES.json --model SERIES.json --baseline SERIES.json --out NEW.json [--query QUERY] [--groups GROUPS.json] (declared keys; optional v2 query byte binding; no fitting or provenance verification)\nprepare-measurements --csv FILE --partitions FILE --training-targets FILE --identity lot,wafer,device --features A,B --group-prefix 1 --out NEW_DIRECTORY\nextract-rram --csv FILE --max-bracket-v V --accept-assumptions true --out NEW_DIRECTORY [--feature-row-unit device|device-condition] [--require-sampled-readpoints true] [--include-source-locations true]\nextract-fet --csv FILE --criterion-a A --polarity positive|negative --max-bracket-v V --window-min-v V --window-max-v V --accept-assumptions true --out NEW_DIRECTORY\nfit --csv FILE --target NAME --features A,B --model knn|ridge|mean|logistic|majority --out MODEL.json [--k 5] [--alpha 1] [--preprocess mixed] [--categorical A,B] [--large-training true] [--mean-inference true (mean only)]\npredict --artifact MODEL.json --csv FILE --out PREDICTIONS.csv [--mean-inference true] [--threshold 0.5] [--row-id NAME --saved-contract CONTRACT.json (regression v2 JSON output)]\nevaluate --csv FILE --target NAME --features A,B --group NAME --model knn|ridge|mean|logistic|majority --folds 5 --out NEW_DIRECTORY [--k 5] [--alpha 1] [--threshold 0.5] [--preprocess mixed] [--categorical A,B]\ninspect-evaluation --bundle DIRECTORY (aggregate-only JSON to stdout; not provenance or group-row verification)\ncompare --csv FILE --target NAME --features A,B --group NAME --candidates mean,ridge:1,knn:3 --outer-folds 5 --inner-folds 3 --max-fits 200 --out NEW_DIRECTORY\n\nStrict finite numeric features are the default. Mixed mode imputes empty numeric cells\nand encodes explicitly named categorical features using training rows only. All other\nfeatures remain numeric; NA and null are literal categorical strings, not missing.\nEvaluation holds out whole groups and fits preprocessing inside each training fold.\nAt most 100 encoded features per estimator. No Python, downloads or telemetry.\nOutputs must not already exist. Default model files contain private raw training data; opt-in mean inference files contain a summary, not a confidentiality guarantee.\n";
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -165,7 +167,7 @@ impl Artifact {
             }
             let columns = mixed_columns(rows, &self.features, &self.categorical_features)?;
             let fitted = Preprocessor::fit(&columns)?;
-            if fitted.feature_names().len() > 100 {
+            if fitted.feature_names().len() > MAX_ESTIMATOR_FEATURES {
                 return Err(
                     "Mixed preprocessing exceeds the estimator limit of 100 encoded features"
                         .into(),
@@ -551,6 +553,9 @@ fn predictions_bytes(values: &[f64]) -> Result<Vec<u8>> {
 }
 fn run() -> Result<()> {
     let (cmd, opts) = args()?;
+    if cmd == "inspect-evaluation" {
+        return evaluation_projection::run(&opts);
+    }
     if cmd == "pool-saved" {
         return pool_command::run(&opts);
     }
