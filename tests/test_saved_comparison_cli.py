@@ -238,6 +238,52 @@ class SavedComparisonCliTests(unittest.TestCase):
         comparison_fixtures.amend(f.b, lambda manifest: manifest["environment"].update(pandas="0.0"))
         self.assertEqual(replay().returncode, 0)
 
+    def test_cli_replays_declared_feature_types_against_observed_query(self):
+        import pandas as pd
+        from groupbench import fit_predict
+
+        f = self.fixture
+        # An all-missing CSV column initially normalizes to float64, but it
+        # can legally be aligned with a categorical training column.
+        f.query.write_text("x,z,response\n1,,99\n2,,99\n3,,99\n")
+        incoming, digest = cli._read_csv_with_hash(f.query)
+        training = pd.DataFrame({"x": [1., 2., 3., 4., 5., 6.],
+                                 "z": list("aabbcc"),
+                                 "g": "A A B B C C".split(), "response": [0., 1., 2., 3., 4., 5.]})
+        fit = fit_predict(training, incoming[["x", "z"]], target="response", group="g",
+                          baselines=("dummy",), inner_splits=2, prediction_source_sha256=digest)
+        f.build(f.a, (0, 0, 0))
+        fit.write(f.b, overwrite=True)
+        env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1] / "src"),
+                   OMP_NUM_THREADS="1", OPENBLAS_NUM_THREADS="1", PYTHONDONTWRITEBYTECODE="1")
+        cmd = [sys.executable, "-m", "groupbench", "compare-predictions", *self.args]
+
+        def replay():
+            return subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=30)
+
+        self.assertEqual(replay().returncode, 0)
+        self.assertEqual(fit.manifest["feature_schema"], [{"name": "x", "dtype": "float64"},
+                                                         {"name": "z", "dtype": "object"}])
+
+        def declare_observed_x_categorical(manifest):
+            # Make the support kind consistent with the replacement dtype.
+            manifest["feature_schema"][0]["dtype"] = "object"
+            support = manifest["input_support"]["features"][0]
+            support["kind"] = "categorical"
+            del support["below_training_min_count"]
+            del support["above_training_max_count"]
+            support["unseen_category_count"] = 0
+
+        comparison_fixtures.amend(f.b, declare_observed_x_categorical)
+        before = snapshot(f.root)
+        reply = replay()
+        self.assertEqual(reply.returncode, 2, reply.stderr)
+        self.assertIn("no comparison was written", reply.stderr)
+        self.assertFalse(reply.stdout)
+        self.assertEqual(before, snapshot(f.root))
+        with self.assertRaisesRegex(scoring.SavedScoringError, "query feature types"):
+            f.score()
+
     def test_root_help_and_existing_dispatch_preserved(self):
         out = io.StringIO()
         with redirect_stdout(out), self.assertRaises(SystemExit) as raised: cli.main(['--help'])

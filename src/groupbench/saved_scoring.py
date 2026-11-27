@@ -228,6 +228,16 @@ def _check_normalized_query_fingerprint(manifest, query, features):
         raise SavedScoringError("Could not rebuild the normalized query fingerprint.") from None
     if digest not in valid:
         raise SavedScoringError("The normalized query fingerprint differs from the retained query.")
+    # The digest is made before training-schema alignment; matching it
+    # does not prove that the declared training dtype could admit this query.
+    # Writer normalization produces float64 or object, and training alignment
+    # can change a query dtype only if its entire column is missing.
+    for record in manifest["feature_schema"]:
+        column = normalized[record["name"]]
+        expected = record["dtype"]
+        if (expected not in ("float64", "object")
+                or (str(column.dtype) != expected and not column.isna().all())):
+            raise SavedScoringError("Declared query feature types cannot admit the retained query.")
 
 
 def _check_query_support_missingness(manifest, query):
@@ -343,7 +353,7 @@ def compare_saved_predictions(run_a, run_b, query_csv, outcomes_csv, contract):
         "model_a": report_a, "model_b": report_b,
         "limitations": list(LIMITATIONS) + [
             "Common query bytes match both producer declarations, not authenticated historical mapping or model execution.",
-            "Normalized feature hashes are checked only when retained and the declared pandas version matches this runtime.",
+            "Normalized feature hashes and their query type compatibility are checked only when the hash is retained and the declared pandas version matches this runtime.",
             "Retained support missingness is checked against the query unless a different pandas version is declared; training-side support is not rebuilt.",
             "Target definitions, units and group/cohort/mapping meanings are caller declarations, not verified facts.",
             "Different training sources, feature subsets and protocols may be compared; this is not a controlled or causal contrast.",
