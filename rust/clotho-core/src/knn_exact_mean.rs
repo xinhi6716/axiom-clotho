@@ -60,8 +60,25 @@ impl Magnitude {
     // Divide the exact integer by the small neighbor count, retaining the
     // remainder so the final f64 conversion cannot double-round.
     fn divide(&mut self, count: u64) -> u64 {
+        if count.is_power_of_two() {
+            let shift = count.trailing_zeros();
+            if shift == 0 {
+                return 0;
+            }
+            let remainder = self.0[0] & (count - 1);
+            let mut high = 0;
+            for word in self.0.iter_mut().rev() {
+                let original = *word;
+                *word = (original >> shift) | high;
+                high = original << (64 - shift);
+            }
+            return remainder;
+        }
+
         let mut remainder = 0;
-        for word in self.0.iter_mut().rev() {
+        // Limbs above the numerator's first nonzero word contribute
+        // neither to the quotient nor to the remainder.
+        for word in self.0.iter_mut().rev().skip_while(|word| **word == 0) {
             let dividend = (u128::from(remainder) << 64) | u128::from(*word);
             let divisor = u128::from(count);
             *word = (dividend / divisor) as u64;
@@ -159,4 +176,37 @@ pub(crate) fn checked_mean(
     let magnitude = larger.rounded_mean_bits(count as u64);
     debug_assert!(magnitude <= f64::MAX.to_bits());
     Ok(f64::from_bits(sign | magnitude))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn optimized_limb_division_matches_exact_integer_quotient_and_remainder() {
+        let mut seed = 0x937a_f016_2c38_8b01_u64;
+        for count in (1_u64..=64).chain([256, 1023, 8192, 16_384, 19_999, 20_000]) {
+            for len in 0..=LIMBS {
+                let mut words = [0; LIMBS];
+                for word in &mut words[..len] {
+                    seed ^= seed << 13;
+                    seed ^= seed >> 7;
+                    seed ^= seed << 17;
+                    *word = seed;
+                }
+                let mut exact = Magnitude(words);
+                let remainder = exact.divide(count);
+                assert!(remainder < count);
+                // The unique quotient and remainder must reconstruct the
+                // original. Use reverse multiply/add instead of division.
+                let mut carry = u128::from(remainder);
+                for (word, quotient) in words.into_iter().zip(exact.0) {
+                    carry += u128::from(quotient) * u128::from(count);
+                    assert_eq!(carry as u64, word);
+                    carry >>= 64;
+                }
+                assert_eq!(carry, 0);
+            }
+        }
+    }
 }
