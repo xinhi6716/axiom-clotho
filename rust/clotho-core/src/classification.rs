@@ -156,6 +156,9 @@ impl LogisticClassifier {
     /// Returns `P(y = 1)` in input-row order. Finite logits use a stable sigmoid.
     pub fn predict_proba(&self, x: &[Vec<f64>]) -> Result<Vec<f64>, ClassificationError> {
         validate_features(x, self.width)?;
+        if x.len() > 1 && self.columns.is_empty() {
+            return repeated_intercept_probability(self.intercept, x.len());
+        }
         x.iter()
             .map(|row| {
                 let mut score = CompensatedSum::default();
@@ -172,6 +175,15 @@ impl LogisticClassifier {
             })
             .collect()
     }
+}
+
+// Keep this path separate from the usual nonconstant score loop. The
+// compensated score and stable sigmoid are identical to that loop.
+#[inline(never)]
+fn repeated_intercept_probability(intercept: f64, count: usize) -> Result<Vec<f64>, ClassificationError> {
+    let mut score = CompensatedSum::default();
+    score.add(intercept)?;
+    Ok(vec![sigmoid(score.total()?); count])
 }
 
 // Test exactly the first optimizer iteration for a fixed intercept-only design.
@@ -575,6 +587,26 @@ fn dot(a: &[f64], b: &[f64]) -> Result<f64, ClassificationError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_intercept_predictions_match_single_row_bits_after_full_validation() {
+        let fit = vec![vec![2.0, -0.0]; 7];
+        for positives in [1, 3, 4, 6] {
+            let y: Vec<_> = (0..7).map(|i| if i < positives { 1.0 } else { 0.0 }).collect();
+            let model = LogisticClassifier::fit(&fit, &y, 1.0).unwrap();
+            assert!(model.columns.is_empty());
+            let mut query = vec![vec![1.0, 0.0], vec![-f64::MAX, f64::MAX], vec![-0.0, 2.0]];
+            let p = model.predict_proba(&query).unwrap();
+            for (row, observed) in query.iter().zip(p) {
+                let single = model.predict_proba(std::slice::from_ref(row)).unwrap();
+                assert_eq!(single[0].to_bits(), observed.to_bits());
+            }
+            query[2][1] = f64::NAN;
+            assert_eq!(model.predict_proba(&query), Err(ClassificationError::NonFinite));
+            query[0].pop();
+            assert_eq!(model.predict_proba(&query), Err(ClassificationError::Shape));
+        }
+    }
 
     #[test]
     fn rejected_full_newton_step_does_not_change_the_current_iterate() {
