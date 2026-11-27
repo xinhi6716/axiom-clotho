@@ -405,6 +405,45 @@ class PredictionSchemaTests(unittest.TestCase):
         self.assertFalse(reply.stdout)
         self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
 
+    def test_cli_rejects_repeated_held_groups_in_v13_prediction_receipt(self):
+        import pandas as pd
+        from groupbench import fit_predict
+
+        frame = pd.DataFrame({"g": list("abcdef") * 3, "x": range(18), "y": range(18)})
+        result = fit_predict(frame, frame[["x"]].head(2), target="y", group="g",
+                             baselines=("group_median",), inner_splits=3)
+        result.write(self.root)
+        self.assertEqual(result.manifest["schema_version"], "1.3")
+        raw = (self.root / "predictions.csv").read_bytes()
+        env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1] / "src"),
+                   PYTHONDONTWRITEBYTECODE="1", OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1")
+        command = [sys.executable, "-m", "groupbench.cli", "validate-prediction-bundle", str(self.root)]
+
+        def replay():
+            return subprocess.run(command, env=env, capture_output=True, text=True, timeout=30)
+
+        self.assertEqual(replay().returncode, 0)
+        changed = copy.deepcopy(result.manifest)
+        first, second, _ = changed["inner_folds"]
+        for key in ("train_groups", "test_groups"):
+            self.assertEqual(len(first[key]), len(second[key]))
+            second[key] = first[key][:]
+        write_bundle(self.root, changed, csv=raw)
+        self.assertEqual(verify_bundle(self.root).bundle_type, "prediction")
+        before = {p.name: p.read_bytes() for p in self.root.iterdir()}
+        reply = replay()
+        self.assertEqual(reply.returncode, 2, reply.stderr)
+        self.assertIn("inner group identities", reply.stderr)
+        self.assertFalse(reply.stdout)
+        self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
+
+        # Narrow historical extension receipts retain counts, not names.
+        for fold in changed["inner_folds"]:
+            fold.pop("train_groups")
+            fold.pop("test_groups")
+        write_bundle(self.root, changed, csv=raw)
+        self.assertEqual(replay().returncode, 0)
+
     def test_cli_checks_total_extended_inner_held_coverage(self):
         import pandas as pd
         from groupbench import fit_predict

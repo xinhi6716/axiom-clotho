@@ -242,6 +242,31 @@ def _extension_families(value, config, *, allow_empty=False):
     return optional
 
 
+def _check_prediction_v13_group_identities(audits):
+    """Tie retained group names across folds, without authenticating the source."""
+    if not any("train_groups" in fold or "test_groups" in fold for fold in audits):
+        return  # Early narrow extension receipts retain only the counts.
+    error = "extended inner group identities must partition one roster and hold each group out once."
+    population, held = None, set()
+    for fold in audits:
+        train, test = fold.get("train_groups"), fold.get("test_groups")
+        if (not isinstance(train, list) or not isinstance(test, list)
+                or len(train) != fold["train_group_count"] or len(test) != fold["test_group_count"]
+                or any(not _text(g) or not g.strip() for side in (train, test) for g in side)
+                or type(fold.get("overlap_count")) is not int or fold["overlap_count"] != 0):
+            _fail(error)
+        train_set, test_set = set(train), set(test)
+        roster = train_set | test_set
+        if (train != sorted(train_set) or test != sorted(test_set)
+                or train_set & test_set or held & test_set
+                or (population is not None and roster != population)):
+            _fail(error)
+        population = roster
+        held.update(test_set)
+    if held != population:
+        _fail(error)
+
+
 def _optional_selection_metadata(value, rows, groups, inner_splits, seed, optional):
     """Check saved extension details/counts, never authenticate or replay fits."""
     _count(seed, 2**32 - 1)
@@ -779,6 +804,8 @@ def _metadata(manifest):
                                    config.get("random_state"), config)
         elif optional:
             _optional_selection_metadata(manifest, n_train, manifest["n_training_groups"], inner, config.get("random_state"), optional)
+        if version == "1.3":
+            _check_prediction_v13_group_identities(manifest["inner_folds"])
         if version == "1.4":
             mapping = _domain_config(config, manifest["n_training_groups"])
             _domain_selection(manifest, n_train, list(mapping), mapping, inner, config)
