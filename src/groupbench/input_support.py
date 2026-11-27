@@ -514,3 +514,45 @@ def quantize_positive_operand(value: Fraction, step: Fraction) -> Fraction | Non
     whole, rem = divmod(ratio.numerator, ratio.denominator)
     code = whole + (2 * rem >= ratio.denominator)
     return code * step if code else None
+
+
+def positive_quantized_change_signs(
+    first: Fraction | None, second: Fraction | None, *,
+    first_step: Fraction, second_step: Fraction,
+) -> tuple[int, ...] | None:
+    """Return exact feasible signs of second minus first on declared grids.
+
+    The two reads must represent the same operand and units. Each positive
+    center belongs to its zero-origin, round-half-up grid. Its preimage is
+    [center - step/2, center + step/2); touching cells cannot produce a tie.
+    Different steps can make an observed change ambiguous. Values represented
+    by None (zero code) are unscorable here, not a tie or no-change event.
+
+    This is conditional on independent freedom within the two inverse cells.
+    It does not estimate a noise distribution, validate the encoding, or
+    infer a hardware trajectory. The caller declares both grid steps.
+    """
+    def cell(center, step):
+        if not isinstance(step, Fraction):
+            raise TypeError("steps must be exact Fraction operands")
+        if step <= 0:
+            raise ValueError("steps must be strictly positive")
+        if center is None:
+            return None
+        if not isinstance(center, Fraction):
+            raise TypeError("codes must be exact Fraction operands or None")
+        if center <= 0 or (center / step).denominator != 1:
+            raise ValueError("codes must be positive centers on the declared grid")
+        half = step / 2
+        return center - half, center + half
+
+    a, b = cell(first, first_step), cell(second, second_step)
+    if a is None or b is None:
+        return None
+    a_lo, a_hi = a
+    b_lo, b_hi = b
+    return tuple(s for s, feasible in (
+        (-1, b_lo < a_hi),
+        (0, max(a_lo, b_lo) < min(a_hi, b_hi)),
+        (1, a_lo < b_hi),
+    ) if feasible)

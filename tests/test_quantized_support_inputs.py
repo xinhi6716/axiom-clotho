@@ -42,3 +42,42 @@ class QuantizedSupportInputsTest(unittest.TestCase):
                 quantize(bad, F(1))
             with self.assertRaises(ValueError):
                 quantize(F(1), bad)
+
+
+class QuantizedChangeSignsTests(unittest.TestCase):
+    def test_touching_cells_exclude_ties_and_mixed_grid_can_reverse(self):
+        from groupbench.input_support import positive_quantized_change_signs as signs
+        self.assertEqual(signs(F(1), F(2), first_step=F(1), second_step=F(1)), (1,))
+        self.assertEqual(signs(F(2), F(1), first_step=F(1), second_step=F(1)), (-1,))
+        self.assertEqual(signs(F(1), F(2), first_step=F(1), second_step=F(2)), (-1, 0, 1))
+        self.assertEqual(signs(F(1), F(1), first_step=F(1), second_step=F(1)), (-1, 0, 1))
+
+    def test_matches_direct_forward_quantizer_over_exact_rational_witnesses(self):
+        from groupbench.input_support import positive_quantized_change_signs as signs
+        from itertools import product
+
+        steps = (F(1, 3), F(1, 2), F(1), F(2), F(3))
+        values = [F(i, 48) for i in range(1, 720)]
+        encoded = {
+            step: {step * k: [x for x in values if quantize(x, step) == step * k]
+                   for k in range(1, 5)}
+            for step in steps
+        }
+        for first_step, second_step in product(steps, repeat=2):
+            for (first, a), (second, b) in product(
+                    encoded[first_step].items(), encoded[second_step].items()):
+                with self.subTest(first=first, second=second, steps=(first_step, second_step)):
+                    expected = tuple(sorted({(y > x) - (y < x) for x, y in product(a, b)}))
+                    self.assertEqual(signs(first, second, first_step=first_step,
+                                           second_step=second_step), expected)
+
+    def test_unscorable_is_separate_and_doesnt_mask_malformed_other_read(self):
+        from groupbench.input_support import positive_quantized_change_signs as signs
+        self.assertIsNone(signs(None, F(1), first_step=F(1), second_step=F(1)))
+        for center, error in ((0, TypeError), (F(0), ValueError), (F(1, 2), ValueError),
+                              (F(-1), ValueError), (1.0, TypeError)):
+            with self.subTest(center=center), self.assertRaises(error):
+                signs(None, center, first_step=F(1), second_step=F(1))
+        for step, error in ((1, TypeError), (F(0), ValueError), (F(-1), ValueError)):
+            with self.subTest(step=step), self.assertRaises(error):
+                signs(None, None, first_step=F(1), second_step=step)
