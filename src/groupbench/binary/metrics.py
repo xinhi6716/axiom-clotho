@@ -161,3 +161,96 @@ def grouped_binary_metrics(y_true, probability_1, groups):
                    worst_group_brier=worst_brier,
                    worst_group_log_loss_clipped=max(row["log_loss_clipped"] for row in per_group))
     return overall, per_group
+
+
+def paired_brier_prevalence_sensitivity(rows, *, expected_roster, prevalence_range):
+    """Reweight a complete paired Brier comparison over a fixed prevalence range.
+
+    Supply (row_id, observed_label, positive_probability_a, positive_probability_b)
+    tuples and a separately frozen (row_id, group_id) roster. Labels must be
+    literal integer 0/1 and both labels must occur. Probabilities and closed
+    prevalence endpoints are finite built-in binary64 or exact integer values
+    in [0, 1]. The prevalence range is externally declared, never inferred
+    from the comparison.
+
+    Row weighting fixes the observed loss difference within each class.
+    Equal-group weighting first fixes each group's conditional loss difference,
+    then averages groups equally within class; it is unavailable if any group
+    lacks either class. The resulting mixtures are hypothetical sensitivity
+    calculations, not evidence of prevalence, label shift or transportability.
+    """
+    from fractions import Fraction
+
+    from ..metrics import (
+        _BINARY64_QUANTUM_DENOMINATOR, _bounded_paired_sequence,
+        _paired_binary64_units, _paired_roster_id,
+    )
+
+    if not all(map(_bounded_paired_sequence, (rows, expected_roster))):
+        raise ValueError("Paired rows and frozen roster require bounded nonempty sequences.")
+    if type(prevalence_range) is not tuple or len(prevalence_range) != 2:
+        raise ValueError("Prevalence range requires a closed pair of endpoints.")
+    unit = _BINARY64_QUANTUM_DENOMINATOR
+    low, high = map(_paired_binary64_units, prevalence_range)
+    if not 0 <= low <= high <= unit:
+        raise ValueError("Prevalence endpoints must be ordered and within [0, 1].")
+    lo, hi = Fraction(low, unit), Fraction(high, unit)
+    roster = {}
+    for entry in expected_roster:
+        if type(entry) is not tuple or len(entry) != 2 or not all(map(_paired_roster_id, entry)):
+            raise ValueError("Frozen roster entries require valid (row ID, group ID) tuples.")
+        row_id, group = entry
+        if row_id in roster:
+            raise ValueError("Frozen roster row IDs must be unique.")
+        roster[row_id] = group
+
+    seen, group_totals = set(), {}
+    for row in rows:
+        if type(row) is not tuple or len(row) != 4 or not _paired_roster_id(row[0]):
+            raise ValueError("Paired rows require one ID, one label and two probabilities.")
+        row_id, label, a, b = row
+        if row_id not in roster or row_id in seen:
+            raise ValueError("Paired rows must match the frozen roster exactly.")
+        seen.add(row_id)
+        if type(label) is not int or label not in (0, 1):
+            raise ValueError("Paired Brier labels must be literal integers 0 or 1.")
+        a, b = map(_paired_binary64_units, (a, b))
+        if not (0 <= a <= unit and 0 <= b <= unit):
+            raise ValueError("Paired Brier probabilities must be within [0, 1].")
+        stats = group_totals.setdefault(roster[row_id], [[0, 0], [0, 0]])[label]
+        stats[0] += 1
+        stats[1] += (b - a) * (b + a - 2 * label * unit)
+    if len(seen) != len(roster):
+        raise ValueError("Paired rows must match the frozen roster exactly.")
+
+    counts = tuple(sum(group[i][0] for group in group_totals.values()) for i in (0, 1))
+    if not all(counts):
+        raise ValueError("Prevalence sensitivity requires both observed classes.")
+    square = unit**2
+
+    def report(d0, d1):
+        def at(p):
+            return d0 + p * (d1 - d0)
+        left, right = at(lo), at(hi)
+        cross = d0 / (d0 - d1) if d0 != d1 else None
+        return {
+            "conditional_brier_b_minus_a": (d0, d1),
+            "brier_b_minus_a_at_prevalence_endpoints": (left, right),
+            "brier_b_minus_a_bounds": (min(left, right), max(left, right)),
+            "tie_prevalence_in_declared_range": cross if cross is not None and lo <= cross <= hi else None,
+            "all_prevalences_tied": d0 == d1 == 0,
+        }
+
+    supporting_groups = tuple(sum(group[i][0] > 0 for group in group_totals.values()) for i in (0, 1))
+    n_groups = len(group_totals)
+    equal_group = None
+    if supporting_groups == (n_groups, n_groups):
+        equal_group = report(*(sum(Fraction(g[i][1], g[i][0] * square)
+                                   for g in group_totals.values()) / n_groups for i in (0, 1)))
+    return {
+        "n_rows": len(seen), "n_declared_groups": n_groups, "n_rows_by_label": counts,
+        "n_declared_groups_by_label": supporting_groups, "prevalence_range_exact": (lo, hi),
+        "row_within_label": report(*(Fraction(sum(g[i][1] for g in group_totals.values()),
+                                               counts[i] * square) for i in (0, 1))),
+        "equal_group_within_label": equal_group,
+    }
