@@ -157,6 +157,45 @@ class SavedComparisonCliTests(unittest.TestCase):
                                     capture_output=True, text=True, timeout=30)
             self.assertEqual((result.returncode, result.stdout, result.stderr), expected)
 
+    def test_cli_matches_writer_admitted_source_digest_case_exactly(self):
+        import pandas as pd
+        from groupbench import fit_predict
+
+        f = self.fixture
+        incoming, digest = cli._read_csv_with_hash(f.query)
+        mixed = "".join(c.upper() if i % 2 == 0 else c for i, c in enumerate(digest))
+        self.assertNotEqual(digest, mixed)
+        self.assertNotEqual(digest, digest.upper())
+        training = pd.DataFrame({"x": [1., 2., 3., 4., 5., 6.], "g": "A A B B C C".split(),
+                                 "response": [0., 1., 2., 3., 4., 5.]})
+        for path, supplied in ((f.a, digest.upper()), (f.b, mixed)):
+            fit = fit_predict(training, incoming[["x"]], target="response", group="g",
+                              baselines=("dummy",), inner_splits=2, prediction_source_sha256=supplied)
+            self.assertEqual(fit.manifest["prediction_source_file_sha256"], supplied)
+            fit.write(path, overwrite=True)
+        env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1] / "src"),
+                   OMP_NUM_THREADS="1", OPENBLAS_NUM_THREADS="1", PYTHONDONTWRITEBYTECODE="1")
+        cmd = [sys.executable, "-m", "groupbench", "compare-predictions", *self.args]
+
+        def replay():
+            return subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=30)
+
+        before = snapshot(f.root)
+        reply = replay()
+        self.assertEqual(reply.returncode, 0, reply.stderr)
+        report = json.loads(reply.stdout)
+        self.assertEqual(report["query_sha256"], digest)
+        self.assertTrue(report["query_bytes_match_both_manifest_declarations"])
+        self.assertEqual(before, snapshot(f.root))
+
+        wrong = ("1" if digest[0] == "0" else "0") + digest[1:].upper()
+        comparison_fixtures.amend(f.b, lambda m: m.update(prediction_source_file_sha256=wrong))
+        before = snapshot(f.root)
+        reply = replay()
+        self.assertEqual(reply.returncode, 2, reply.stderr)
+        self.assertFalse(reply.stdout)
+        self.assertEqual(before, snapshot(f.root))
+
     def test_cli_reconciles_normalized_query_fingerprint_with_retained_csv(self):
         import pandas as pd
         from groupbench import fit_predict

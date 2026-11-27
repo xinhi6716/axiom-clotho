@@ -290,9 +290,11 @@ def compare_saved_predictions(run_a, run_b, query_csv, outcomes_csv, contract):
     for loaded in (loaded_a, loaded_b):
         manifest = loaded[1]
         claimed_hash = manifest.get("prediction_source_file_sha256")
+        # The writer accepts either hex case for a supplied source digest.
+        # Match the same bytes without changing the canonical reported hash.
         if (type(claimed_hash) is not str
-                or re.fullmatch(r"[0-9a-f]{64}", claimed_hash) is None
-                or claimed_hash != query_hash):
+                or re.fullmatch(r"[0-9a-fA-F]{64}", claimed_hash) is None
+                or claimed_hash.lower() != query_hash):
             raise SavedScoringError("Exact query bytes must match both manifest source-hash declarations.")
         config = manifest["config"]
         if config.get("target") != contract["target_column"]:
