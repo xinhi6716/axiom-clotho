@@ -1654,3 +1654,42 @@ def paired_group_mae_upper_tail(rows, *, expected_roster, tail_mass):
         "n_groups_above_boundary": sum(value > boundary for value in effects),
         "n_groups_at_boundary": sum(value == boundary for value in effects),
     }
+
+
+def paired_group_bias_cancellation_audit(rows, *, expected_roster):
+    """Separate signed residual bias from its cancellation across groups.
+
+    Rows are (row ID, target, A prediction, B prediction), matched to an
+    independently frozen (row ID, group ID) roster. Bias is prediction
+    minus target. For row-mass and equal-group weighting, report the mean
+    signed group bias and mean absolute group bias separately; the latter
+    is not row-level MAE. Their difference after taking the absolute value
+    of the signed mean is a nonnegative cancellation gap. All quantities
+    are exact for represented binary64 inputs. This is descriptive, not
+    evidence of calibration, group independence or a population effect.
+    """
+    groups = {}
+    for group, a, b in _paired_group_residual_units(rows, expected_roster):
+        entry = groups.setdefault(group, [0, 0, 0])
+        entry[0] += 1
+        entry[1] += a
+        entry[2] += b
+    unit = _BINARY64_QUANTUM_DENOMINATOR
+    details = {}
+    for group, (n, a, b) in sorted(groups.items()):
+        bias_a, bias_b = Fraction(a, n * unit), Fraction(b, n * unit)
+        details[group] = {"n_rows": n, "a": bias_a, "b": bias_b, "b_minus_a": bias_b - bias_a}
+
+    def report(row_mass):
+        den = len(rows) if row_mass else len(groups)
+        def model(key):
+            weighted = [(g[key], g["n_rows"] if row_mass else 1) for g in details.values()]
+            signed = sum(value * weight for value, weight in weighted) / den
+            magnitude = sum(abs(value) * weight for value, weight in weighted) / den
+            return {"signed_bias": signed, "mean_absolute_group_bias": magnitude,
+                    "cancellation_gap": magnitude - abs(signed)}
+        a, b = map(model, ("a", "b"))
+        return {"a": a, "b": b, "b_minus_a": {key: b[key] - a[key] for key in a}}
+
+    return {"n_rows": len(rows), "n_groups": len(groups), "per_group": details,
+            "row_mass": report(True), "equal_group": report(False)}
