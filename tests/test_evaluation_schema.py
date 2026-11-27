@@ -61,6 +61,45 @@ class EvaluationSchemaTests(unittest.TestCase):
         self.assertEqual(verify_bundle(self.root).bundle_type, 'evaluation')
         with self.assertRaises(ValueError): validate_evaluation_bundle(self.root)
 
+    def test_cli_rebuilds_outer_fold_membership_from_declared_seed(self):
+        from groupbench.evaluation import _evaluation_run_key
+        from groupbench.splitting import GroupKFold
+
+        command = [sys.executable, "-m", "groupbench.cli", "validate-evaluation-bundle", str(self.root)]
+        env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1] / "src"),
+                   OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1", PYTHONDONTWRITEBYTECODE="1")
+
+        def replay():
+            return subprocess.run(command, env=env, text=True, capture_output=True, timeout=30)
+
+        self.assertEqual(replay().returncode, 0)
+        rows = self.results[0].predictions
+        groups = list(rows["group"])
+        folds = list(rows["outer_fold"])
+        alternate_seed = next(seed for seed in range(1, 20) if any(
+            any(folds[i] != fold for i in test)
+            for fold, (_, test) in enumerate(GroupKFold(3, seed).split(groups=groups))))
+
+        def change_seed(manifest):
+            manifest["config"]["random_state"] = alternate_seed
+            # Maintain the run-key declaration; only the source allocation
+            # contradicts this seed, not the internal metrics or digests.
+            manifest["run_key"] = _evaluation_run_key(manifest["data_sha256"], manifest["config"])
+
+        self.mutate_json("manifest.json", change_seed)
+        self.assertEqual(verify_bundle(self.root).bundle_type, "evaluation")
+        before = {p.name: p.read_bytes() for p in self.root.iterdir()}
+        reply = replay()
+        self.assertEqual(reply.returncode, 2, reply.stderr)
+        self.assertIn("seeded outer fold assignment", reply.stderr)
+        self.assertFalse(reply.stdout)
+        self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
+
+        # Readers still accept structurally consistent historical receipts
+        # without asserting this runtime can reproduce another NumPy RNG.
+        self.mutate_json("manifest.json", lambda m: m["environment"].update(numpy="0.0"))
+        self.assertEqual(replay().returncode, 0)
+
     def test_cli_requires_selected_predictions_to_match_declared_family_refit(self):
         from groupbench.model import GroupBenchRegressor
 

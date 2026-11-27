@@ -9,10 +9,12 @@ import re
 import numpy as np
 
 from .baselines import _lower_group_median
-from .data import validate_groups
+from .data import validate_groups, validate_seed
 from .domain_selection import domain_metadata
 from .evaluation import _evaluation_run_key
 from .metrics import regression_metrics, _checked_arithmetic
+from .model import _check_split_position_budget
+from .splitting import GroupKFold
 from .prediction_schema import (_manifest, _DECIMAL, _optional_selection_metadata, _extension_families,
     _DOMAIN_FIELDS, _domain_config, _domain_selection, _reject_domain_audits, _domain_candidates,
     _same_declaration, _extension_families_v2, _extended_selection_v2, _reject_ridge_v2_markers,
@@ -99,6 +101,24 @@ def _partitioned_metrics(observed, predicted, group_rows, fold_rows, fold_groups
                  [by_group[group] for group in fold_groups[fold]])}
                 for fold, indexes in enumerate(fold_rows)]
     return dict(overall=overall, per_group=per_group, per_fold=per_fold)
+
+
+def _check_seeded_outer_assignment(manifest, config, groups, fold_rows):
+    environment = manifest.get("environment")
+    if ("random_state" not in config or not isinstance(environment, dict)
+            or environment.get("numpy") != np.__version__):
+        # Keep byte/semantic validation of historical receipts, without
+        # assuming that a different NumPy release used the same RNG draws.
+        return
+    try:
+        seed = validate_seed(config["random_state"])
+        _check_split_position_budget(len(groups) * len(fold_rows))
+    except ValueError:
+        _fail("unsupported seed or split budget for seeded outer fold assignment.")
+    for saved_rows, (_, expected_rows) in zip(
+            fold_rows, GroupKFold(len(fold_rows), seed).split(groups=groups)):
+        if not np.array_equal(saved_rows, expected_rows):
+            _fail("retained rows disagree with the seeded outer fold assignment.")
 
 
 def _check(manifest, summary, raw):
@@ -190,6 +210,7 @@ def _check(manifest, summary, raw):
         membership[group] = fold
         group_rows[group].append(position)
         fold_rows[fold].append(position)
+    _check_seeded_outer_assignment(manifest, config, groups, fold_rows)
     audits = manifest.get("outer_folds")
     if not isinstance(audits, list) or len(audits) != nf:
         _fail("outer fold audit coverage differs.")
@@ -288,7 +309,7 @@ def _check(manifest, summary, raw):
 
 
 def validate_evaluation_bundle(run_dir) -> EvaluationSchemaResult:
-    """Check saved regression metrics only; no models, sources, HTML rendering or writes."""
+    """Check saved regression folds and metrics; no model fits, source reads or writes."""
     with _open_run_directory(run_dir) as fd:
         _, _, raw, signature = _read_file(fd, "checksums.json", MAX_CHECKSUM_BYTES, collect=True)
         records = _checksum_records(raw)
