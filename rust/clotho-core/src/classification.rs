@@ -363,41 +363,46 @@ fn solve_positive_definite(
     {
         return Err(ClassificationError::ConvergenceFailure);
     }
-    for j in 0..width {
-        for k in 0..=j {
-            matrix[j][k] = matrix[j][k] / scales[j] / scales[k];
+    for (row, &row_scale) in matrix.iter_mut().zip(&scales) {
+        for (entry, &column_scale) in row.iter_mut().zip(&scales) {
+            *entry = *entry / row_scale / column_scale;
         }
     }
     for j in 0..width {
-        for k in 0..=j {
-            let mut value = matrix[j][k];
-            for (a, b) in matrix[j][..k].iter().zip(&matrix[k][..k]) {
+        // Borrow the active row once. Earlier rows already contain the
+        // factor and remain immutable while this row is solved left to right.
+        let (previous, trailing) = matrix.split_at_mut(j);
+        let row = &mut trailing[0];
+        for (k, factored) in previous.iter().enumerate() {
+            let mut value = row[k];
+            for (a, b) in row[..k].iter().zip(&factored[..k]) {
                 value -= a * b;
             }
-            if j == k {
-                // Refuse numerically singular curvature rather than silently
-                // fitting an unrequested pseudoinverse/regularized objective.
-                if value <= 1e-14 || !value.is_finite() {
-                    return Err(ClassificationError::ConvergenceFailure);
-                }
-                matrix[j][j] = value.sqrt();
-            } else {
-                matrix[j][k] = value / matrix[k][k];
-            }
+            row[k] = value / factored[k];
         }
+        let mut diagonal = row[j];
+        for &value in &row[..j] {
+            diagonal -= value * value;
+        }
+        // Refuse numerically singular curvature rather than silently
+        // fitting an unrequested pseudoinverse/regularized objective.
+        if diagonal <= 1e-14 || !diagonal.is_finite() {
+            return Err(ClassificationError::ConvergenceFailure);
+        }
+        row[j] = diagonal.sqrt();
     }
     let mut solution = vec![0.0; width];
-    for j in 0..width {
-        let mut value = right[j] / scales[j];
-        for k in 0..j {
-            value -= matrix[j][k] * solution[k];
+    for (j, (row, (&right, &scale))) in matrix.iter().zip(right.iter().zip(&scales)).enumerate() {
+        let mut value = right / scale;
+        for (entry, solved) in row[..j].iter().zip(&solution[..j]) {
+            value -= entry * solved;
         }
-        solution[j] = finite(value / matrix[j][j])?;
+        solution[j] = finite(value / row[j])?;
     }
     for j in (0..width).rev() {
         let mut value = solution[j];
-        for k in j + 1..width {
-            value -= matrix[k][j] * solution[k];
+        for (row, solved) in matrix[j + 1..].iter().zip(&solution[j + 1..]) {
+            value -= row[j] * solved;
         }
         solution[j] = finite(value / matrix[j][j])?;
     }
@@ -690,4 +695,17 @@ mod tests {
         assert!(result.gradient[1] < 0.0);
         assert!(result.curvature[1][1] > 0.0);
     }
+    #[test]
+    fn packed_cholesky_uses_only_factored_prefix_and_detects_singularity() {
+        let matrix = vec![vec![4.0], vec![2.0, 5.0], vec![-2.0, 0.0, 10.25]];
+        let actual = solve_positive_definite(matrix, &[-8.0, -9.0, 29.75]).unwrap();
+        for (actual, expected) in actual.into_iter().zip([0.5, -2.0, 3.0]) {
+            assert!((actual - expected).abs() < 1e-14);
+        }
+        assert_eq!(
+            solve_positive_definite(vec![vec![1.0], vec![1.0, 1.0]], &[1.0, 1.0]),
+            Err(ClassificationError::ConvergenceFailure)
+        );
+    }
+
 }
