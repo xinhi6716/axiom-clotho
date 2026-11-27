@@ -396,3 +396,12 @@ coupling constraints. Early coverage uses (0, 1.02] s and terminal coverage
 uses [80,000, 120,000] s: zero early is excluded, but both terminal edges
 are included. Missing origin or read evidence is counted separately. These
 secondary counts do not infer anchor identity or change timing admission.
+
+Add `--diagnose-early-route-terminal` with both route tables to stratify
+terminal anchor availability by route agreement at the early anchor alone.
+A terminal route change does not move an episode into a different early
+route group, and an absent terminal does not make an otherwise known early
+route unresolved. The report uses the full frozen roster as the denominator
+and counts terminal nominal absence separately from duplicate or unusable
+terminal metadata. These counts characterize selection and do not imply
+that route disagreement caused non-observation or alter the timing gate.

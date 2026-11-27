@@ -214,6 +214,34 @@ class RetentionAnchorAudit(unittest.TestCase):
         self.assertIn("timestamp capture SHA-256 must be 64 lowercase", invalid.stderr)
         self.assertFalse(invalid.stdout)
 
+    def test_terminal_missingness_is_stratified_by_early_route_only(self):
+        roster = [(*BASE[:4], f"E{i}") for i in range(6)]
+        early, terminal = 1_000_000, 100_000_000_000
+        rows = (episode(roster[0]) + episode(roster[1])[:2] + episode(roster[2])
+                + episode(roster[3])[:2] + episode(roster[4]))
+        plan = [(*key, tick, "privatePlanned") for key in roster for tick in (0, early, terminal)]
+        log = [
+            (*roster[0], early, "privatePlanned"), (*roster[0], terminal, "different"),
+            (*roster[1], early, "privatePlanned"),
+            (*roster[2], early, "different"), (*roster[2], terminal, "privatePlanned"),
+            (*roster[3], early, "different"),
+            (*roster[4], terminal, "privatePlanned"),
+        ]
+        flag = "--diagnose-early-route-terminal"
+        plain = self.run_capture(roster, rows, readout_paths=log, planned_paths=plan)
+        checked = self.run_capture(roster, rows, readout_paths=log, planned_paths=plan, extra=(flag,))
+        self.assertEqual((plain.returncode, checked.returncode), (1, 1))
+        report = json.loads(checked.stdout)
+        joint = report.pop("terminal_anchor_support_by_early_route_agreement")
+        for status in ("all_logged_routes_match_plan", "logged_route_differs_from_plan", "unresolved_route"):
+            self.assertEqual(joint[status], {"frozen_attempted_episodes": 2,
+                "frozen_attempted_by_terminal_status": {"missing_nominal_anchor": 1, "within_window": 1}})
+        self.assertEqual(report, json.loads(plain.stdout))
+        self.assertNotIn("privatePlanned", checked.stdout)
+        denied = self.run_capture(roster, rows, readout_paths=log, extra=(flag,))
+        self.assertEqual(denied.returncode, 2)
+        self.assertIn("requires both planned and observed", denied.stderr)
+
     def test_decimal_elapsed_windows_distinguish_origin_uncertainty_and_inclusive_edges(self):
         keys = [(*BASE[:4], f"E{i}") for i in range(5)]
         anchors = (0, 1_000_000, 100_000_000_000)

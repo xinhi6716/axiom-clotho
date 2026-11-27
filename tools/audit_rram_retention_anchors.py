@@ -248,9 +248,9 @@ def planned_readout_paths(path, roster):
     return plans
 
 
-def planned_path_status(slots, observed, plan):
+def planned_path_status(slots, observed, plan, nominals=ANCHORS):
     unresolved = False
-    for nominal in ANCHORS:
+    for nominal in nominals:
         path = observed.get(nominal)
         if len(slots.get(nominal, ())) != 1 or not path:
             unresolved = True
@@ -799,7 +799,9 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
           planned_bias_table=None, planned_role_table=None, logged_role_table=None,
           planned_aperture_width_table=None, event_order_table=None,
           diagnose_individual_read_counters=False, native_timer_segment_table=None, timing_envelope_table=None, decimal_time_token_table=None,
-          diagnose_decimal_elapsed=False):
+          diagnose_decimal_elapsed=False, diagnose_early_route_terminal=False):
+    if diagnose_early_route_terminal and (planned_path_table is None or readout_path_table is None):
+        raise ValueError("early route/terminal diagnosis requires both planned and observed readout paths")
     if diagnose_decimal_elapsed and decimal_time_token_table is None:
         raise ValueError("decimal elapsed diagnosis requires decimal time tokens")
     if diagnose_individual_read_counters and (event_order_table is None or native_read_table is None):
@@ -873,6 +875,7 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
 
     plans = planned_readout_paths(planned_path_table, expected) if planned_path_table is not None else None
     attempted_plan_paths, eligible_plan_paths = Counter(), Counter()
+    terminal_by_early_route = defaultdict(Counter)
     paths = readout_paths(readout_path_table, expected) if readout_path_table is not None else None
     attempted_paths, eligible_paths = Counter(), Counter()
     native_reads, native_read_assignments = (native_read_identity_statuses(native_read_table, expected)
@@ -942,6 +945,10 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
             attempted_plan_paths[status] += 1
             if reason == "eligible":
                 eligible_plan_paths[status] += 1
+        if diagnose_early_route_terminal:
+            early_status = planned_path_status(slots, paths.get(key, {}), plans[key], ANCHORS[1:2])
+            terminal_status = tuple(anchor_statuses(slots))[-1]
+            terminal_by_early_route[early_status][terminal_status] += 1
         if native_reads is not None:
             status = native_reads[key]
             attempted_native_reads[status] += 1
@@ -1139,6 +1146,12 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
             "frozen_attempted_by_status": dict(sorted(attempted_plan_paths.items())),
             "timing_eligible_by_status": dict(sorted(eligible_plan_paths.items())),
         }
+    if diagnose_early_route_terminal:
+        report["terminal_anchor_support_by_early_route_agreement"] = {
+            status: {"frozen_attempted_episodes": sum(counts.values()),
+                     "frozen_attempted_by_terminal_status": dict(sorted(counts.items()))}
+            for status, counts in sorted(terminal_by_early_route.items())
+        }
     if native_reads is not None:
         report["native_read_identity_support"] = {
             "frozen_attempted_by_status": dict(sorted(attempted_native_reads.items())),
@@ -1298,6 +1311,8 @@ def main():
                         help="independent common-clock rounded time tokens and declared resolutions")
     parser.add_argument("--diagnose-decimal-elapsed", action="store_true",
                         help="conditional origin-to-read elapsed bounds under declared token intervals")
+    parser.add_argument("--diagnose-early-route-terminal", action="store_true",
+                        help="describe terminal support stratified by route agreement at the early anchor only")
     args = parser.parse_args()
     try:
         report = audit(args.frozen_roster, args.capture, diagnose_anchors=args.diagnose_anchors,
@@ -1325,7 +1340,8 @@ def main():
                        native_timer_segment_table=args.native_timer_segments,
                        timing_envelope_table=args.timing_envelope_windows,
                        decimal_time_token_table=args.decimal_time_tokens,
-                       diagnose_decimal_elapsed=args.diagnose_decimal_elapsed)
+                       diagnose_decimal_elapsed=args.diagnose_decimal_elapsed,
+                       diagnose_early_route_terminal=args.diagnose_early_route_terminal)
     except (OSError, UnicodeError, csv.Error):
         parser.exit(2, "error: input could not be read as UTF-8 CSV\n")
     except ValueError as exc:
