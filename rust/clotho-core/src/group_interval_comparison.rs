@@ -62,17 +62,19 @@ pub fn compare_interval_coverage(
             });
         }
     };
-    // Each map has already matched the exact same sorted composite keys.
+    // Each input has already matched the exact same sorted composite keys.
     // Zip them in key order, so each group is one contiguous run.
     let mut rows = CoverageTransitions::default();
     let mut whole_groups = CoverageTransitions::default();
     let mut current = None;
     let (mut left_all, mut right_all) = (true, true);
-    for (((key, &value), (left_key, &(left_lo, left_hi))), (right_key, &(right_lo, right_hi))) in
+    for ((observation, left), right) in
         matched.observed.iter().zip(left_bounds.iter()).zip(right_bounds.iter())
     {
-        debug_assert_eq!(key, left_key);
-        debug_assert_eq!(key, right_key);
+        let key = observation.key;
+        let value = observation.value;
+        debug_assert_eq!(key, left.key);
+        debug_assert_eq!(key, right.key);
         if current != Some(key.group) {
             if current.is_some() {
                 whole_groups.add(left_all, right_all);
@@ -80,8 +82,8 @@ pub fn compare_interval_coverage(
             current = Some(key.group);
             (left_all, right_all) = (true, true);
         }
-        let left = left_lo <= value && value <= left_hi;
-        let right = right_lo <= value && value <= right_hi;
+        let left = left.lower <= value && value <= left.upper;
+        let right = right.lower <= value && value <= right.upper;
         rows.add(left, right);
         left_all &= left;
         right_all &= right;

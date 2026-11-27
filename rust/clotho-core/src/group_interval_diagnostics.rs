@@ -3,8 +3,8 @@
 //! This audit is not calibration, independence evidence, or a population guarantee.
 
 use crate::group_max_calibration::{valid_key, RowKey, MAX_CALIBRATION_ROWS};
-use crate::group_max_intervals::GroupMaxIntervals;
-use std::collections::{BTreeMap, BTreeSet};
+use crate::group_max_intervals::{GroupMaxIntervals, QueryInterval};
+use std::borrow::Cow;
 
 #[derive(Clone, Copy, Debug)]
 pub struct IntervalObservation<'a> {
@@ -40,20 +40,34 @@ pub enum GroupIntervalDiagnostic {
     },
 }
 
-pub(crate) struct IntervalRoster<'a> {
-    expected: BTreeSet<RowKey<'a>>,
-    pub(crate) observed: BTreeMap<RowKey<'a>, f64>,
+pub(crate) struct IntervalRoster<'a, 's> {
+    pub(crate) observed: Cow<'s, [IntervalObservation<'a>]>,
 }
 
-pub(crate) enum ValidatedBounds<'a> {
+pub(crate) enum ValidatedBounds<'a, 's> {
     Insufficient { groups: usize, rank: usize },
-    Finite(BTreeMap<RowKey<'a>, (f64, f64)>),
+    Finite(Cow<'s, [QueryInterval<'a>]>),
 }
 
-impl<'a> IntervalRoster<'a> {
+// Preserve the original rows when already ordered. Copy only when keys
+// decrease; duplicate detection is a separate exact roster check.
+fn ordered_rows<'a, 's, T: Clone>(
+    rows: &'s [T],
+    key: impl Fn(&T) -> RowKey<'a>,
+) -> Cow<'s, [T]> {
+    if rows.windows(2).all(|w| key(&w[0]) <= key(&w[1])) {
+        Cow::Borrowed(rows)
+    } else {
+        let mut ordered = rows.to_vec();
+        ordered.sort_unstable_by(|a, b| key(a).cmp(&key(b)));
+        Cow::Owned(ordered)
+    }
+}
+
+impl<'a, 's> IntervalRoster<'a, 's> {
     pub(crate) fn new(
         roster: &[RowKey<'a>],
-        observations: &[IntervalObservation<'a>],
+        observations: &'s [IntervalObservation<'a>],
     ) -> Result<Self, IntervalDiagnosticError> {
         use IntervalDiagnosticError as Error;
         if roster.len() > MAX_CALIBRATION_ROWS || observations.len() > MAX_CALIBRATION_ROWS {
@@ -65,24 +79,28 @@ impl<'a> IntervalRoster<'a> {
         if !roster.iter().copied().chain(observations.iter().map(|r| r.key)).all(valid_key) {
             return Err(Error::InvalidKey);
         }
-        let expected: BTreeSet<_> = roster.iter().copied().collect();
-        let observed: BTreeMap<_, _> = observations.iter().map(|r| (r.key, r.value)).collect();
-        if expected.len() != roster.len() || observed.len() != observations.len()
-            || !expected.iter().copied().eq(observed.keys().copied()) {
+        if roster.len() != observations.len() {
             return Err(Error::RosterMismatch);
         }
-        if !observed.values().all(|x| x.is_finite()) {
+        let expected = ordered_rows(roster, |key| *key);
+        let observed = ordered_rows(observations, |r| r.key);
+        if expected.windows(2).any(|w| w[0] == w[1])
+            || !expected.iter().copied().eq(observed.iter().map(|r| r.key))
+        {
+            return Err(Error::RosterMismatch);
+        }
+        if !observed.iter().all(|r| r.value.is_finite()) {
             return Err(Error::NonfiniteObservation);
         }
-        Ok(Self { expected, observed })
+        Ok(Self { observed })
     }
 
     // Carry the same bound checks into either single-arm scoring or paired
-    // scoring without rebuilding shared roster/observation maps.
-    pub(crate) fn bounds(
+    // scoring. The observed keys have already matched the declared roster.
+    pub(crate) fn bounds<'p>(
         &self,
-        prediction: &GroupMaxIntervals<'a>,
-    ) -> Result<ValidatedBounds<'a>, IntervalDiagnosticError> {
+        prediction: &'p GroupMaxIntervals<'a>,
+    ) -> Result<ValidatedBounds<'a, 'p>, IntervalDiagnosticError> {
         use IntervalDiagnosticError as Error;
         let intervals = match prediction {
             GroupMaxIntervals::Finite { intervals, .. } => intervals,
@@ -96,16 +114,14 @@ impl<'a> IntervalRoster<'a> {
         if !intervals.iter().all(|r| valid_key(r.key)) {
             return Err(Error::InvalidKey);
         }
-        let predicted: BTreeMap<_, _> = intervals
-            .iter()
-            .map(|r| (r.key, (r.lower, r.upper)))
-            .collect();
-        if predicted.len() != intervals.len()
-            || !self.expected.iter().copied().eq(predicted.keys().copied())
-        {
+        if intervals.len() != self.observed.len() {
             return Err(Error::RosterMismatch);
         }
-        if !predicted.values().all(|(l, u)| l.is_finite() && u.is_finite() && l <= u) {
+        let predicted = ordered_rows(intervals, |r| r.key);
+        if !self.observed.iter().map(|r| r.key).eq(predicted.iter().map(|r| r.key)) {
+            return Err(Error::RosterMismatch);
+        }
+        if !predicted.iter().all(|r| r.lower.is_finite() && r.upper.is_finite() && r.lower <= r.upper) {
             return Err(Error::InvalidBounds);
         }
         Ok(ValidatedBounds::Finite(predicted))
@@ -137,7 +153,7 @@ pub(crate) fn evaluate_group_intervals_by_group(
         ValidatedBounds::Insufficient { groups, rank } => {
             let mut count = 0;
             let mut previous_group = None;
-            for key in matched.observed.keys() {
+            for key in matched.observed.iter().map(|r| r.key) {
                 if previous_group != Some(key.group) {
                     count += 1;
                     previous_group = Some(key.group);
@@ -149,7 +165,7 @@ pub(crate) fn evaluate_group_intervals_by_group(
         }
     };
 
-    // The two maps were independently matched to the exact same sorted
+    // The two inputs were independently matched to the exact same sorted
     // roster. Therefore corresponding entries have identical row keys, and
     // rows of each group are contiguous without another lookup or index.
     let mut previous_group = None;
@@ -161,10 +177,10 @@ pub(crate) fn evaluate_group_intervals_by_group(
         groups_fully_covered += usize::from(rows == covered);
         visit_group(rows, covered);
     };
-    for ((key, &(lower, upper)), (observed_key, &value)) in
-        predicted.iter().zip(matched.observed.iter())
-    {
-        debug_assert_eq!(key, observed_key);
+    for (interval, observed) in predicted.iter().zip(matched.observed.iter()) {
+        let QueryInterval { key, lower, upper } = *interval;
+        let value = observed.value;
+        debug_assert_eq!(key, observed.key);
         if previous_group != Some(key.group) {
             if group_rows > 0 {
                 finish_group(group_rows, group_covered);
@@ -241,4 +257,42 @@ mod tests {
         assert_eq!(evaluate_group_intervals(&[A], &wrong, &[obs(A,0.)]),
             Err(IntervalDiagnosticError::InvalidBounds));
     }
+    #[test]
+    fn sorted_rosters_borrow_rows_and_shuffled_inputs_use_the_same_order() {
+        let observations = [obs(A, -1.0), obs(B, 1.0), obs(C, 2.0)];
+        let prediction = bounds(&[A, B, C]);
+        let ordered = IntervalRoster::new(&[A, B, C], &observations).unwrap();
+        assert!(matches!(ordered.observed, Cow::Borrowed(_)));
+        assert!(matches!(
+            ordered.bounds(&prediction),
+            Ok(ValidatedBounds::Finite(Cow::Borrowed(_)))
+        ));
+        let reversed = [observations[2], observations[1], observations[0]];
+        let unordered = IntervalRoster::new(&[B, C, A], &reversed).unwrap();
+        assert!(matches!(unordered.observed, Cow::Owned(_)));
+        assert_eq!(
+            unordered.observed.iter().map(|r| r.key).collect::<Vec<_>>(),
+            vec![A, B, C]
+        );
+        assert_eq!(
+            evaluate_group_intervals(&[B, C, A], &bounds(&[B, A, C]), &reversed),
+            evaluate_group_intervals(&[A, B, C], &prediction, &observations)
+        );
+
+        // A bad value/bound remains subordinate to the exact-roster check.
+        let duplicated = [observations[0], observations[0], obs(C, f64::NAN)];
+        assert_eq!(
+            evaluate_group_intervals(&[A, B, C], &prediction, &duplicated),
+            Err(IntervalDiagnosticError::RosterMismatch)
+        );
+        let mut wrong = bounds(&[A, A, C]);
+        if let GroupMaxIntervals::Finite { intervals, .. } = &mut wrong {
+            intervals[2].lower = f64::INFINITY;
+        }
+        assert_eq!(
+            evaluate_group_intervals(&[A, B, C], &wrong, &observations),
+            Err(IntervalDiagnosticError::RosterMismatch)
+        );
+    }
+
 }
