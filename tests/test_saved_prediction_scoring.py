@@ -150,9 +150,12 @@ class SavedPredictionScoringTests(unittest.TestCase):
         for token, observed in (("1e-999", "0"), ("9007199254740993", "9007199254740992")):
             with self.subTest(token=token):
                 make_bundle(self.bundle, [token])
-                # Structural acceptance stays unchanged; scoring is a stricter
-                # numeric subset and must not silently turn these into equality.
-                self.assertEqual(validate_prediction_bundle_schema(self.bundle).n_predictions, 1)
+                if token == "1e-999":
+                    with self.assertRaisesRegex(ValueError, "underflows to zero"):
+                        validate_prediction_bundle_schema(self.bundle)
+                else:
+                    # Scoring retains its stricter bare-integer precision check.
+                    self.assertEqual(validate_prediction_bundle_schema(self.bundle).n_predictions, 1)
                 self.reject_rows("row_position,group,observed\n0,A," + observed + "\n")
 
     def test_finite_conversion_but_unsafe_metric_arithmetic_rejects(self):

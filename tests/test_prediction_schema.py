@@ -185,6 +185,42 @@ class PredictionSchemaTests(unittest.TestCase):
         write_bundle(self.root, altered, csv=raw)
         self.assertEqual(replay().returncode, 0)
 
+    def test_cli_rejects_nonzero_prediction_collapsing_to_zero(self):
+        import pandas as pd
+        from groupbench import fit_predict
+
+        frame = pd.DataFrame({"g": list("abc") * 2, "x": range(6), "y": [0.] * 6})
+        fit = fit_predict(frame, frame[["x"]].head(2), target="y", group="g",
+                          baselines=("dummy",), inner_splits=2)
+        fit.write(self.root)
+        env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1] / "src"),
+                   OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1", PYTHONDONTWRITEBYTECODE="1")
+        cmd = [sys.executable, "-m", "groupbench", "validate-prediction-bundle", str(self.root)]
+
+        def replay():
+            return subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=30)
+
+        self.assertEqual(replay().returncode, 0)
+
+        def publish(token):
+            write_bundle(self.root, fit.manifest,
+                         csv=f"row_position,prediction\n0,{token}\n1,0.0\n".encode())
+            self.assertEqual(verify_bundle(self.root).bundle_type, "prediction")
+
+        for token in ("-0e-999", "5e-324", "-5e-324"):
+            with self.subTest(token=token):
+                publish(token)
+                self.assertEqual(replay().returncode, 0)
+        for token in ("1e-4000", "-2e-324"):
+            with self.subTest(token=token):
+                publish(token)
+                before = {p.name: p.read_bytes() for p in self.root.iterdir()}
+                reply = replay()
+                self.assertEqual(reply.returncode, 2, reply.stderr)
+                self.assertIn("prediction underflows to zero", reply.stderr)
+                self.assertFalse(reply.stdout)
+                self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
+
     def test_count_types_and_bounds(self):
         for key in ("n_training_rows", "n_training_groups", "n_predictions"):
             for bad in (True, False, 0, -1, 1.0, "2", None, 20001):

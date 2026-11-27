@@ -914,11 +914,12 @@ def _predictions(raw, n_predictions, *, selected_median=None):
             value = float(token)
             if not math.isfinite(value):
                 _fail("CSV predictions must be bounded finite decimal numbers.")
+            if value == 0 and any(ch in "123456789" for ch in token.lower().split("e", 1)[0]):
+                _fail("nonzero CSV prediction underflows to zero in binary64.")
             if selected_median is not None:
                 if token.lstrip("+-").isdigit():
                     value = int(token)
-                underflows = value == 0 and any(ch in "123456789" for ch in token.lower().split("e", 1)[0])
-                if value != selected_median or underflows:
+                if value != selected_median:
                     _fail("CSV predictions differ from the selected group-median refit constant.")
             count += 1
         if count != n_predictions:
