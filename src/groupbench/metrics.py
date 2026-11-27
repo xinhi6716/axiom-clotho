@@ -1186,3 +1186,57 @@ def paired_mae_group_weight_bounds(rows, *, expected_roster, group_weight_bounds
             lower * n_groups <= unit <= upper * n_groups for lower, upper in declared.values()),
         "target_group_weighted_mae_b_minus_a_bounds": (allocate(ordered), allocate(reversed(ordered))),
     }
+
+
+def paired_mae_group_sign_stability(rows, *, expected_roster):
+    """Identify which whole-group omissions alter the exact paired MAE winner.
+
+    Rows are (row ID, target, forecast A, forecast B); the independent frozen
+    roster fixes (row ID, group ID). Both comparisons use the same rows and
+    omit the same complete group. Micro weights rows equally; equal-group
+    weights each remaining group equally after averaging its rows. Signs are
+    computed exactly for the represented binary64 inputs, not rounded losses.
+    This is a descriptive sensitivity check, not permission to omit a group,
+    a test of group independence, or evidence about unobserved groups.
+    """
+    group_totals = {}
+    for group, a, b in _paired_group_error_units(rows, expected_roster):
+        entry = group_totals.setdefault(group, [0, 0])
+        entry[0] += 1
+        entry[1] += b - a
+    micro = sum(total for _, total in group_totals.values())
+    group_means = {group: Fraction(total, n) for group, (n, total) in group_totals.items()}
+    equal_group = sum(group_means.values(), Fraction())
+
+    def winner(delta):
+        return "A" if delta > 0 else "B" if delta < 0 else "tie"
+
+    full = {"micro": winner(micro), "equal_group": winner(equal_group)}
+    omissions = []
+    if len(group_totals) > 1:
+        for group, (n, total) in sorted(group_totals.items()):
+            omissions.append({
+                "omitted_group": group,
+                "n_omitted_rows": n,
+                "micro": winner(micro - total),
+                "equal_group": winner(equal_group - group_means[group]),
+            })
+
+    def classify(weighting):
+        original = full[weighting]
+        return {
+            "strict_reversals": tuple(item["omitted_group"] for item in omissions
+                                      if original != "tie" and item[weighting] not in (original, "tie")),
+            "ties_created": tuple(item["omitted_group"] for item in omissions
+                                  if original != "tie" and item[weighting] == "tie"),
+            "ties_resolved": tuple(item["omitted_group"] for item in omissions
+                                   if original == "tie" and item[weighting] != "tie"),
+        }
+
+    return {
+        "n_rows": len(rows),
+        "n_groups": len(group_totals),
+        "winner": full,
+        "without_group": tuple(omissions),
+        "changes": {weighting: classify(weighting) for weighting in full},
+    }
