@@ -28,6 +28,13 @@ _CONTRACT = {"schema_version": "1.0", "algorithm": "sha256",
              "scope": "fixed_groupbench_python_sources_v1"}
 
 
+def _source_map_digest(records):
+    """Combine declared per-file digests without reading a source path."""
+    canonical = json.dumps({**_CONTRACT, "files": records}, sort_keys=True,
+                           separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
+
+
 def observe_package_source():
     """Return a source-byte observation or unavailable, without blocking a run.
 
@@ -75,9 +82,7 @@ def observe_package_source():
             with _open_run_directory(_PACKAGE_ROOT) as current_root_fd:
                 if _signature(os.fstat(current_root_fd)) != root_signature:
                     return {**unavailable, "reason": "source_unavailable_or_changed"}
-        canonical = json.dumps({**_CONTRACT, "files": records}, sort_keys=True,
-                               separators=(",", ":"), ensure_ascii=True).encode("utf-8")
-        return {**_CONTRACT, "status": "available", "sha256": hashlib.sha256(canonical).hexdigest(),
+        return {**_CONTRACT, "status": "available", "sha256": _source_map_digest(records),
                 "files": records}
     except (OSError, ValueError):
         # Never serialize filesystem exceptions or partial records: they may

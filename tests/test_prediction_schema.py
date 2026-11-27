@@ -144,6 +144,47 @@ class PredictionSchemaTests(unittest.TestCase):
         write_bundle(self.root, legacy, csv=csv)
         self.assertEqual(replay().returncode, 0)
 
+    def test_cli_reconciles_retained_package_source_map_digest(self):
+        import pandas as pd
+        from groupbench import fit_predict
+
+        frame = pd.DataFrame({"g": list("abc") * 2, "x": range(6), "y": range(6)})
+        fit = fit_predict(frame, frame[["x"]].head(2), target="y", group="g",
+                          baselines=("dummy",), inner_splits=2)
+        fit.write(self.root)
+        observed = fit.manifest["package_source"]
+        self.assertEqual(observed["status"], "available")
+        raw = (self.root / "predictions.csv").read_bytes()
+        env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1] / "src"),
+                   OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1", PYTHONDONTWRITEBYTECODE="1")
+        cmd = [sys.executable, "-m", "groupbench", "validate-prediction-bundle", str(self.root)]
+
+        def replay():
+            return subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=30)
+
+        self.assertEqual(replay().returncode, 0)
+        altered = copy.deepcopy(fit.manifest)
+        files = altered["package_source"]["files"]
+        name = next(iter(files))
+        files[name] = ("1" if files[name][0] == "0" else "0") + files[name][1:]
+        write_bundle(self.root, altered, csv=raw)
+        self.assertEqual(verify_bundle(self.root).bundle_type, "prediction")
+        before = {p.name: p.read_bytes() for p in self.root.iterdir()}
+        reply = replay()
+        self.assertEqual(reply.returncode, 2, reply.stderr)
+        self.assertIn("source-map aggregate digest", reply.stderr)
+        self.assertFalse(reply.stdout)
+        self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
+
+        # A coherent map may be historical; validation only checks declaration
+        # consistency and does not inspect the currently installed source files.
+        body = {key: value for key, value in altered["package_source"].items()
+                if key not in ("status", "sha256")}
+        canonical = json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
+        altered["package_source"]["sha256"] = hashlib.sha256(canonical).hexdigest()
+        write_bundle(self.root, altered, csv=raw)
+        self.assertEqual(replay().returncode, 0)
+
     def test_count_types_and_bounds(self):
         for key in ("n_training_rows", "n_training_groups", "n_predictions"):
             for bad in (True, False, 0, -1, 1.0, "2", None, 20001):

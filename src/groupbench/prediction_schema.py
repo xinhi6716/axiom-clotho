@@ -797,12 +797,29 @@ def _domain_selection(value, rows, group_ids, mapping, inner, config, *, group_s
     _domain_records(value, config, audits)
 
 
+def _check_package_source_digest(source):
+    from .package_source import _CONTRACT, _source_map_digest
+
+    if (not isinstance(source, dict) or source.get("status") != "available"
+            or any(source.get(key) != value for key, value in _CONTRACT.items())):
+        return  # Absent, unavailable and unknown historical descriptors stay opaque.
+    records = source.get("files")
+    if (not isinstance(records, dict) or not 1 <= len(records) <= 256
+            or any(not _text(name) or len(name) > 256 or not name.endswith(".py")
+                   or "\\" in name or any(part in ("", ".", "..") for part in name.split("/"))
+                   or not isinstance(digest, str) or re.fullmatch(r"[0-9a-f]{64}", digest) is None
+                   for name, digest in records.items())
+            or source.get("sha256") != _source_map_digest(records)):
+        _fail("recorded package source-map aggregate digest is inconsistent.")
+
+
 def _metadata(manifest):
     version = manifest.get("schema_version")
     if (manifest.get("mode") != "fit_predict" or "schema_id" in manifest
             or version not in ("1.0", "1.1", "1.2", "1.3", "1.4", "1.5")):
         _fail("only supported regression fit_predict schemas 1.0/1.1/1.2/1.3/1.4/1.5 are accepted.")
     config = _object(manifest.get("config"))
+    _check_package_source_digest(manifest.get("package_source"))
     if version != "1.5":
         _reject_ridge_v2_markers(manifest)
     if version != "1.4":
