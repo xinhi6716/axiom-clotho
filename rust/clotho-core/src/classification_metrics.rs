@@ -145,20 +145,25 @@ pub fn binary_metrics(
     let mut loss_sum = CompensatedSum::default();
     let mut brier_sum = CompensatedSum::default();
 
-    for (&label, &value) in y_true.iter().zip(probability) {
-        let positive = label == 1.0;
-        let classified_positive = value >= threshold;
-        actual_positive += usize::from(positive);
-        predicted_positive += usize::from(classified_positive);
-        tp += usize::from(positive & classified_positive);
-        let clipped = value.clamp(LOG_LOSS_EPSILON, 1.0 - LOG_LOSS_EPSILON);
-        loss_sum.add(if positive {
-            -clipped.ln()
-        } else {
-            -(-clipped).ln_1p()
-        });
-        let error = value - label;
-        brier_sum.add(error * error);
+    if first_other.is_none() && y_true.len() >= 8 {
+        (tp, actual_positive, predicted_positive, loss_sum, brier_sum) =
+            endpoint_sums(y_true, probability, threshold);
+    } else {
+        for (&label, &value) in y_true.iter().zip(probability) {
+            let positive = label == 1.0;
+            let classified_positive = value >= threshold;
+            actual_positive += usize::from(positive);
+            predicted_positive += usize::from(classified_positive);
+            tp += usize::from(positive & classified_positive);
+            let clipped = value.clamp(LOG_LOSS_EPSILON, 1.0 - LOG_LOSS_EPSILON);
+            loss_sum.add(if positive {
+                -clipped.ln()
+            } else {
+                -(-clipped).ln_1p()
+            });
+            let error = value - label;
+            brier_sum.add(error * error);
+        }
     }
 
     let n_positive = actual_positive;
@@ -200,6 +205,38 @@ pub fn binary_metrics(
         tn,
         fn_,
     })
+}
+
+// Endpoints have only four distinct clipped losses. Evaluate the same
+// expressions once, then still add each rounded term in input order.
+#[inline(never)]
+fn endpoint_sums(
+    labels: &[f64],
+    probabilities: &[f64],
+    threshold: f64,
+) -> (usize, usize, usize, CompensatedSum, CompensatedSum) {
+    // Use the runtime libm path, just like a clipped runtime probability:
+    // compile-time transcendental folding need not use the target's libm.
+    let low = std::hint::black_box(LOG_LOSS_EPSILON);
+    let high = std::hint::black_box(1.0 - LOG_LOSS_EPSILON);
+    let losses = [[-(-low).ln_1p(), -low.ln()], [-(-high).ln_1p(), -high.ln()]];
+    let mut loss = CompensatedSum::default();
+    let mut brier = CompensatedSum::default();
+    let mut predicted = 0;
+    let mut actual = 0;
+    let mut tp = 0;
+
+    for (&label, &value) in labels.iter().zip(probabilities) {
+        let positive = label == 1.0;
+        let one = value == 1.0;
+        let classified_positive = one | (threshold == 0.0);
+        actual += usize::from(positive);
+        predicted += usize::from(classified_positive);
+        tp += usize::from(positive & classified_positive);
+        loss.add(losses[usize::from(one)][usize::from(positive)]);
+        brier.add(f64::from(u8::from(positive != one)));
+    }
+    (tp, actual, predicted, loss, brier)
 }
 
 // Integer units are 2^-2148, the square of the minimum subnormal. Even a
@@ -404,6 +441,32 @@ impl CompensatedSum {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn endpoint_sums_preserve_runtime_loss_and_square_bits_in_input_order() {
+        for n in [8, 9, 32, 4096] {
+            for seed in 0..8 {
+                let labels: Vec<_> = (0..n).map(|i| if (i ^ seed) % 7 < 3 { -0.0 } else { 1.0 }).collect();
+                let probability: Vec<_> = (0..n).map(|i| if (i + seed) % 11 < 4 { -0.0 } else { 1.0 }).collect();
+                for threshold in [-0.0, 0.5, 1.0] {
+                    let result = binary_metrics(&labels, &probability, threshold).unwrap();
+                    let mut loss = CompensatedSum::default();
+                    let mut brier = CompensatedSum::default();
+                    let mut confusion = [0; 4];
+                    for (&label, &p) in labels.iter().zip(&probability) {
+                        let clipped = std::hint::black_box(p).clamp(LOG_LOSS_EPSILON, 1.0 - LOG_LOSS_EPSILON);
+                        loss.add(if label == 1.0 { -clipped.ln() } else { -(-clipped).ln_1p() });
+                        let error = p - label;
+                        brier.add(error * error);
+                        confusion[2 * usize::from(label == 1.0) + usize::from(p >= threshold)] += 1;
+                    }
+                    assert_eq!([result.tn, result.fp, result.fn_, result.tp], confusion);
+                    assert_eq!(result.log_loss.to_bits(), (loss.total() / n as f64).to_bits());
+                    assert_eq!(result.brier.to_bits(), (brier.total() / n as f64).to_bits());
+                }
+            }
+        }
+    }
 
     #[test]
     fn auc_preserves_ties_and_adjacent_scores_across_all_input_orders() {
