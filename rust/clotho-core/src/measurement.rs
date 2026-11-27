@@ -62,6 +62,66 @@ fn valid_id(key: &[String], width: usize) -> bool {
                 && !s.chars().any(char::is_control)
         })
 }
+enum OrderedRoster<'a, T> {
+    Borrowed(&'a [T], bool),
+    Indexed(BTreeMap<&'a [String], &'a T>),
+}
+
+enum RosterIter<'i, 'a, T> {
+    Borrowed(std::slice::Iter<'a, T>),
+    Reversed(std::iter::Rev<std::slice::Iter<'a, T>>),
+    Indexed(std::collections::btree_map::Values<'i, &'a [String], &'a T>),
+}
+
+impl<'a, T> Iterator for RosterIter<'_, 'a, T> {
+    type Item = &'a T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Self::Borrowed(rows) => rows.next(),
+            Self::Reversed(rows) => rows.next(),
+            Self::Indexed(rows) => rows.next().copied(),
+        }
+    }
+}
+
+impl<'a, T> OrderedRoster<'a, T> {
+    fn iter(&self) -> RosterIter<'_, 'a, T> {
+        match self {
+            Self::Borrowed(rows, false) => RosterIter::Borrowed(rows.iter()),
+            Self::Borrowed(rows, true) => RosterIter::Reversed(rows.iter().rev()),
+            Self::Indexed(rows) => RosterIter::Indexed(rows.values()),
+        }
+    }
+}
+
+fn checked_roster<'a, T>(
+    rows: &'a [T],
+    key: impl Fn(&T) -> &[String],
+    check: impl Fn(&T) -> Result<(), JoinError>,
+) -> Result<OrderedRoster<'a, T>, JoinError> {
+    let descending = rows.first().map(&key) > rows.last().map(&key);
+    if rows.windows(2).all(|w| {
+        if descending { key(&w[0]) > key(&w[1]) } else { key(&w[0]) < key(&w[1]) }
+    }) {
+        for row in rows {
+            check(row)?;
+        }
+        Ok(OrderedRoster::Borrowed(rows, descending))
+    } else {
+        let mut index = BTreeMap::new();
+        for row in rows {
+            // Validate and check duplicates in arrival order. Doing all the
+            // value checks before indexing would change error precedence.
+            check(row)?;
+            if index.insert(key(row), row).is_some() {
+                return Err(JoinError::DuplicateIdentity);
+            }
+        }
+        Ok(OrderedRoster::Indexed(index))
+    }
+}
+
 /// Output order is canonical lexicographic composite identity order within each
 /// partition. `group_prefix` uses exact tuple components, never delimiter joins.
 /// No acquisition, blinding, causal independence or source authenticity is
@@ -87,83 +147,71 @@ pub fn prepare_measurements(
     if n_features == 0 || n_features > 100 {
         return Err(JoinError::InvalidFeatures);
     }
-    // Keep borrowed tuple keys while checking the rosters. Only the returned
-    // rows need to own their identities and group prefixes.
-    let mut by_feature = BTreeMap::new();
-    for row in features {
+    // Strictly ordered tuple keys prove uniqueness without building trees.
+    // Independently unordered rosters retain the original ordered index.
+    let by_feature = checked_roster(features, |row| &row.identity, |row| {
         if !valid_id(&row.identity, width) {
             return Err(JoinError::InvalidIdentity);
         }
         if row.values.len() != n_features || row.values.iter().any(|v| !v.is_finite()) {
             return Err(JoinError::InvalidFeatures);
         }
-        if by_feature.insert(row.identity.as_slice(), row).is_some() {
-            return Err(JoinError::DuplicateIdentity);
-        }
-    }
-    let mut by_partition = BTreeMap::new();
-    for row in partitions {
+        Ok(())
+    })?;
+    let by_partition = checked_roster(partitions, |row| &row.identity, |row| {
         if !valid_id(&row.identity, width) {
             return Err(JoinError::InvalidIdentity);
         }
-        if by_partition
-            .insert(row.identity.as_slice(), row.partition)
-            .is_some()
-        {
-            return Err(JoinError::DuplicateIdentity);
-        }
-    }
-    if by_partition.keys().ne(by_feature.keys()) {
+        Ok(())
+    })?;
+    if by_partition.iter().map(|r| &r.identity).ne(by_feature.iter().map(|r| &r.identity)) {
         return Err(JoinError::PartitionMismatch);
     }
     let training_keys = || {
-        by_partition
-            .iter()
-            .filter_map(|(&key, &partition)| (partition == Partition::Train).then_some(key))
+        by_partition.iter().filter_map(|row| {
+            (row.partition == Partition::Train).then_some(row.identity.as_slice())
+        })
     };
     let train_count = training_keys().count();
-    if train_count == 0 || train_count == by_partition.len() {
+    if train_count == 0 || train_count == partitions.len() {
         return Err(JoinError::EmptyPartition);
     }
     // Lexicographic tuple order keeps every exact prefix contiguous. A
     // mixed group must contain an adjacent Train/Predict transition.
     let mut previous = None;
-    for (&key, &partition) in &by_partition {
-        let prefix = &key[..group_prefix];
+    for row in by_partition.iter() {
+        let prefix = &row.identity[..group_prefix];
         if let Some((last_prefix, last_partition)) = previous {
-            if last_partition != partition && last_prefix == prefix {
+            if last_partition != row.partition && last_prefix == prefix {
                 return Err(JoinError::GroupOverlap);
             }
         }
-        previous = Some((prefix, partition));
+        previous = Some((prefix, row.partition));
     }
-    let mut targets = BTreeMap::new();
-    for row in endpoints {
+    let targets = checked_roster(endpoints, |row| &row.identity, |row| {
         if !valid_id(&row.identity, width) {
             return Err(JoinError::InvalidIdentity);
         }
         if !row.target.is_finite() {
             return Err(JoinError::InvalidEndpoint);
         }
-        if targets.insert(row.identity.as_slice(), row.target).is_some() {
-            return Err(JoinError::DuplicateIdentity);
-        }
-    }
-    if targets.keys().copied().ne(training_keys()) {
+        Ok(())
+    })?;
+    if targets.iter().map(|r| r.identity.as_slice()).ne(training_keys()) {
         return Err(JoinError::EndpointMismatch);
     }
     let mut training = Vec::with_capacity(train_count);
-    let mut prediction = Vec::with_capacity(by_partition.len() - train_count);
-    // Validate before consuming the sorted maps in lockstep. Targets contain
-    // exactly the train subsequence, so prediction rows never take a label.
-    let mut targets = targets.into_iter();
-    for ((key, row), (partition_key, partition)) in by_feature.into_iter().zip(by_partition) {
-        debug_assert_eq!(key, partition_key);
-        let target = match partition {
+    let mut prediction = Vec::with_capacity(partitions.len() - train_count);
+    // The validated targets contain exactly the ordered train subsequence.
+    let mut target_rows = targets.iter();
+    for (row, partition) in by_feature.iter().zip(by_partition.iter()) {
+        let key = &row.identity;
+        debug_assert_eq!(key, &partition.identity);
+        let target = match partition.partition {
             Partition::Train => {
-                let (target_key, target) = targets.next().ok_or(JoinError::EndpointMismatch)?;
-                debug_assert_eq!(key, target_key);
-                Some(target)
+                let target = target_rows.next().ok_or(JoinError::EndpointMismatch)?;
+                debug_assert_eq!(key, &target.identity);
+                Some(target.target)
             }
             Partition::Predict => None,
         };
@@ -171,14 +219,14 @@ pub fn prepare_measurements(
             group: key[..group_prefix].to_vec(),
             values: row.values.clone(),
             target,
-            identity: key.to_vec(),
+            identity: key.clone(),
         };
-        match partition {
+        match partition.partition {
             Partition::Train => training.push(prepared),
             Partition::Predict => prediction.push(prepared),
         }
     }
-    debug_assert!(targets.next().is_none());
+    debug_assert!(target_rows.next().is_none());
     Ok(PreparedMeasurements {
         training,
         prediction,

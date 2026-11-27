@@ -448,3 +448,35 @@ fn named_slot_tracking_preserves_wide_reordering_and_exact_zero() {
         Err(JoinError::InvalidFeatures)
     );
 }
+
+#[test]
+fn ordered_rosters_and_indexed_fallback_keep_duplicate_precedence() {
+    let (mut features, partitions, endpoints) = fixture();
+    features.reverse();
+    let ordered = prepare_measurements(&features, &partitions, &endpoints, 1).unwrap();
+    features.reverse();
+    assert_eq!(
+        prepare_measurements(&features, &partitions, &endpoints, 1),
+        Ok(ordered)
+    );
+
+    // Invalid values on the duplicate row precede the duplicate itself.
+    let mut repeated = features[0].clone();
+    repeated.values[0] = f64::NAN;
+    features.push(repeated);
+    assert_eq!(
+        prepare_measurements(&features, &partitions, &endpoints, 1),
+        Err(JoinError::InvalidFeatures)
+    );
+
+    // A later bad row must not mask an earlier duplicate.
+    let last = features.len() - 1;
+    features[last].values[0] = 0.0;
+    let mut invalid = features[0].clone();
+    invalid.identity[0] = " invalid".into();
+    features.push(invalid);
+    assert_eq!(
+        prepare_measurements(&features, &partitions, &endpoints, 1),
+        Err(JoinError::DuplicateIdentity)
+    );
+}
