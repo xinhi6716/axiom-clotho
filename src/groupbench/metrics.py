@@ -849,7 +849,7 @@ def paired_group_mse_components(rows, *, expected_roster):
 
 def paired_threshold_decision_cost_bounds(rows, *, expected_roster, threshold,
                                           false_positive_cost, false_negative_cost,
-                                          known_total_events=None):
+                                          known_total_events=None, known_events_by_group=None):
     """Bound paired threshold decision costs for independently bounded truths.
 
     Supply (row_id, truth_lower, truth_upper, prediction_a, prediction_b)
@@ -863,8 +863,12 @@ def paired_threshold_decision_cost_bounds(rows, *, expected_roster, threshold,
     represented binary64 inputs. By default truths can vary independently.
     Optionally constrain the total count of events to a known integer from
     the same frozen cohort and threshold, obtained independently of model
-    comparisons. No other dependence is assumed and the caller establishes
-    count provenance. Each weighting's extrema may be attained by different
+    comparisons. Alternatively, constrain events separately for every
+    declared group with an exact group-ID-to-count dict. A pooled count and
+    a by-group count declaration are mutually exclusive. Counts refer to
+    the supplied row population, not overlapping reports or weighted rates.
+    No other dependence is assumed and the caller establishes count
+    provenance. Each weighting's extrema may be attained by different
     admissible event assignments; no assignments are returned or imputed.
     These are descriptive cost sensitivities, not a probability model or
     authorization to deploy a decision rule.
@@ -888,10 +892,22 @@ def paired_threshold_decision_cost_bounds(rows, *, expected_roster, threshold,
             raise ValueError("Frozen roster row IDs must be unique.")
         roster[key] = group
 
+    grouped_constraint = known_events_by_group is not None
+    if grouped_constraint:
+        if known_total_events is not None:
+            raise ValueError("Supply either known total events or group counts, not both.")
+        if type(known_events_by_group) is not dict or not 1 <= len(known_events_by_group) <= len(roster):
+            raise ValueError("Known group event counts require a bounded group-ID-to-count dict.")
+        counts = dict(known_events_by_group)
+        if (any(not _paired_roster_id(group) or type(count) is not int or count < 0
+                for group, count in counts.items()) or counts.keys() != set(roster.values())):
+            raise ValueError("Known group event counts must cover every frozen group exactly with nonnegative integers.")
+
     seen, totals = set(), {}
     ambiguous = ambiguous_disagreement = n_definite_event = 0
-    constrained = known_total_events is not None
+    constrained = known_total_events is not None or grouped_constraint
     event_shifts = []
+    definite_by_group = {}
     for row in rows:
         if type(row) is not tuple or len(row) != 5 or not _paired_roster_id(row[0]):
             raise ValueError("Paired rows require an ID, two truth bounds and two predictions.")
@@ -917,6 +933,8 @@ def paired_threshold_decision_cost_bounds(rows, *, expected_roster, threshold,
                 low, high = min(cost_if_negative, cost_if_positive), max(cost_if_negative, cost_if_positive)
         else:
             n_definite_event += lower >= t
+            if grouped_constraint and lower >= t:
+                definite_by_group[group] = definite_by_group.get(group, 0) + 1
             low = high = different * fp if upper < t else -different * fn
         pooled = totals.setdefault(group, [0, 0, 0])
         pooled[0] += 1
@@ -937,18 +955,39 @@ def paired_threshold_decision_cost_bounds(rows, *, expected_roster, threshold,
             sum(Fraction(group[i], group[0] * quantum) for group in totals.values()) / len(totals)
             for i in (1, 2)),
     }
-    if constrained:
+    def extrema(shifts, baseline, divisor, remaining):
+        ordered = sorted(shifts)
+        # The same k event assignments affect both arms. Relative to the
+        # all-non-event baseline for unresolved rows, each switched row
+        # contributes a fixed additive change. Sorting finds sharp extrema.
+        return ((baseline + sum(ordered[:remaining])) / divisor,
+                (baseline + sum(ordered[len(ordered) - remaining:])) / divisor)
+
+    if grouped_constraint:
+        by_group = {}
+        for group, shift in event_shifts:
+            by_group.setdefault(group, []).append(shift)
+        per_group = {}
+        for group, (n, baseline, _) in totals.items():
+            remaining = counts[group] - definite_by_group.get(group, 0)
+            shifts = by_group.get(group, ())
+            if not 0 <= remaining <= len(shifts):
+                raise ValueError("Known group event counts conflict with the closed truth intervals.")
+            per_group[group] = extrema(shifts, Fraction(baseline), 1, remaining)
+        # A positive group multiplier cannot change the minimum or maximum
+        # within a group. Group quotas can be achieved simultaneously.
+        report.update(
+            n_groups_with_known_event_counts=len(counts),
+            row_weighted_b_minus_a_cost_bounds=tuple(
+                sum(pair[i] for pair in per_group.values()) / (len(seen) * quantum) for i in (0, 1)),
+            equal_group_b_minus_a_cost_bounds=tuple(
+                sum(pair[i] / totals[group][0] for group, pair in per_group.items()) /
+                (len(totals) * quantum) for i in (0, 1)),
+        )
+    elif known_total_events is not None:
         remaining = known_total_events - n_definite_event
         if not 0 <= remaining <= ambiguous:
             raise ValueError("Known total events conflict with the closed truth intervals.")
-
-        def extrema(shifts, baseline, divisor):
-            ordered = sorted(shifts)
-            # The same k event assignments affect both arms. Relative to the
-            # all-non-event baseline for unresolved rows, each switched row
-            # contributes a fixed additive change. Sorting finds sharp extrema.
-            return ((baseline + sum(ordered[:remaining])) / divisor,
-                    (baseline + sum(ordered[len(ordered) - remaining:])) / divisor)
 
         row_low, _ = report["row_weighted_b_minus_a_cost_bounds"]
         group_low, _ = report["equal_group_b_minus_a_cost_bounds"]
@@ -956,10 +995,10 @@ def paired_threshold_decision_cost_bounds(rows, *, expected_roster, threshold,
         report.update(
             known_total_events=known_total_events,
             row_weighted_b_minus_a_cost_bounds=extrema(
-                (shift for _, shift in event_shifts), row_low * row_divisor, row_divisor),
+                (shift for _, shift in event_shifts), row_low * row_divisor, row_divisor, remaining),
             equal_group_b_minus_a_cost_bounds=extrema(
                 (Fraction(shift, totals[group][0]) for group, shift in event_shifts),
-                group_low * group_divisor, group_divisor),
+                group_low * group_divisor, group_divisor, remaining),
         )
     return report
 

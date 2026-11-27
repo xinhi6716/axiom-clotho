@@ -112,3 +112,56 @@ class PairedThresholdDecisionBoundsTests(unittest.TestCase):
                                 **(policy | {'false_positive_cost': 1.5}))
                 for key, candidates in zip((ROW, GROUP), zip(*expected)):
                     self.assertEqual(report[key], (min(candidates), max(candidates)))
+
+
+class GroupEventQuotaTests(unittest.TestCase):
+    def test_pooled_total_can_move_events_to_the_wrong_group(self):
+        rows = [('a', 0, 1, 0, 1), ('b', 0, 1, 1, 0)]
+        roster = [('a', 'g0'), ('b', 'g1')]
+        policy = dict(threshold=1, false_positive_cost=2, false_negative_cost=5)
+        pooled = bounds(rows, expected_roster=roster, known_total_events=1, **policy)
+        grouped = bounds(rows, expected_roster=roster, known_events_by_group={'g0': 1, 'g1': 0}, **policy)
+        self.assertEqual(pooled[ROW], (Fraction(-7, 2), Fraction(7, 2)))
+        self.assertEqual(grouped[ROW], (Fraction(-7, 2),) * 2)
+        self.assertEqual(grouped[GROUP], grouped[ROW])
+        self.assertEqual(grouped['n_groups_with_known_event_counts'], 2)
+        self.assertNotIn('known_total_events', grouped)
+
+    def test_unequal_groups_against_all_exact_group_completions(self):
+        roster = [('a', 'large'), ('b', 'large'), ('c', 'small')]
+        choices = ((0, 0), (-1, 0), (0, -1))
+        for arms in product(choices, repeat=3):
+            rows = [(key, -1, 0, a, b) for (key, _), (a, b) in zip(roster, arms)]
+            for large, small in product(range(3), range(2)):
+                expected = []
+                for actuals in product((False, True), repeat=3):
+                    if sum(actuals[:2]) != large or actuals[2] != small:
+                        continue
+                    def score(y, prediction):
+                        if y:
+                            return 4 if prediction < 0 else 0
+                        return Fraction(3, 2) if prediction >= 0 else 0
+                    deltas = [score(y, b) - score(y, a) for y, (a, b) in zip(actuals, arms)]
+                    expected.append((Fraction(sum(deltas), 3),
+                                     Fraction(sum(deltas[:2]), 4) + Fraction(deltas[2], 2)))
+                report = bounds(rows[::-1], expected_roster=roster[::-1], threshold=0,
+                                false_positive_cost=1.5, false_negative_cost=4,
+                                known_events_by_group={'small': small, 'large': large})
+                for key, candidates in zip((ROW, GROUP), zip(*expected)):
+                    self.assertEqual(report[key], (min(candidates), max(candidates)))
+
+    def test_every_group_including_fully_observed_must_be_bound(self):
+        rows = [('a', 1, 1, 0, 1), ('b', 0, 1, 0, 1)]
+        roster = [('a', 'known'), ('b', 'partial')]
+        policy = dict(threshold=1, false_positive_cost=2, false_negative_cost=5)
+        good = dict(known=1, partial=0)
+        for bad in ({}, {'partial': 0}, {'known': 1, 'partial': 0, 'extra': 0},
+                    {'known': 0, 'partial': 1}, {'known': 1, 'partial': 2},
+                    {'known': True, 'partial': 0}, {'known': -1, 'partial': 0},
+                    [('known', 1), ('partial', 0)]):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                bounds(rows, expected_roster=roster, known_events_by_group=bad, **policy)
+        with self.assertRaisesRegex(ValueError, 'not both'):
+            bounds(rows, expected_roster=roster, known_total_events=1, known_events_by_group=good, **policy)
+        accepted = bounds(rows, expected_roster=roster, known_events_by_group=good, **policy)
+        self.assertEqual(accepted[ROW], (Fraction(-3, 2),) * 2)
