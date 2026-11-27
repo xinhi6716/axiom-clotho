@@ -481,11 +481,20 @@ fn check_condition(columns: &[Vec<f64>]) -> Result<(), RegressionError> {
         .map(|i| (i..count).map(|j| columns[j][i].abs()).sum::<f64>())
         .fold(0.0_f64, f64::max);
     let mut inverse_row_sums = vec![0.0_f64; count];
+    // A solve for unit column j touches only rows 0..=j. Reuse the
+    // workspace: descending substitution overwrites each entry before any
+    // earlier row reads it, and never reads the suffix left by prior solves.
+    let mut inverse_column = vec![0.0; count];
     for j in 0..count {
-        let mut inverse_column = vec![0.0; count];
+        let columns = &columns[..=j];
+        let inverse_column = &mut inverse_column[..=j];
         for i in (0..=j).rev() {
-            let contribution =
-                compensated_sum((i + 1..=j).map(|k| columns[k][i] * inverse_column[k]))?;
+            let contribution = compensated_sum(
+                columns[i + 1..]
+                    .iter()
+                    .zip(&inverse_column[i + 1..])
+                    .map(|(column, value)| column[i] * value),
+            )?;
             let rhs = if i == j { 1.0 } else { 0.0 };
             inverse_column[i] = (rhs - contribution) / columns[i][i];
             if !inverse_column[i].is_finite() {
@@ -583,4 +592,26 @@ mod pivot_tests {
         assert_eq!(pivot_with_norm(&columns, 1), Some((2, 5.0)));
         assert_eq!(pivot_with_norm(&columns, 2), Some((3, 4.0)));
     }
+    #[test]
+    fn condition_workspace_preserves_triangular_boundary_and_numeric_failures() {
+        let well_scaled = [vec![4.0], vec![1.0, 3.0], vec![-1.0, 0.75, 2.0]];
+        assert_eq!(check_condition(&well_scaled), Ok(()));
+        for (last, expected) in [
+            (2e-12, Ok(())),
+            (0.5e-12, Err(RegressionError::IllConditioned)),
+            (0.0, Err(RegressionError::IllConditioned)),
+            (f64::from_bits(1), Err(RegressionError::IllConditioned)),
+        ] {
+            // The leading off-diagonals make later substitutions reuse more
+            // entries, while the last pivot spans the acceptance boundary.
+            let diagonal = [vec![1.0], vec![0.25, 1.0], vec![-0.125, 0.5, last]];
+            assert_eq!(check_condition(&diagonal), expected);
+        }
+        let nonfinite_contribution = [vec![1.0], vec![f64::MAX, 0.25]];
+        assert_eq!(
+            check_condition(&nonfinite_contribution),
+            Err(RegressionError::NumericFailure)
+        );
+    }
+
 }
