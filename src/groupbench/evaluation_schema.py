@@ -11,7 +11,7 @@ import numpy as np
 from sklearn import __version__ as _SKLEARN_VERSION
 
 from .baselines import _lower_group_median
-from .data import validate_groups, validate_seed
+from .data import MAX_FEATURES, validate_groups, validate_seed
 from .domain_selection import domain_metadata
 from .evaluation import _evaluation_run_key
 from .metrics import regression_metrics, _checked_arithmetic
@@ -207,6 +207,27 @@ def _check_dummy_fold_predictions(manifest, observed, folds, fold_rows, predicti
                 _fail("Dummy mean differs from retained training labels.")
 
 
+def _check_declared_feature_order(manifest, config):
+    if "feature_schema" not in manifest:
+        # Narrow historical schemas need not retain a feature roster.
+        return
+    records = manifest["feature_schema"]
+    if not isinstance(records, list) or not 1 <= len(records) <= MAX_FEATURES:
+        _fail("ordered feature schema must retain a bounded, nonempty feature roster.")
+    names = []
+    for record in records:
+        name = record.get("name") if isinstance(record, dict) else None
+        if type(name) is not str or not name or "\0" in name:
+            _fail("ordered feature schema contains an invalid feature identity.")
+        names.append(name)
+    if len(set(names)) != len(names) or config.get("features") != names:
+        _fail("ordered feature schema differs from configured feature identities.")
+    roles = [config[key] for key in ("target", "group", "domain") if key in config]
+    if (any(type(role) is not str or role in names for role in roles)
+            or len(set(roles)) != len(roles)):
+        _fail("ordered feature schema and target, group or domain roles must be disjoint.")
+
+
 def _check(manifest, summary, raw):
     version = manifest.get("schema_version")
     protocols = {"1.0": "nested-group-kfold-v1", "1.1": "nested-group-kfold-distinct-v2",
@@ -333,6 +354,7 @@ def _check(manifest, summary, raw):
         inner_counts = config.get("inner_splits_per_outer")
         if not isinstance(inner_counts, list) or len(inner_counts) != nf:
             _fail("domain inner fold schedule coverage differs.")
+    _check_declared_feature_order(manifest, config)
     for fold, audit in enumerate(audits):
         test_groups = sorted(fold_groups[fold])
         # These explicit lists are part of the saved format, not row rescans.

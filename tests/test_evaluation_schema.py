@@ -217,6 +217,39 @@ class EvaluationSchemaTests(unittest.TestCase):
         self.assertFalse(reply.stdout)
         self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
 
+    def test_cli_binds_ordered_feature_schema_to_evaluation_config(self):
+        from groupbench.evaluation import _evaluation_run_key
+
+        frame = pd.DataFrame({"g": ["a", "b", "c", "d"] * 2, "voltage": range(8),
+                              "temperature": [3., 1., 2., 4.] * 2, "y": range(8)})
+        fit = benchmark(frame, target="y", group="g", features=("temperature", "voltage"),
+                        baselines=("dummy",), outer_splits=2, inner_splits=2)
+        fit.write(self.root, overwrite=True)
+        command = [sys.executable, "-m", "groupbench.cli", "validate-evaluation-bundle", str(self.root)]
+        env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1] / "src"),
+                   OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1", PYTHONDONTWRITEBYTECODE="1")
+
+        def replay():
+            return subprocess.run(command, env=env, text=True, capture_output=True, timeout=30)
+
+        self.assertEqual(replay().returncode, 0)
+
+        def change_order(manifest):
+            manifest["config"]["features"].reverse()
+            manifest["run_key"] = _evaluation_run_key(manifest["data_sha256"], manifest["config"])
+
+        self.mutate_json("manifest.json", change_order)
+        self.assertEqual(verify_bundle(self.root).bundle_type, "evaluation")
+        before = {p.name: p.read_bytes() for p in self.root.iterdir()}
+        reply = replay()
+        self.assertEqual(reply.returncode, 2, reply.stderr)
+        self.assertIn("ordered feature schema", reply.stderr)
+        self.assertFalse(reply.stdout)
+        self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
+
+        self.mutate_json("manifest.json", lambda m: m.pop("feature_schema"))
+        self.assertEqual(replay().returncode, 0)
+
     def test_cli_requires_selected_predictions_to_match_declared_family_refit(self):
         from groupbench.model import GroupBenchRegressor
 
