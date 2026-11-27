@@ -24,7 +24,7 @@ def episode(key=BASE, early=1_000_000, final=100_000_000_000, error=0):
 
 
 class RetentionAnchorAudit(unittest.TestCase):
-    def run_capture(self, roster, rows, capture_header=IDS + TIMES, *, extra=(), block_map=None, stress=None, readout_paths=None, read_bias=None, apertures=None, schedule=None, terminations=None, planned_paths=None):
+    def run_capture(self, roster, rows, capture_header=IDS + TIMES, *, extra=(), block_map=None, stress=None, readout_paths=None, read_bias=None, apertures=None, schedule=None, terminations=None, planned_paths=None, native_reads=None):
         with tempfile.TemporaryDirectory() as tmp:
             folder = Path(tmp)
             for name, header, payload in (
@@ -52,6 +52,12 @@ class RetentionAnchorAudit(unittest.TestCase):
                     cols = IDS + ("nominal_us", "planned_readout_path")
                     csv.writer(stream).writerows((cols, *planned_paths))
                 extra = (*extra, "--planned-readout-paths", str(plan))
+            if native_reads is not None:
+                native = folder / "native_reads.csv"
+                with native.open("w", newline="", encoding="utf-8") as stream:
+                    cols = IDS + ("nominal_us", "native_read_namespace", "native_read_id")
+                    csv.writer(stream).writerows((cols, *native_reads))
+                extra = (*extra, "--native-read-identities", str(native))
             if read_bias is not None:
                 bias_path = folder / "bias.csv"
                 with bias_path.open("w", newline="", encoding="utf-8") as stream:
@@ -165,6 +171,49 @@ class RetentionAnchorAudit(unittest.TestCase):
         self.assertEqual(invalid.returncode, 2)
         self.assertIn("timestamp capture SHA-256 must be 64 lowercase", invalid.stderr)
         self.assertFalse(invalid.stdout)
+
+    def test_native_read_reuse_crosses_episodes_but_not_namespaces(self):
+        keys = [(*BASE[:4], f"E{i}") for i in range(5)]
+        ticks = (0, 1_000_000, 100_000_000_000)
+        rows = sum((episode(key) for key in keys[:4]), []) + episode(keys[4])[:1]
+        native = [
+            (*keys[0], ticks[0], "privateA", "0"),
+            (*keys[0], ticks[1], "privateA", "0"),  # Within one episode.
+            (*keys[1], ticks[2], "privateA", "0"),  # Also across episodes.
+            *[(*keys[2], tick, "privateB", str(n)) for n, tick in enumerate(ticks)],
+            (*keys[3], ticks[0], "privateC", "0"),  # Reused counter, distinct namespace.
+            (*keys[4], ticks[0], "privateD", "1"),
+        ]
+        result = self.run_capture(keys, rows, native_reads=native)
+        ordinary = self.run_capture(keys, rows)
+        self.assertEqual((result.returncode, ordinary.returncode), (1, 1))
+        report = json.loads(result.stdout)
+        self.assertEqual(report.pop("native_read_identity_support"), {
+            "frozen_attempted_by_status": {
+                "native_read_reused_across_anchor_assignments": 2,
+                "all_anchors_have_distinct_logged_native_reads": 1,
+                "missing_or_ambiguous_native_read_assignment": 2,
+            },
+            "timing_eligible_by_status": {
+                "native_read_reused_across_anchor_assignments": 2,
+                "all_anchors_have_distinct_logged_native_reads": 1,
+                "missing_or_ambiguous_native_read_assignment": 1,
+            },
+        })
+        self.assertEqual(report, json.loads(ordinary.stdout))
+        self.assertNotIn("privateA", result.stdout)
+
+    def test_native_read_metadata_does_not_resolve_duplicate_capture(self):
+        native = (*BASE, 0, "run", "read")
+        for rows, metadata, diagnostic in (
+            (episode() + episode()[:1], [native], "does not identify one"),
+            (episode(), [native, native], "duplicate native read identity"),
+            (episode(), [(*BASE, 0, "", "read")], "invalid native read namespace"),
+        ):
+            result = self.run_capture([BASE], rows, native_reads=metadata)
+            self.assertEqual(result.returncode, 2)
+            self.assertFalse(result.stdout)
+            self.assertIn(diagnostic, result.stderr)
 
     def test_planned_paths_detect_same_wrong_route_but_accept_planned_change(self):
         roster = [(*BASE[:4], f"E{i}") for i in range(5)]

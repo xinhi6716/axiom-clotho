@@ -257,6 +257,35 @@ def planned_path_status(slots, observed, plan):
     return "unresolved_route" if unresolved else "all_logged_routes_match_plan"
 
 
+def native_read_identity_statuses(path, roster):
+    reads_by_anchor, anchors_by_read = {}, defaultdict(set)
+    fields = IDENTITY + ("nominal_us", "native_read_namespace", "native_read_id")
+    for key, (raw_nominal, namespace, read_id) in records(path, fields):
+        nominal = integer(raw_nominal)
+        anchor = (key, nominal)
+        if key not in roster or nominal not in ANCHORS or len(roster[key].get(nominal, ())) != 1:
+            raise ValueError("native read identity does not identify one captured frozen anchor")
+        if anchor in reads_by_anchor:
+            raise ValueError("duplicate native read identity declaration for a captured anchor")
+        if not KEY.fullmatch(namespace) or not KEY.fullmatch(read_id):
+            raise ValueError("invalid native read namespace or identity")
+        identity = (namespace, read_id)
+        reads_by_anchor[anchor] = identity
+        anchors_by_read[identity].add(anchor)
+
+    conflicting = {key for anchors in anchors_by_read.values() if len(anchors) > 1
+                   for key, _ in anchors}
+    statuses = {}
+    for key in roster:
+        if key in conflicting:
+            statuses[key] = "native_read_reused_across_anchor_assignments"
+        elif all((key, nominal) in reads_by_anchor for nominal in ANCHORS):
+            statuses[key] = "all_anchors_have_distinct_logged_native_reads"
+        else:
+            statuses[key] = "missing_or_ambiguous_native_read_assignment"
+    return statuses
+
+
 def read_bias_intervals(path, expected):
     biases = defaultdict(dict)
     fields = IDENTITY + ("nominal_us", "observed_read_bias_uV", "read_bias_error_uV")
@@ -497,7 +526,7 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
           read_bias_table=None, aperture_table=None, diagnose_joint_aperture=False,
           diagnose_common_read_error_aperture=False, commanded_schedule_path=None,
           termination_table_path=None, commanded_schedule_sha256=None,
-          termination_dispositions_sha256=None, planned_path_table=None):
+          termination_dispositions_sha256=None, planned_path_table=None, native_read_table=None):
     if planned_path_table is not None and readout_path_table is None:
         raise ValueError("planned readout paths require observed readout paths")
     validate_digest(roster_sha256, "frozen roster")
@@ -563,6 +592,9 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
     attempted_plan_paths, eligible_plan_paths = Counter(), Counter()
     paths = readout_paths(readout_path_table, expected) if readout_path_table is not None else None
     attempted_paths, eligible_paths = Counter(), Counter()
+    native_reads = (native_read_identity_statuses(native_read_table, expected)
+                    if native_read_table is not None else None)
+    attempted_native_reads, eligible_native_reads = Counter(), Counter()
     biases = read_bias_intervals(read_bias_table, expected) if read_bias_table is not None else None
     attempted_bias, eligible_bias = Counter(), Counter()
     apertures = captured_apertures(aperture_table, expected) if aperture_table is not None else None
@@ -602,6 +634,11 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
             attempted_plan_paths[status] += 1
             if reason == "eligible":
                 eligible_plan_paths[status] += 1
+        if native_reads is not None:
+            status = native_reads[key]
+            attempted_native_reads[status] += 1
+            if reason == "eligible":
+                eligible_native_reads[status] += 1
         if biases is not None:
             status = read_bias_status(slots, biases.get(key, {}))
             attempted_bias[status] += 1
@@ -750,6 +787,11 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
             "frozen_attempted_by_status": dict(sorted(attempted_plan_paths.items())),
             "timing_eligible_by_status": dict(sorted(eligible_plan_paths.items())),
         }
+    if native_reads is not None:
+        report["native_read_identity_support"] = {
+            "frozen_attempted_by_status": dict(sorted(attempted_native_reads.items())),
+            "timing_eligible_by_status": dict(sorted(eligible_native_reads.items())),
+        }
     if biases is not None:
         report["reported_read_bias_support"] = {
             "frozen_attempted_by_status": dict(sorted(attempted_bias.items())),
@@ -829,6 +871,8 @@ def main():
                         help="verify exact logged disposition bytes against a trusted archive SHA-256")
     parser.add_argument("--planned-readout-paths", type=Path,
                         help="independently declared expected route for each frozen anchor")
+    parser.add_argument("--native-read-identities", type=Path,
+                        help="optional instrument-native individual read identity per captured anchor")
     args = parser.parse_args()
     try:
         report = audit(args.frozen_roster, args.capture, diagnose_anchors=args.diagnose_anchors,
@@ -846,7 +890,8 @@ def main():
                        commanded_schedule_sha256=args.commanded_schedule_sha256,
                        termination_table_path=args.termination_dispositions,
                        termination_dispositions_sha256=args.termination_dispositions_sha256,
-                       planned_path_table=args.planned_readout_paths)
+                       planned_path_table=args.planned_readout_paths,
+                       native_read_table=args.native_read_identities)
     except (OSError, UnicodeError, csv.Error):
         parser.exit(2, "error: input could not be read as UTF-8 CSV\n")
     except ValueError as exc:

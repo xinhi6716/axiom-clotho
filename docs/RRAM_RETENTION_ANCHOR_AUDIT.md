@@ -273,3 +273,15 @@ missing/ambiguous capture or unknown route leaves agreement unresolved. The
 audit returns aggregates for all frozen and timing-eligible attempts only.
 It compares opaque labels in the same namespace, does not establish
 electrical equivalence, and does not change timing eligibility.
+
+Use `--native-read-identities native_reads.csv` to check for duplicate
+attribution of the same independently logged native read to more than one
+frozen anchor, including across episodes. The exact sidecar columns are
+`lot,wafer,die,cell,episode,nominal_us,native_read_namespace,native_read_id`.
+Use a namespace within which one ID refers to one individual channel
+reading (e.g. stream plus run epoch if counters reset), not a common
+trigger shared by different channels. Rows must identify unique captured
+anchors. Equal IDs in different namespaces are not a collision. Missing
+identifiers do not establish distinct acquisition. The output aggregates
+only timing-eligible and whole-roster counts; this check does not change
+the timing gate or prove independence of distinct readings.
