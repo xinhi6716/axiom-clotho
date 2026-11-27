@@ -1693,3 +1693,41 @@ def paired_group_bias_cancellation_audit(rows, *, expected_roster):
 
     return {"n_rows": len(rows), "n_groups": len(groups), "per_group": details,
             "row_mass": report(True), "equal_group": report(False)}
+
+
+def paired_mae_held_label_offset_oracle(rows, *, expected_roster):
+    """Quantify the in-sample advantage of forbidden held-label refitting.
+
+    On a complete frozen (row ID, group ID) roster, compare unchanged forecasts
+    to corrections fitted on those SAME held labels: one additive constant for
+    all rows, or a separate constant for every group. Both use row-weighted
+    MAE on the same roster. These post-hoc minima are descriptive lower bounds
+    for the specified offset families, never scores of a deployable model.
+    Fitted offsets are deliberately not returned. Calculations are exact for
+    represented binary64 inputs; an L1 minimizer is the lower residual median.
+    """
+    groups = {}
+    for group, a, b in _paired_group_residual_units(rows, expected_roster):
+        entry = groups.setdefault(group, ([], []))
+        entry[0].append(a)
+        entry[1].append(b)
+
+    def oracle_loss(residuals):
+        values = sorted(residuals)
+        median = values[(len(values) - 1) // 2]
+        return sum(abs(value - median) for value in values)
+
+    denominator = len(rows) * _BINARY64_QUANTUM_DENOMINATOR
+    def model(column):
+        per_group = [group[column] for group in groups.values()]
+        flat = [value for group in per_group for value in group]
+        native = Fraction(sum(map(abs, flat)), denominator)
+        global_oracle = Fraction(oracle_loss(flat), denominator)
+        group_oracle = Fraction(sum(map(oracle_loss, per_group)), denominator)
+        return {"native_mae": native, "held_global_offset_oracle_mae": global_oracle,
+                "held_group_offset_oracle_mae": group_oracle,
+                "additional_group_refit_advantage": global_oracle - group_oracle}
+
+    a, b = map(model, (0, 1))
+    return {"n_rows": len(rows), "n_groups": len(groups), "a": a, "b": b,
+            "b_minus_a": {key: b[key] - a[key] for key in a}}
