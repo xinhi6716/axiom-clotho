@@ -24,7 +24,7 @@ def episode(key=BASE, early=1_000_000, final=100_000_000_000, error=0):
 
 
 class RetentionAnchorAudit(unittest.TestCase):
-    def run_capture(self, roster, rows, capture_header=IDS + TIMES, *, extra=(), block_map=None, stress=None, readout_paths=None, read_bias=None, apertures=None, schedule=None, terminations=None, planned_paths=None, native_reads=None, planned_bias=None, planned_roles=None, logged_roles=None):
+    def run_capture(self, roster, rows, capture_header=IDS + TIMES, *, extra=(), block_map=None, stress=None, readout_paths=None, read_bias=None, apertures=None, schedule=None, terminations=None, planned_paths=None, native_reads=None, planned_bias=None, planned_roles=None, logged_roles=None, aperture_widths=None):
         with tempfile.TemporaryDirectory() as tmp:
             folder = Path(tmp)
             for name, header, payload in (
@@ -83,6 +83,12 @@ class RetentionAnchorAudit(unittest.TestCase):
                     fields = IDS + ("nominal_us", "aperture_open_offset_us", "aperture_close_offset_us")
                     csv.writer(stream).writerows((fields, *apertures))
                 extra = (*extra, "--read-apertures", str(aperture_file))
+            if aperture_widths is not None:
+                width_file = folder / "width_plan.csv"
+                with width_file.open("w", newline="", encoding="utf-8") as stream:
+                    fields = IDS + ("nominal_us", "min_aperture_width_us", "max_aperture_width_us")
+                    csv.writer(stream).writerows((fields, *aperture_widths))
+                extra = (*extra, "--planned-aperture-widths", str(width_file))
             if schedule is not None:
                 schedule_path = folder / "schedule.csv"
                 with schedule_path.open("w", newline="", encoding="utf-8") as stream:
@@ -184,6 +190,52 @@ class RetentionAnchorAudit(unittest.TestCase):
         self.assertEqual(invalid.returncode, 2)
         self.assertIn("timestamp capture SHA-256 must be 64 lowercase", invalid.stderr)
         self.assertFalse(invalid.stdout)
+
+    def test_planned_aperture_width_is_independent_of_timing_window_fit(self):
+        roster = [(*BASE[:4], f"E{i}") for i in range(4)]
+        early, end = 1_000_000, 100_000_000_000
+        plan = [(*key, tick, 10, 20) for key in roster for tick in (early, end)]
+        rows = sum((episode(key, early=1_019_999) for key in roster[:3]), [])
+        apertures = [
+            (*roster[0], early, -21, 0),  # Fits early window but too long.
+            (*roster[0], end, -5, 5),    # Exactly lower duration boundary.
+            (*roster[1], early, 0, 20),  # Legal width; aperture exceeds early window.
+            (*roster[1], end, 0, 9),     # Too short.
+            (*roster[2], early, 0, ""),  # Unknown duration, regardless of clock metadata.
+        ]
+        plain = self.run_capture(roster, rows, apertures=apertures)
+        result = self.run_capture(roster, rows, apertures=apertures, aperture_widths=plan)
+        self.assertEqual((plain.returncode, result.returncode), (1, 1))
+        report = json.loads(result.stdout)
+        cross = report.pop("planned_read_aperture_width_support_by_us")
+        for tick, violation in ((early, "reported_width_above_plan"),
+                                (end, "reported_width_below_plan")):
+            self.assertEqual(cross[str(tick)], {
+                "frozen_attempted_by_status": {
+                    violation: 1, "reported_width_within_plan": 1, "missing_or_unknown_aperture_width": 2,
+                },
+                "timing_eligible_by_status": {
+                    violation: 1, "reported_width_within_plan": 1, "missing_or_unknown_aperture_width": 1,
+                },
+            })
+        self.assertEqual(report, json.loads(plain.stdout))
+        timing = report["reported_read_aperture_support_by_us"][str(early)]["timing_eligible_by_status"]
+        self.assertEqual(timing["full_aperture_within_window"], 1)
+
+    def test_aperture_width_recipe_requires_complete_unsigned_ordered_bounds(self):
+        e, t = 1_000_000, 100_000_000_000
+        plan = [(*BASE, e, 10, 20), (*BASE, t, 10, 20)]
+        for planned, observed, message in (
+            (plan, None, "require a read aperture table"),
+            (plan[:1], [], "must cover all frozen read anchors"),
+            (plan + plan[:1], [], "duplicate planned aperture width"),
+            (plan[:-1] + [(*BASE, t, 20, 10)], [], "bounds must be ordered"),
+            (plan[:-1] + [(*BASE, t, "-1", 10)], [], "unsigned integral microseconds"),
+        ):
+            r = self.run_capture([BASE], episode(), apertures=observed, aperture_widths=planned)
+            self.assertEqual(r.returncode, 2)
+            self.assertFalse(r.stdout)
+            self.assertIn(message, r.stderr)
 
     def test_event_role_audit_distinguishes_timed_stress_marker_from_read(self):
         roster = [(*BASE[:4], f"E{i}") for i in range(4)]

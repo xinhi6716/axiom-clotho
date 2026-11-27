@@ -311,3 +311,15 @@ without being a measurement read. Any known mismatch disproves role
 agreement; otherwise unknown or absent roles leave it unresolved. An event
 role does not prove electrical delivery or a continuous stress interval,
 and the diagnostic changes no timing admission.
+
+To compare integration duration with its independently prescribed recipe,
+use `--planned-aperture-widths width_plan.csv` with `--read-apertures`.
+The exact fields are
+`lot,wafer,die,cell,episode,nominal_us,min_aperture_width_us,max_aperture_width_us`.
+Declare inclusive ordered nonnegative integer bounds for each early and
+terminal read in the frozen roster. Reported width is close offset minus
+open offset; it is invariant to a common translation of both offsets.
+An aperture can fit the elapsed-time window but be too long for the recipe,
+or have the right duration while straddling the time limit. Unknown offsets
+remain unresolved. This checks reported integration duration, not electrical
+exposure or independent endpoint calibration, and changes no timing gate.

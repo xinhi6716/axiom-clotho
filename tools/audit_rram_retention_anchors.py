@@ -408,6 +408,35 @@ def captured_apertures(path, expected):
     return apertures
 
 
+def planned_aperture_widths(path, roster):
+    plans = defaultdict(dict)
+    fields = IDENTITY + ("nominal_us", "min_aperture_width_us", "max_aperture_width_us")
+    for key, (raw_nominal, lower, upper) in records(path, fields):
+        nominal = integer(raw_nominal)
+        if key not in roster or nominal not in ANCHORS[1:]:
+            raise ValueError("planned aperture width does not identify a frozen read anchor")
+        if nominal in plans[key]:
+            raise ValueError("duplicate planned aperture width for a frozen anchor")
+        lo, hi = integer(lower), integer(upper)
+        if lo > hi:
+            raise ValueError("planned aperture width bounds must be ordered")
+        plans[key][nominal] = lo, hi
+    if len(plans) != len(roster) or any(len(plan) != len(ANCHORS[1:]) for plan in plans.values()):
+        raise ValueError("planned aperture widths must cover all frozen read anchors")
+    return plans
+
+
+def aperture_width_status(offsets, bounds):
+    if offsets is None:
+        return "missing_or_unknown_aperture_width"
+    width = offsets[1] - offsets[0]
+    if width < bounds[0]:
+        return "reported_width_below_plan"
+    if width > bounds[1]:
+        return "reported_width_above_plan"
+    return "reported_width_within_plan"
+
+
 def aperture_status(slots, nominal, offsets):
     rows = slots.get(nominal, ())
     if len(rows) != 1:
@@ -594,7 +623,10 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
           diagnose_common_read_error_aperture=False, commanded_schedule_path=None,
           termination_table_path=None, commanded_schedule_sha256=None,
           termination_dispositions_sha256=None, planned_path_table=None, native_read_table=None,
-          planned_bias_table=None, planned_role_table=None, logged_role_table=None):
+          planned_bias_table=None, planned_role_table=None, logged_role_table=None,
+          planned_aperture_width_table=None):
+    if planned_aperture_width_table is not None and aperture_table is None:
+        raise ValueError("planned aperture widths require a read aperture table")
     if (planned_role_table is None) != (logged_role_table is None):
         raise ValueError("event role audit requires both planned and logged event role tables")
     if planned_bias_table is not None and read_bias_table is None:
@@ -677,6 +709,10 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
     bias_plans = planned_read_bias(planned_bias_table, expected) if planned_bias_table is not None else None
     attempted_bias_plan, eligible_bias_plan = Counter(), Counter()
     apertures = captured_apertures(aperture_table, expected) if aperture_table is not None else None
+    width_plans = (planned_aperture_widths(planned_aperture_width_table, expected)
+                   if planned_aperture_width_table is not None else None)
+    attempted_widths = {nominal: Counter() for nominal in ANCHORS[1:]}
+    eligible_widths = {nominal: Counter() for nominal in ANCHORS[1:]}
     attempted_apertures = {nominal: Counter() for nominal in ANCHORS[1:]}
     eligible_apertures = {nominal: Counter() for nominal in ANCHORS[1:]}
     attempted_joint, eligible_joint = Counter(), Counter()
@@ -733,6 +769,12 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
             attempted_bias_plan[status] += 1
             if reason == "eligible":
                 eligible_bias_plan[status] += 1
+        if width_plans is not None:
+            for nominal, limits in width_plans[key].items():
+                status = aperture_width_status(apertures.get(key, {}).get(nominal), limits)
+                attempted_widths[nominal][status] += 1
+                if reason == "eligible":
+                    eligible_widths[nominal][status] += 1
         if apertures is not None:
             for nominal in ANCHORS[1:]:
                 status = aperture_status(slots, nominal, apertures.get(key, {}).get(nominal))
@@ -904,6 +946,14 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
             }
             for nominal in ANCHORS[1:]
         }
+    if width_plans is not None:
+        report["planned_read_aperture_width_support_by_us"] = {
+            str(nominal): {
+                "frozen_attempted_by_status": dict(sorted(attempted_widths[nominal].items())),
+                "timing_eligible_by_status": dict(sorted(eligible_widths[nominal].items())),
+            }
+            for nominal in ANCHORS[1:]
+        }
     if diagnose_joint_aperture:
         report["conditional_shared_origin_aperture_support"] = {
             "frozen_attempted_by_status": dict(sorted(attempted_joint.items())),
@@ -978,6 +1028,8 @@ def main():
                         help="independent frozen recipe of anchor event roles")
     parser.add_argument("--logged-event-roles", type=Path,
                         help="independent acquisition log of roles at existing unique anchors")
+    parser.add_argument("--planned-aperture-widths", type=Path,
+                        help="independent allowed aperture durations at frozen read anchors")
     args = parser.parse_args()
     try:
         report = audit(args.frozen_roster, args.capture, diagnose_anchors=args.diagnose_anchors,
@@ -998,7 +1050,8 @@ def main():
                        planned_path_table=args.planned_readout_paths,
                        native_read_table=args.native_read_identities,
                        planned_bias_table=args.planned_read_bias,
-                       planned_role_table=args.planned_event_roles, logged_role_table=args.logged_event_roles)
+                       planned_role_table=args.planned_event_roles, logged_role_table=args.logged_event_roles,
+                       planned_aperture_width_table=args.planned_aperture_widths)
     except (OSError, UnicodeError, csv.Error):
         parser.exit(2, "error: input could not be read as UTF-8 CSV\n")
     except ValueError as exc:
