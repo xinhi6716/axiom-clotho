@@ -1547,3 +1547,74 @@ def three_level_endpoint_contrast(rows, *, expected_strata, levels):
         "n_valleys": sum(item["strict_reversal"] == "valley" for item in details.values()),
         "n_strata_with_flat_step": sum(item["has_flat_step"] for item in details.values()),
     }
+
+
+def paired_lower_tail_rank_alerts(calibration, queries, *, expected_calibration, expected_queries, alpha):
+    """Report operational alert discordance under a common lower-tail rank rule.
+
+    Records are (row ID, score A, score B); independently frozen rosters
+    contain (row ID, group ID). Calibration and query IDs and groups must be
+    disjoint. For each model flag when (1 + # own calibration scores <= own
+    query score)/(n + 1) <= exact alpha. Both models receive exactly the same
+    calibration and query rows. Cells are ordered by A then B: 01 means only
+    B alerts. This is not an assessment of correctness or error control.
+    """
+    from bisect import bisect_right
+
+    if type(alpha) is not Fraction or not 0 < alpha < 1:
+        raise ValueError("Alpha must be an exact Fraction in (0, 1).")
+
+    def aligned(records, expected):
+        if not all(map(_bounded_paired_sequence, (records, expected))):
+            raise ValueError("Records and frozen rosters require bounded nonempty sequences.")
+        roster, scores = {}, {}
+        for membership in expected:
+            if (type(membership) is not tuple or len(membership) != 2
+                    or not all(map(_paired_roster_id, membership))):
+                raise ValueError("Frozen roster entries require valid (row ID, group ID) tuples.")
+            key, group = membership
+            if key in roster:
+                raise ValueError("Frozen roster row IDs must be unique.")
+            roster[key] = group
+        for row in records:
+            if type(row) is not tuple or len(row) != 3 or not _paired_roster_id(row[0]):
+                raise ValueError("Records require an ID and both scores.")
+            key, a, b = row
+            if key not in roster or key in scores:
+                raise ValueError("Records must match their frozen roster exactly.")
+            scores[key] = (_paired_binary64_units(a), _paired_binary64_units(b))
+        if len(scores) != len(roster):
+            raise ValueError("Records must match their frozen roster exactly.")
+        return roster, scores
+
+    cal_roster, cal = aligned(calibration, expected_calibration)
+    query_roster, query = aligned(queries, expected_queries)
+    if cal_roster.keys() & query_roster.keys() or set(cal_roster.values()) & set(query_roster.values()):
+        raise ValueError("Calibration and query rows and groups must be disjoint.")
+    n_plus_one = len(cal) + 1
+    rank_limit = (alpha.numerator * n_plus_one) // alpha.denominator
+    ordered = [sorted(pair[i] for pair in cal.values()) for i in range(2)]
+    names = ("00", "01", "10", "11")
+    cells = dict.fromkeys(names, 0)
+    group_cells = {}
+    for key, pair in query.items():
+        a, b = (1 + bisect_right(ordered[i], pair[i]) <= rank_limit for i in range(2))
+        cell = names[2 * a + b]
+        cells[cell] += 1
+        group_cells.setdefault(query_roster[key], dict.fromkeys(names, 0))[cell] += 1
+
+    def report(counts):
+        n = sum(counts.values())
+        return {
+            "n_queries": n, "cells": counts,
+            "alert_rate_b_minus_a": Fraction(counts["01"] - counts["10"], n),
+            "discordance_rate": Fraction(counts["01"] + counts["10"], n),
+        }
+
+    groups = {g: report(group_cells[g]) for g in sorted(group_cells)}
+    return {
+        "n_calibration": len(cal), "n_query_groups": len(groups), "pooled": report(cells),
+        "per_group": groups,
+        "equal_group_alert_rate_b_minus_a": (
+            sum(g["alert_rate_b_minus_a"] for g in groups.values()) / len(groups)),
+    }
