@@ -1437,3 +1437,53 @@ def held_group_condition_lookup_mae(training, held, *, expected_train, expected_
             for status, name in ((True, "seen"), (False, "unseen"))
         },
     }
+
+
+def paired_group_mae_win_profile(rows, *, expected_roster, margin=0):
+    """Count intact held groups by their paired aggregate MAE comparison.
+
+    Rows are (row ID, target, forecast A, forecast B), matched to an
+    independently frozen (row ID, group ID) roster. Loss is averaged across
+    rows within each group before classification. A group is tied if its
+    absolute MAE difference is at most the predeclared nonnegative margin
+    in target units. Group means and comparisons are exact for represented
+    binary64 values. Equal-group win prevalence is not the winner under
+    equal-group mean loss and is not an inferential probability.
+    """
+    threshold = _paired_binary64_units(margin)
+    if threshold < 0:
+        raise ValueError("The practical MAE margin must be nonnegative.")
+    totals = {}
+    for group, a, b in _paired_group_error_units(rows, expected_roster):
+        entry = totals.setdefault(group, [0, 0, 0])
+        entry[0] += 1
+        entry[1] += a
+        entry[2] += b
+
+    counts = {"a_wins": 0, "ties": 0, "b_wins": 0}
+    details = []
+    unit = _BINARY64_QUANTUM_DENOMINATOR
+    for group, (n, a, b) in sorted(totals.items()):
+        delta = b - a
+        classification = ("a_wins" if delta > n * threshold else
+                          "b_wins" if delta < -n * threshold else "ties")
+        counts[classification] += 1
+        details.append({
+            "group": group, "n_rows": n,
+            "mae_b_minus_a": Fraction(delta, n * unit),
+            "classification": classification,
+        })
+
+    def difference(n, a, b):
+        return Fraction(b - a, n * unit)
+
+    return {
+        "n_rows": len(rows),
+        "n_groups": len(totals),
+        "margin": Fraction(threshold, unit),
+        "group_counts": counts,
+        "group_fractions": {key: Fraction(count, len(totals)) for key, count in counts.items()},
+        "micro_mae_b_minus_a": difference(len(rows), *(sum(t[i] for t in totals.values()) for i in (1, 2))),
+        "equal_group_mae_b_minus_a": sum(item["mae_b_minus_a"] for item in details) / len(totals),
+        "per_group": tuple(details),
+    }
