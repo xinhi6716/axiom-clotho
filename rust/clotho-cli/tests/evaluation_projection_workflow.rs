@@ -208,3 +208,30 @@ fn fitted_models_round_trip_nontrivial_binary_and_regression_scales() {
         assert_eq!(projection["n_rows"], 42);
     }
 }
+
+#[test]
+fn genuine_sources_bind_encoded_width_to_preprocessing_declarations() {
+    for binary in [false, true] {
+        let mutations: [fn(&mut Value); 5] = [
+            |v| v["folds"][0]["encoded_feature_count"] = json!(2),
+            |v| v["features"][0] = v["target"].clone(),
+            |v| v["preprocess"] = json!("not-a-processor"),
+            |v| v["categorical_features"] = json!(["private_feature"]),
+            |v| {
+                v["preprocess"] = json!("mixed");
+                v["categorical_features"] = json!(["private_absent_feature"]);
+            },
+        ];
+        for mutate in mutations {
+            let work = Work::new();
+            let bundle = evaluate(&work, binary);
+            let first = inspect_success(&bundle);
+            // Numeric-only imputation retains one output per input.
+            alter(&bundle, |v| v["preprocess"] = json!("mixed"));
+            assert_eq!(inspect_success(&bundle), first);
+            alter(&bundle, |v| v["preprocess"] = json!("numeric"));
+            alter(&bundle, mutate);
+            assert_rejected(&bundle);
+        }
+    }
+}

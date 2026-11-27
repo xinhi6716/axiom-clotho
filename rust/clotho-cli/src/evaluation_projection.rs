@@ -115,9 +115,19 @@ fn nullable<'de, D: serde::Deserializer<'de>>(d: D) -> std::result::Result<Optio
 enum ProducerModel { Knn, Ridge, Mean, Logistic, Majority }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum ProducerPreprocess { Numeric, Mixed }
+
+
+#[derive(Deserialize)]
 struct Manifest<M, G, F, A> {
     schema_version: String,
     model: ProducerModel,
+    preprocess: ProducerPreprocess,
+    features: Vec<String>,
+    categorical_features: Vec<String>,
+    target: String,
+    group: String,
     n_rows: usize,
     n_groups: usize,
     n_folds: usize,
@@ -294,6 +304,11 @@ fn number(cell: &str) -> Result<f64> {
 
 fn check_manifest<M, G, F, A>(m: &Manifest<M, G, F, A>, schema: &str) -> Result<()> {
     require(m.schema_version == schema, "Evaluation marker and metrics schema disagree")?;
+    let mixed = matches!(m.preprocess, ProducerPreprocess::Mixed);
+    crate::validate_features(&m.features, &m.target, Some(&m.group))
+        .map_err(|_| "Invalid evaluation feature declaration")?;
+    crate::validate_categorical(&m.features, &m.categorical_features, mixed)
+        .map_err(|_| "Invalid evaluation categorical declaration")?;
     let binary_model = matches!(m.model, ProducerModel::Logistic | ProducerModel::Majority);
     require(binary_model == (schema == BIN), "Evaluation model and schema disagree")?;
     require(
@@ -303,6 +318,18 @@ fn check_manifest<M, G, F, A>(m: &Manifest<M, G, F, A>, schema: &str) -> Result<
         && m.groups.len() == m.n_groups && m.folds.len() == m.n_folds,
         "Inconsistent evaluation counts",
     )
+}
+
+fn check_encoded_width<M, G, F, A>(
+    m: &Manifest<M, G, F, A>, encoded: usize,
+) -> Result<()> {
+    let declared = m.features.len();
+    let plausible = if m.categorical_features.is_empty() {
+        encoded == declared
+    } else {
+        (declared..=MAX_ESTIMATOR_FEATURES).contains(&encoded)
+    };
+    require(plausible, "Evaluation encoded width contradicts the feature declaration")
 }
 
 fn projection<M, G, F, A>(m: &Manifest<M, G, F, A>, task: Aggregate) -> EvaluationProjection {
@@ -368,6 +395,7 @@ fn project_reg(m: Manifest<Reg, RegGroup, RegFold, RegMacro>, csv: &[u8]) -> Res
     require(equal_group_weighted == m.equal_group_weighted, "Inconsistent regression group summary")?;
     let mut folds = Vec::with_capacity(m.n_folds);
     for (i, (f, (y, p))) in m.folds.iter().zip(&rows.folds).enumerate() {
+        check_encoded_width(&m, f.encoded_feature_count)?;
         let measured = reg(regression_metrics(y, p)?);
         compare(Reg { mae: f.mae, rmse: f.rmse, r2: f.r2 }, measured)?;
         folds.push(fold(i, f.fold, f.n_train, f.n_test, f.encoded_feature_count, m.n_rows, y.len(), measured)?);
@@ -431,6 +459,7 @@ fn project_bin(m: Manifest<Bin, BinGroup, BinFold, BinMacro>, header: BinaryHead
     require(equal_group_weighted == m.equal_group_weighted, "Inconsistent binary group summary")?;
     let mut folds = Vec::with_capacity(m.n_folds);
     for (i, (f, (y, p))) in m.folds.iter().zip(&rows.folds).enumerate() {
+        check_encoded_width(&m, f.encoded_feature_count)?;
         let measured = bin(binary_metrics(y, p, threshold)?);
         compare(f.metrics, measured)?;
         folds.push(fold(i, f.fold, f.n_train, f.n_test, f.encoded_feature_count, m.n_rows, y.len(), measured)?);
