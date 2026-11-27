@@ -235,3 +235,39 @@ fn genuine_sources_bind_encoded_width_to_preprocessing_declarations() {
         }
     }
 }
+
+#[test]
+fn cannot_project_fold_counts_incompatible_with_the_saved_group_sizes() {
+    for (model, binary) in [("mean", false), ("majority", true)] {
+        let work = Work::new();
+        let csv = work.0.join("source.csv");
+        fs::write(&csv, "x,y,g\n1,0,A\n2,0,A\n3,0,A\n4,0,B\n5,0,B\n6,0,B\n7,0,C\n8,0,C\n9,0,D\n10,0,D\n").unwrap();
+        let bundle = work.0.join("bundle");
+        let evaluation = Command::new(env!("CARGO_BIN_EXE_clotho"))
+            .args(["evaluate", "--csv"]).arg(csv)
+            .args(["--features", "x", "--target", "y", "--group", "g",
+                "--model", model, "--folds", "2", "--out"])
+            .arg(&bundle).output().unwrap();
+        assert!(evaluation.status.success(), "{}", String::from_utf8_lossy(&evaluation.stderr));
+        let genuine = inspect_success(&bundle);
+        assert_eq!(genuine["folds"][0]["n_test"], 5);
+        assert_eq!(genuine["folds"][1]["n_test"], 5);
+
+        // Totals and metrics are still consistent for all-zero outcomes
+        // and a constant model. The claimed sizes all fit individually
+        // but cannot form two five-row folds to match the saved CSV.
+        alter(&bundle, |v| {
+            for (record, count) in v["groups"].as_array_mut().unwrap().iter_mut().zip([3, 3, 3, 1]) {
+                record["n_rows"] = json!(count);
+                if binary {
+                    record["metrics"]["n_negative"] = json!(count);
+                    record["metrics"]["tn"] = json!(count);
+                }
+            }
+        });
+        let out = inspect(&bundle);
+        assert!(!out.status.success());
+        assert!(out.stdout.is_empty());
+        assert!(String::from_utf8_lossy(&out.stderr).contains("Evaluation fold sizes"));
+    }
+}

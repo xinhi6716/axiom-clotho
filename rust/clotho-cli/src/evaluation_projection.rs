@@ -10,7 +10,8 @@ use clotho_core::{
 };
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::{HashMap, HashSet},
+    cmp::Reverse,
+    collections::{BinaryHeap, HashMap, HashSet},
     fs::{self, File},
     io::{self, Read, Write},
     path::{Path, PathBuf},
@@ -337,14 +338,32 @@ fn projection<M, G, F, A>(m: &Manifest<M, G, F, A>, task: Aggregate) -> Evaluati
         n_folds: m.n_folds, task }
 }
 
-fn check_group_rows<'a>(rows: usize, groups: impl Iterator<Item = (&'a str, usize)>) -> Result<()> {
+fn check_group_rows<'a>(
+    rows: &Rows, groups: impl Iterator<Item = (&'a str, usize)>,
+) -> Result<()> {
+    let n_rows = rows.observed.len();
     let mut total = 0_usize;
     let mut seen = HashSet::new();
+    let mut sizes = Vec::new();
     for (id, n) in groups {
-        require(seen.insert(id) && (1..=rows).contains(&n), "Inconsistent evaluation group roster")?;
+        require(seen.insert(id) && (1..=n_rows).contains(&n), "Inconsistent evaluation group roster")?;
         total = total.checked_add(n).ok_or("Invalid evaluation group count")?;
+        sizes.push(n);
     }
-    require(total == rows, "Inconsistent evaluation group counts")
+    require(total == n_rows, "Inconsistent evaluation group counts")?;
+
+    // Largest group first, then lowest-index lightest fold. Producer
+    // lexical tie-breaking among equal-sized groups cannot affect the
+    // resulting loads. This neither reconstructs nor asserts row-to-group IDs.
+    sizes.sort_unstable_by(|a, b| b.cmp(a));
+    let mut loads: BinaryHeap<_> = (0..rows.folds.len()).map(|i| Reverse((0, i))).collect();
+    for size in sizes {
+        let mut lightest = loads.peek_mut().ok_or("Missing evaluation folds")?;
+        let Reverse((load, i)) = *lightest;
+        *lightest = Reverse((load + size, i));
+    }
+    require(loads.into_iter().all(|Reverse((load, i))| rows.folds[i].0.len() == load),
+        "Evaluation fold sizes disagree with the declared group size partition")
 }
 
 fn fold<M>(
@@ -381,7 +400,7 @@ fn project_reg(m: Manifest<Reg, RegGroup, RegFold, RegMacro>, csv: &[u8]) -> Res
     check_manifest(&m, REG)?;
     let rows = parse_rows(csv, m.n_rows, m.n_folds, None)?;
     compare(m.pooled_row_weighted, reg(regression_metrics(&rows.observed, &rows.predicted)?))?;
-    check_group_rows(m.n_rows, m.groups.iter().map(|g| (g.group.as_str(), g.n_rows)))?;
+    check_group_rows(&rows, m.groups.iter().map(|g| (g.group.as_str(), g.n_rows)))?;
     let mut maes = Vec::with_capacity(m.n_groups);
     let mut rmses = Vec::with_capacity(m.n_groups);
     for g in &m.groups {
@@ -438,7 +457,7 @@ fn project_bin(m: Manifest<Bin, BinGroup, BinFold, BinMacro>, header: BinaryHead
     require((0.0..=1.0).contains(&threshold) && header.positive_label == 1, "Invalid binary evaluation metadata")?;
     let rows = parse_rows(csv, m.n_rows, m.n_folds, Some(threshold))?;
     compare(m.pooled_row_weighted, bin(binary_metrics(&rows.observed, &rows.predicted, threshold)?))?;
-    check_group_rows(m.n_rows, m.groups.iter().map(|g| (g.group.as_str(), g.n_rows)))?;
+    check_group_rows(&rows, m.groups.iter().map(|g| (g.group.as_str(), g.n_rows)))?;
     let mut losses = Vec::new();
     let mut accuracies = Vec::new();
     let mut balanced = Vec::new();
