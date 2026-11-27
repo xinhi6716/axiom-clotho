@@ -205,6 +205,31 @@ def _validate_comparison_contract(contract):
         raise SavedScoringError("Comparison method labels must be distinct.")
 
 
+def _check_normalized_query_fingerprint(manifest, query, features):
+    if "new_features_sha256" not in manifest:
+        return
+    digest = manifest["new_features_sha256"]
+    if type(digest) is not str or re.fullmatch(r"[0-9a-f]{64}", digest) is None:
+        raise SavedScoringError("The normalized query fingerprint must be a SHA-256 declaration.")
+    import pandas as pd
+    from .data import validate_features
+    environment = manifest.get("environment")
+    if not isinstance(environment, dict) or environment.get("pandas") != pd.__version__:
+        # Historical hashes depend on pandas' version-specific row hashing;
+        # the separate exact query file hash still binds those bundles.
+        return
+    try:
+        normalized = validate_features(query[features])
+        row_hashes = pd.util.hash_pandas_object(normalized, index=False).values
+        # The writer hashed native uint64 bytes and did not declare endianness.
+        valid = {hashlib.sha256(row_hashes.astype(dtype, copy=False).tobytes()).hexdigest()
+                 for dtype in ("<u8", ">u8")}
+    except (ValueError, TypeError, OverflowError):
+        raise SavedScoringError("Could not rebuild the normalized query fingerprint.") from None
+    if digest not in valid:
+        raise SavedScoringError("The normalized query fingerprint differs from the retained query.")
+
+
 def compare_saved_predictions(run_a, run_b, query_csv, outcomes_csv, contract):
     """Descriptively compare two saved bundles linked to identical query bytes.
 
@@ -241,6 +266,7 @@ def compare_saved_predictions(run_a, run_b, query_csv, outcomes_csv, contract):
             raise SavedScoringError("Both target columns must match the explicit common target declaration.")
         if any(name not in query.columns for name in config["features"]):
             raise SavedScoringError("Original query is missing a declared model feature column.")
+        _check_normalized_query_fingerprint(manifest, query, config["features"])
     outcome_raw, outcome_hash = _read_outcomes(outcomes_csv)
     outcomes = _outcomes(outcome_raw, n)
     report_a = _score_loaded_bundle(loaded_a, outcomes, outcome_hash)
@@ -293,6 +319,7 @@ def compare_saved_predictions(run_a, run_b, query_csv, outcomes_csv, contract):
         "model_a": report_a, "model_b": report_b,
         "limitations": list(LIMITATIONS) + [
             "Common query bytes match both producer declarations, not authenticated historical mapping or model execution.",
+            "Normalized feature hashes are checked only when retained and the declared pandas version matches this runtime.",
             "Target definitions, units and group/cohort/mapping meanings are caller declarations, not verified facts.",
             "Different training sources, feature subsets and protocols may be compared; this is not a controlled or causal contrast.",
             "Paired contrasts are exact on accepted binary64 inputs before display rounding; they may differ from subtraction of displayed MAEs.",
