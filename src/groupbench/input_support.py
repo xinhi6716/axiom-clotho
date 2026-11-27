@@ -698,3 +698,86 @@ def audit_conformal_score_ties(calibration_scores, query_scores, *, level: Fract
         "n_conservative_alerts": alerts,
         "n_extra_alerts_if_ties_wrongly_dropped": dropped_tie_alerts,
     }
+
+
+def audit_reference_group_neighbor_alerts(reference, calibration, queries, *,
+                                          reference_groups, k: int, level: Fraction) -> dict:
+    """Compare exact scalar k-neighbor reference-row and reference-group ranks.
+
+    Inputs are already in the same frozen feature coordinate. With a group
+    score, each declared reference group contributes its closest coordinate
+    once. Exact copies within a verified group therefore cannot multiply its
+    contribution. More *distinct* reads within a group can change its minimum.
+    Recalibrate each score definition using the same supplied calibration
+    roster. The caller owns provenance, independent rosters and any
+    exchangeability argument; this is an outcome-free diagnostic, not a
+    conditional false-alarm guarantee.
+    """
+    from bisect import bisect_left
+    from .data import MAX_ROWS, validate_groups
+    from .metrics import _validated_paired_float
+
+    if any(type(v) not in (list, tuple) or not 1 <= len(v) <= MAX_ROWS
+           for v in (reference, calibration, queries)):
+        raise ValueError("Reference, calibration and query coordinates require bounded nonempty sequences.")
+    if not isinstance(level, Fraction):
+        raise TypeError("The alert level must be an exact Fraction.")
+    if not 0 < level < 1:
+        raise ValueError("The alert level must be strictly between zero and one.")
+    if type(k) is not int or not 1 <= k <= len(reference):
+        raise ValueError("k must be a positive integer within the reference row count.")
+    groups = validate_groups(reference_groups, len(reference))
+    n_groups = len(set(groups))
+    if n_groups < k:
+        raise ValueError("Fewer than k declared reference groups.")
+    if len(reference) * (len(calibration) + len(queries)) > 2_000_000:
+        raise ValueError("Exact scalar reference search exceeds the pair budget.")
+
+    # Distances are exact for validated binary64 coordinates, even at
+    # opposite finite extremes or around the last representable increment.
+    def coordinate(value):
+        return Fraction.from_float(_validated_paired_float(value))
+
+    rows = sorted(zip(map(coordinate, reference), groups), key=lambda row: row[0])
+    positions = [x for x, _ in rows]
+
+    def distances(value):
+        x = coordinate(value)
+        right = bisect_left(positions, x)
+        left = right - 1
+        seen = set()
+        visits = 0
+        while True:
+            lo = x - positions[left] if left >= 0 else None
+            hi = positions[right] - x if right < len(rows) else None
+            if hi is None or (lo is not None and lo <= hi):
+                distance, group = lo, rows[left][1]
+                left -= 1
+            else:
+                distance, group = hi, rows[right][1]
+                right += 1
+            visits += 1
+            if visits == k:
+                row_distance = distance
+            seen.add(group)
+            if len(seen) == k:
+                return row_distance, distance
+
+    row_cal, group_cal = map(sorted, zip(*(distances(x) for x in calibration)))
+    denominator = len(calibration) + 1
+    boundary = level.numerator * denominator // level.denominator
+    row_only = group_only = both = 0
+    for query in queries:
+        a, b = distances(query)
+        row_alert = denominator - bisect_left(row_cal, a) <= boundary
+        group_alert = denominator - bisect_left(group_cal, b) <= boundary
+        row_only += row_alert and not group_alert
+        group_only += group_alert and not row_alert
+        both += row_alert and group_alert
+    return {
+        "n_reference_rows": len(reference), "n_declared_reference_groups": n_groups,
+        "n_calibration_scores": len(calibration), "n_queries": len(queries), "k": k,
+        "rank_denominator": denominator, "largest_alert_rank": boundary,
+        "n_alerts_row_only": row_only, "n_alerts_group_only": group_only,
+        "n_alerts_both": both, "n_alerts_neither": len(queries) - row_only - group_only - both,
+    }
