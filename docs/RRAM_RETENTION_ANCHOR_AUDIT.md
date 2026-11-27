@@ -285,3 +285,16 @@ anchors. Equal IDs in different namespaces are not a collision. Missing
 identifiers do not establish distinct acquisition. The output aggregates
 only timing-eligible and whole-roster counts; this check does not change
 the timing gate or prove independence of distinct readings.
+
+Use `--planned-read-bias bias_plan.csv` with `--read-bias` to compare the
+reported applied-bias intervals against an independent frozen recipe. The
+exact sidecar columns are
+`lot,wafer,die,cell,episode,nominal_us,planned_bias_min_uV,planned_bias_max_uV`.
+Declare an ordered, inclusive signed integer microvolt interval for every
+frozen anchor. Any observed interval disjoint from the plan rules out
+agreement; otherwise all three observed intervals must be fully contained
+to report agreement. A partially overlapping or missing interval is
+unresolved, including a touch at one edge that is not full containment.
+This distinguishes internally consistent but wrong polarity from planned
+operation, does not infer voltage at the device from unverified logs, and
+does not change timing eligibility.

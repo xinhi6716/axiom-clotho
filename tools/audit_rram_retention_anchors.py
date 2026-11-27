@@ -307,6 +307,41 @@ def read_bias_intervals(path, expected):
     return biases
 
 
+def planned_read_bias(path, roster):
+    plans = defaultdict(dict)
+    fields = IDENTITY + ("nominal_us", "planned_bias_min_uV", "planned_bias_max_uV")
+    for key, (raw_nominal, lower, upper) in records(path, fields):
+        nominal = integer(raw_nominal)
+        if key not in roster or nominal not in ANCHORS:
+            raise ValueError("planned bias does not identify a frozen anchor")
+        if nominal in plans[key]:
+            raise ValueError("duplicate planned bias for a frozen anchor")
+        if not SIGNED_INTEGER.fullmatch(lower) or not SIGNED_INTEGER.fullmatch(upper):
+            raise ValueError("planned bias bounds must be signed integral microvolts")
+        lo, hi = int(lower), int(upper)
+        if lo > hi:
+            raise ValueError("planned bias bounds must be ordered")
+        plans[key][nominal] = lo, hi
+    if len(plans) != len(roster) or any(len(plan) != len(ANCHORS) for plan in plans.values()):
+        raise ValueError("planned bias must cover all anchors of the frozen roster")
+    return plans
+
+
+def planned_bias_status(observed, plan):
+    unresolved = False
+    for nominal, (lo, hi) in plan.items():
+        interval = observed.get(nominal)
+        if interval is None:
+            unresolved = True
+            continue
+        a, b = interval
+        if b < lo or a > hi:
+            return "logged_bias_interval_disjoint_from_plan"
+        if a < lo or b > hi:
+            unresolved = True
+    return "unresolved_bias" if unresolved else "all_logged_bias_intervals_contained_in_plan"
+
+
 def read_bias_status(slots, metadata):
     if any(len(slots.get(nominal, ())) != 1 for nominal in ANCHORS):
         return "missing_or_ambiguous_capture"
@@ -526,7 +561,10 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
           read_bias_table=None, aperture_table=None, diagnose_joint_aperture=False,
           diagnose_common_read_error_aperture=False, commanded_schedule_path=None,
           termination_table_path=None, commanded_schedule_sha256=None,
-          termination_dispositions_sha256=None, planned_path_table=None, native_read_table=None):
+          termination_dispositions_sha256=None, planned_path_table=None, native_read_table=None,
+          planned_bias_table=None):
+    if planned_bias_table is not None and read_bias_table is None:
+        raise ValueError("planned bias requires observed read bias")
     if planned_path_table is not None and readout_path_table is None:
         raise ValueError("planned readout paths require observed readout paths")
     validate_digest(roster_sha256, "frozen roster")
@@ -597,6 +635,8 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
     attempted_native_reads, eligible_native_reads = Counter(), Counter()
     biases = read_bias_intervals(read_bias_table, expected) if read_bias_table is not None else None
     attempted_bias, eligible_bias = Counter(), Counter()
+    bias_plans = planned_read_bias(planned_bias_table, expected) if planned_bias_table is not None else None
+    attempted_bias_plan, eligible_bias_plan = Counter(), Counter()
     apertures = captured_apertures(aperture_table, expected) if aperture_table is not None else None
     attempted_apertures = {nominal: Counter() for nominal in ANCHORS[1:]}
     eligible_apertures = {nominal: Counter() for nominal in ANCHORS[1:]}
@@ -644,6 +684,11 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
             attempted_bias[status] += 1
             if reason == "eligible":
                 eligible_bias[status] += 1
+        if bias_plans is not None:
+            status = planned_bias_status(biases.get(key, {}), bias_plans[key])
+            attempted_bias_plan[status] += 1
+            if reason == "eligible":
+                eligible_bias_plan[status] += 1
         if apertures is not None:
             for nominal in ANCHORS[1:]:
                 status = aperture_status(slots, nominal, apertures.get(key, {}).get(nominal))
@@ -797,6 +842,11 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
             "frozen_attempted_by_status": dict(sorted(attempted_bias.items())),
             "timing_eligible_by_status": dict(sorted(eligible_bias.items())),
         }
+    if bias_plans is not None:
+        report["planned_read_bias_agreement"] = {
+            "frozen_attempted_by_status": dict(sorted(attempted_bias_plan.items())),
+            "timing_eligible_by_status": dict(sorted(eligible_bias_plan.items())),
+        }
     if apertures is not None:
         report["reported_read_aperture_support_by_us"] = {
             str(nominal): {
@@ -873,6 +923,8 @@ def main():
                         help="independently declared expected route for each frozen anchor")
     parser.add_argument("--native-read-identities", type=Path,
                         help="optional instrument-native individual read identity per captured anchor")
+    parser.add_argument("--planned-read-bias", type=Path,
+                        help="independent allowed signed bias window at each frozen anchor")
     args = parser.parse_args()
     try:
         report = audit(args.frozen_roster, args.capture, diagnose_anchors=args.diagnose_anchors,
@@ -891,7 +943,8 @@ def main():
                        termination_table_path=args.termination_dispositions,
                        termination_dispositions_sha256=args.termination_dispositions_sha256,
                        planned_path_table=args.planned_readout_paths,
-                       native_read_table=args.native_read_identities)
+                       native_read_table=args.native_read_identities,
+                       planned_bias_table=args.planned_read_bias)
     except (OSError, UnicodeError, csv.Error):
         parser.exit(2, "error: input could not be read as UTF-8 CSV\n")
     except ValueError as exc:

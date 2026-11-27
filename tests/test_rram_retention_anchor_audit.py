@@ -24,7 +24,7 @@ def episode(key=BASE, early=1_000_000, final=100_000_000_000, error=0):
 
 
 class RetentionAnchorAudit(unittest.TestCase):
-    def run_capture(self, roster, rows, capture_header=IDS + TIMES, *, extra=(), block_map=None, stress=None, readout_paths=None, read_bias=None, apertures=None, schedule=None, terminations=None, planned_paths=None, native_reads=None):
+    def run_capture(self, roster, rows, capture_header=IDS + TIMES, *, extra=(), block_map=None, stress=None, readout_paths=None, read_bias=None, apertures=None, schedule=None, terminations=None, planned_paths=None, native_reads=None, planned_bias=None):
         with tempfile.TemporaryDirectory() as tmp:
             folder = Path(tmp)
             for name, header, payload in (
@@ -64,6 +64,12 @@ class RetentionAnchorAudit(unittest.TestCase):
                     columns = IDS + ("nominal_us", "observed_read_bias_uV", "read_bias_error_uV")
                     csv.writer(stream).writerows((columns, *read_bias))
                 extra = (*extra, "--read-bias", str(bias_path))
+            if planned_bias is not None:
+                path = folder / "bias_plan.csv"
+                with path.open("w", newline="", encoding="utf-8") as stream:
+                    cols = IDS + ("nominal_us", "planned_bias_min_uV", "planned_bias_max_uV")
+                    csv.writer(stream).writerows((cols, *planned_bias))
+                extra = (*extra, "--planned-read-bias", str(path))
             if apertures is not None:
                 aperture_file = folder / "apertures.csv"
                 with aperture_file.open("w", newline="", encoding="utf-8") as stream:
@@ -171,6 +177,41 @@ class RetentionAnchorAudit(unittest.TestCase):
         self.assertEqual(invalid.returncode, 2)
         self.assertIn("timestamp capture SHA-256 must be 64 lowercase", invalid.stderr)
         self.assertFalse(invalid.stdout)
+
+    def test_planned_bias_distinguishes_wrong_polarity_and_boundary_uncertainty(self):
+        roster = [(*BASE[:4], f"E{i}") for i in range(5)]
+        ticks = (0, 1_000_000, 100_000_000_000)
+        plan = [(*key, tick, -105000, -95000) for key in roster for tick in ticks]
+        obs = [(*key, tick, point, err) for key, (point, err) in zip(
+            roster[:4], ((-100000, 5000), (100000, 0), (-90000, 5000), (100000, 0))
+        ) for tick in (ticks[:1] if key == roster[3] else ticks)]
+        rows = sum((episode(key) for key in roster[:3]), []) + episode(roster[3])[:1]
+        plain = self.run_capture(roster, rows, read_bias=obs)
+        checked = self.run_capture(roster, rows, read_bias=obs, planned_bias=plan)
+        self.assertEqual((plain.returncode, checked.returncode), (1, 1))
+        report = json.loads(checked.stdout)
+        self.assertEqual(report.pop("planned_read_bias_agreement"), {
+            "frozen_attempted_by_status": {"all_logged_bias_intervals_contained_in_plan": 1,
+                "logged_bias_interval_disjoint_from_plan": 2, "unresolved_bias": 2},
+            "timing_eligible_by_status": {"all_logged_bias_intervals_contained_in_plan": 1,
+                "logged_bias_interval_disjoint_from_plan": 1, "unresolved_bias": 1},
+        })
+        self.assertEqual(report, json.loads(plain.stdout))
+
+    def test_planned_bias_rejects_incomplete_recipe_duplicate_units_and_reversed_bounds(self):
+        plan = [(*BASE, t, -10, -1) for t in (0, 1_000_000, 100_000_000_000)]
+        log = [(*BASE, 0, -4, 0)]
+        for proposed, observed, diagnostic in (
+            (plan, None, "requires observed"),
+            (plan[:-1], log, "must cover all anchors"),
+            (plan + plan[:1], log, "duplicate planned bias"),
+            (plan[:-1] + [(*BASE, plan[-1][5], "-1mV", -1)], log, "integral microvolts"),
+            (plan[:-1] + [(*BASE, plan[-1][5], -1, -10)], log, "must be ordered"),
+        ):
+            r = self.run_capture([BASE], episode(), read_bias=observed, planned_bias=proposed)
+            self.assertEqual(r.returncode, 2)
+            self.assertFalse(r.stdout)
+            self.assertIn(diagnostic, r.stderr)
 
     def test_native_read_reuse_crosses_episodes_but_not_namespaces(self):
         keys = [(*BASE[:4], f"E{i}") for i in range(5)]
