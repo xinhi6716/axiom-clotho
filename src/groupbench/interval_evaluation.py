@@ -483,6 +483,47 @@ def bound_paired_interval_coverage(rows, *, expected_roster):
     }
 
 
+def bound_paired_aggregate_bias(rows, *, expected_roster):
+    """Bound signed bias and paired absolute aggregate bias with censored truths.
+
+    Rows are (row ID, truth lower, truth upper, point A, point B). Supply an
+    independently frozen (row ID, group ID) roster. Adjacent intervals may
+    degenerate to an exact truth. Each row has one truth shared by both models;
+    distinct row truths vary independently over their closed intervals.
+    Absolute aggregate bias means the magnitude of the weighted mean signed
+    error, not mean absolute error or mean absolute group bias. Each weighting
+    is optimized separately; the results are finite-roster sensitivity bounds.
+    """
+    if (type(rows) not in (list, tuple) or not 1 <= len(rows) <= MAX_ROWS
+            or any(type(row) is not tuple or len(row) != 5 for row in rows)):
+        raise ValueError("Each row must supply one ID, a truth interval and two point forecasts.")
+    wrapped = [(key, lo, hi, a, a, b, b) for key, lo, hi, a, b in rows]
+    totals = {}
+    for group, lo, hi, a, _, b, _ in _paired_bounded_interval_rows(wrapped, expected_roster):
+        item = totals.setdefault(group, [0, Fraction(), Fraction(), Fraction(), Fraction()])
+        item[0] += 1
+        for index, value in enumerate((lo, hi, a, b), 1):
+            item[index] += value
+
+    def summary(lo, hi, a, b):
+        # A positive weighted sum of independent closed intervals fills its
+        # whole aggregate interval. The two absolute biases share that value.
+        candidates = {lo, hi} | {value for value in (a, b) if lo < value < hi}
+        contrasts = [abs(b - y) - abs(a - y) for y in candidates]
+        return {
+            "mean_truth_bounds": (lo, hi),
+            "a_signed_bias_bounds": (a - hi, a - lo),
+            "b_signed_bias_bounds": (b - hi, b - lo),
+            "signed_bias_b_minus_a": b - a,
+            "absolute_bias_b_minus_a_bounds": (min(contrasts), max(contrasts)),
+        }
+
+    micro = [sum(group[i] for group in totals.values()) / len(rows) for i in range(1, 5)]
+    macro = [_mean([group[i] / group[0] for group in totals.values()]) for i in range(1, 5)]
+    return {"n_rows": len(rows), "n_groups": len(totals),
+            "row_weighted": summary(*micro), "equal_group": summary(*macro)}
+
+
 def diagnose_saved_interval_reference(document):
     """Return an opt-in descriptive sidecar, without changing normal evaluation.
 
