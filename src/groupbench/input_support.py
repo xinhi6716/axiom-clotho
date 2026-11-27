@@ -644,3 +644,57 @@ def audit_numeric_interval_group_support(training, query_intervals, *, training_
         "n_queries_meeting_threshold_only_somewhere": some_only,
         "n_queries_meeting_threshold_nowhere": nowhere,
     }
+
+
+def audit_conformal_score_ties(calibration_scores, query_scores, *, level: Fraction) -> dict:
+    """Audit the effect of ties on fixed upper-tail conformal score ranks.
+
+    Bigger scores are more nonconforming. Each score represents one declared
+    calibration/query observation. Repeated *values* count with multiplicity.
+    The caller ensures independent rosters, comparable score definitions and
+    (for any formal validity claim) an appropriate exchangeability argument.
+    This diagnostic sees no labels and does not choose a cutoff or mutate
+    scores. Calibration ranks count >=; > is an explicitly invalid comparison
+    under ties, shown only to expose alerts attainable by dropping equal mass.
+    Exact ratio comparisons avoid floating point ambiguity at the fixed level.
+    Only aggregate counts are returned; no claim about joint false alarms.
+    """
+    from bisect import bisect_left, bisect_right
+
+    from .data import MAX_ROWS
+    from .metrics import _validated_paired_float
+
+    if not isinstance(level, Fraction):
+        raise TypeError("The alert level must be an exact Fraction.")
+    if not 0 < level < 1:
+        raise ValueError("The alert level must be strictly between zero and one.")
+    if any(type(v) not in (list, tuple) or not 1 <= len(v) <= MAX_ROWS
+           for v in (calibration_scores, query_scores)):
+        raise ValueError("Calibration and query scores require bounded nonempty sequences.")
+    calibration = sorted(map(_validated_paired_float, calibration_scores))
+    n_calibration = len(calibration)
+    denominator = n_calibration + 1
+    allowed_rank = (level.numerator * denominator) // level.denominator
+
+    tied = tied_pairs = max_ties = alerts = dropped_tie_alerts = 0
+    for query in map(_validated_paired_float, query_scores):
+        first = bisect_left(calibration, query)
+        last = bisect_right(calibration, query)
+        equal = last - first
+        tied += bool(equal)
+        tied_pairs += equal
+        max_ties = max(max_ties, equal)
+        alerts += denominator - first <= allowed_rank
+        dropped_tie_alerts += denominator - last <= allowed_rank < denominator - first
+    return {
+        "n_calibration_scores": n_calibration,
+        "n_query_scores": len(query_scores),
+        "rank_denominator": denominator,
+        "largest_alert_rank": allowed_rank,
+        "any_alert_attainable_at_level": allowed_rank > 0,
+        "n_queries_tied_with_calibration": tied,
+        "n_calibration_query_equal_pairs": tied_pairs,
+        "max_calibration_ties_for_one_query": max_ties,
+        "n_conservative_alerts": alerts,
+        "n_extra_alerts_if_ties_wrongly_dropped": dropped_tie_alerts,
+    }

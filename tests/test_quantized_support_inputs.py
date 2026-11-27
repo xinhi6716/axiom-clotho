@@ -124,3 +124,58 @@ class IntervalGroupSupportTests(unittest.TestCase):
         for interval in ((2., 1.), (False, 1.), [0., 1.], (float("nan"), 1.)):
             with self.subTest(interval=interval), self.assertRaises(ValueError):
                 audit([1.], [interval], training_groups=[0], minimum_training_groups=1)
+
+
+class ConformalScoreTieAuditTests(unittest.TestCase):
+    def test_matched_discrete_encoder_changes_attainable_five_percent_boundary(self):
+        from groupbench.input_support import audit_conformal_score_ties as audit
+        raw, encoded = 0, 0
+        incorrect_extra = 0
+        pooled = tuple(range(40))
+        for held in pooled:
+            train = [x for x in pooled if x != held]
+            old = audit(train, [held], level=F(1, 20))
+            new = audit([4 * (x // 4) for x in train], [4 * (held // 4)], level=F(1, 20))
+            raw += old["n_conservative_alerts"]
+            encoded += new["n_conservative_alerts"]
+            incorrect_extra += new["n_extra_alerts_if_ties_wrongly_dropped"]
+            self.assertEqual(new["n_calibration_scores"], 39)
+            self.assertEqual(new["max_calibration_ties_for_one_query"], 3)
+        self.assertEqual((raw, encoded, incorrect_extra), (2, 0, 4))
+
+    def test_exact_inclusive_ranks_and_multiplicity_match_direct_fraction_counts(self):
+        from itertools import product
+        from groupbench.input_support import audit_conformal_score_ties as audit
+        queries = [-2., -1., 0., 1., 2.]
+        for calibration in product((-1., 0., 1.), repeat=4):
+            for level in (F(1, 10), F(1, 5), F(2, 5), F(4, 5)):
+                n = len(calibration) + 1
+                outcomes = []
+                for score in queries:
+                    tie = sum(x == score for x in calibration)
+                    inclusive = F(1 + sum(x >= score for x in calibration), n) <= level
+                    strict = F(1 + sum(x > score for x in calibration), n) <= level
+                    outcomes.append((tie, inclusive, strict and not inclusive))
+                actual = audit(calibration, queries, level=level)
+                self.assertEqual(actual["any_alert_attainable_at_level"], F(1, n) <= level)
+                self.assertEqual(actual["n_queries_tied_with_calibration"], sum(bool(a) for a, _, _ in outcomes))
+                self.assertEqual(actual["n_calibration_query_equal_pairs"], sum(a for a, _, _ in outcomes))
+                self.assertEqual(actual["max_calibration_ties_for_one_query"], max(a for a, _, _ in outcomes))
+                self.assertEqual(actual["n_conservative_alerts"], sum(b for _, b, _ in outcomes))
+                self.assertEqual(actual["n_extra_alerts_if_ties_wrongly_dropped"], sum(c for _, _, c in outcomes))
+                self.assertEqual(audit(calibration[::-1], queries[::-1], level=level), actual)
+
+    def test_rejects_bad_boundaries_and_never_deduplicates_scores(self):
+        from groupbench.input_support import audit_conformal_score_ties as audit
+        actual = audit([-0., 0., 0.], [0., -0., 1.], level=F(1, 4))
+        self.assertEqual((actual["n_queries_tied_with_calibration"], actual["n_calibration_query_equal_pairs"],
+                          actual["n_conservative_alerts"], actual["n_extra_alerts_if_ties_wrongly_dropped"]),
+                         (2, 6, 1, 2))
+        for level in (F(0), F(1), F(2)):
+            with self.assertRaises(ValueError):
+                audit([0.], [0.], level=level)
+        with self.assertRaises(TypeError):
+            audit([0.], [0.], level=.05)
+        for bad in (float("nan"), float("inf"), True, 2**53 + 1):
+            with self.assertRaises(ValueError):
+                audit([0.], [bad], level=F(1, 2))
