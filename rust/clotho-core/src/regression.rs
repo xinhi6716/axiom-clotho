@@ -70,7 +70,7 @@ impl MeanRegressor {
 
     pub fn fit(x: &[Vec<f64>], y: &[f64]) -> Result<Self, RegressionError> {
         let width = validate_training(x, y, false)?;
-        let (mean, _) = checked_target_location(y)?;
+        let mean = validated_target_mean(y)?;
         Ok(Self { width, mean })
     }
 
@@ -359,6 +359,13 @@ fn checked_mul(a: f64, b: f64) -> Result<f64, RegressionError> {
     } else {
         Ok(value)
     }
+}
+
+// Shared with nested selection, which prevalidates the complete input and
+// constructs nonempty disjoint folds before evaluating any candidates.
+pub(crate) fn validated_target_mean(y: &[f64]) -> Result<f64, RegressionError> {
+    debug_assert!(!y.is_empty());
+    Ok(checked_target_location(y)?.0)
 }
 
 // Inputs were validated by the estimator. Sharing the scale with TargetScaler

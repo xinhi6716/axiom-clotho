@@ -18,7 +18,7 @@ use crate::evaluation::{
     RegressionMetrics,
 };
 use crate::knn::{KnnError, KnnRegressor};
-use crate::regression::{MeanRegressor, RegressionError, RidgeRegressor};
+use crate::regression::{validated_target_mean, RegressionError, RidgeRegressor};
 use std::fmt;
 
 pub const MAX_SELECTION_ROWS: usize = 20_000;
@@ -221,13 +221,15 @@ pub fn nested_grouped_regression(
         }
     }
 
+    let uses_features = candidates.iter().any(|c| !matches!(c, RegressionCandidate::Mean));
     let mut out_of_fold_predictions = vec![0.0; x.len()];
     let mut outer_folds = Vec::with_capacity(outer_splits);
     let mut fit_count = 0;
     for (outer_fold_index, (outer, inner_folds)) in
         outer_plan.into_iter().zip(inner_plans).enumerate()
     {
-        let (outer_x, outer_y) = training_rows(x, y, &outer.train_indices);
+        let outer_y: Vec<_> = outer.train_indices.iter().map(|&i| y[i]).collect();
+        let outer_x = if uses_features { feature_rows(x, &outer.train_indices) } else { Vec::new() };
         let start_fit_count = fit_count;
         let mut scores = Vec::with_capacity(candidates.len());
         let mut best: Option<(usize, f64)> = None;
@@ -243,16 +245,23 @@ pub fn nested_grouped_regression(
                 failure: None,
                 fit_count: 0,
             };
-            let mut inner_predictions = vec![0.0; outer_x.len()];
+            let mut inner_predictions = vec![0.0; outer_y.len()];
             for (inner_fold_index, inner) in inner_folds.iter().enumerate() {
-                let (train_x, test_x) = row_workspace.split_at_mut(inner.train_indices.len());
-                refill_feature_rows(train_x, &outer_x, &inner.train_indices);
                 train_y.clear();
                 train_y.extend(inner.train_indices.iter().map(|&row| outer_y[row]));
-                refill_feature_rows(test_x, &outer_x, &inner.test_indices);
                 fit_count += 1;
                 score.fit_count += 1;
-                match fit_predict(*candidate, train_x, &train_y, test_x) {
+                let predictions = if matches!(candidate, RegressionCandidate::Mean) {
+                    // This baseline consumes targets only. Global input validation
+                    // and nonempty planned folds already establish its feature contract.
+                    predict_mean(&train_y, inner.test_indices.len())
+                } else {
+                    let (train_x, test_x) = row_workspace.split_at_mut(inner.train_indices.len());
+                    refill_feature_rows(train_x, &outer_x, &inner.train_indices);
+                    refill_feature_rows(test_x, &outer_x, &inner.test_indices);
+                    fit_feature_predict(*candidate, train_x, &train_y, test_x)
+                };
+                match predictions {
                     Ok(predictions) => {
                         for (&row, prediction) in inner.test_indices.iter().zip(predictions) {
                             inner_predictions[row] = prediction;
@@ -301,14 +310,14 @@ pub fn nested_grouped_regression(
                 })
             }
         };
-        let test_x = feature_rows(x, &outer.test_indices);
         fit_count += 1;
-        let predictions = fit_predict(
-            candidates[selected_candidate_index],
-            &outer_x,
-            &outer_y,
-            &test_x,
-        )
+        let chosen = candidates[selected_candidate_index];
+        let predictions = if matches!(chosen, RegressionCandidate::Mean) {
+            predict_mean(&outer_y, outer.test_indices.len())
+        } else {
+            let test_x = feature_rows(x, &outer.test_indices);
+            fit_feature_predict(chosen, &outer_x, &outer_y, &test_x)
+        }
         .map_err(|(stage, error)| SelectionError::OuterFailure {
             outer_fold_index,
             candidate_index: selected_candidate_index,
@@ -403,24 +412,20 @@ fn refill_feature_rows(out: &mut [Vec<f64>], x: &[Vec<f64>], indices: &[usize]) 
     }
 }
 
-fn training_rows(x: &[Vec<f64>], y: &[f64], indices: &[usize]) -> (Vec<Vec<f64>>, Vec<f64>) {
-    (
-        feature_rows(x, indices),
-        indices.iter().map(|&i| y[i]).collect(),
-    )
+fn predict_mean(y: &[f64], rows: usize) -> Result<Vec<f64>, (FailureStage, CandidateError)> {
+    let average = validated_target_mean(y)
+        .map_err(|e| (FailureStage::Fit, CandidateError::Regression(e)))?;
+    Ok(vec![average; rows])
 }
 
-fn fit_predict(
+fn fit_feature_predict(
     candidate: RegressionCandidate,
     x: &[Vec<f64>],
     y: &[f64],
     test: &[Vec<f64>],
 ) -> Result<Vec<f64>, (FailureStage, CandidateError)> {
     match candidate {
-        RegressionCandidate::Mean => MeanRegressor::fit(x, y)
-            .map_err(|e| (FailureStage::Fit, CandidateError::Regression(e)))?
-            .predict(test)
-            .map_err(|e| (FailureStage::Predict, CandidateError::Regression(e))),
+        RegressionCandidate::Mean => unreachable!("mean does not consume the feature workspace"),
         RegressionCandidate::Ridge { alpha } => RidgeRegressor::fit(x, y, alpha)
             .map_err(|e| (FailureStage::Fit, CandidateError::Regression(e)))?
             .predict(test)

@@ -775,3 +775,35 @@ fn failure_text_does_not_echo_feature_target_or_group_values() {
     assert!(text.contains("outer fold 2"));
     assert!(text.contains("supported floating-point range"));
 }
+
+#[test]
+fn mean_candidates_skip_feature_workspace_without_skipping_global_validation() {
+    let (mut x, y, groups) = fixture();
+    for row in &mut x {
+        row.fill(f64::MAX);
+    }
+    let candidates = [
+        RegressionCandidate::Mean,
+        RegressionCandidate::Ridge { alpha: 0.0 },
+        RegressionCandidate::Mean,
+    ];
+    let report = nested_grouped_regression(&x, &y, &groups, 3, 2, &candidates, 100).unwrap();
+    for fold in &report.outer_folds {
+        assert_eq!(fold.selected_candidate_index, 0);
+        let (train_x, train_y) = rows(&x, &y, &fold.train_indices);
+        let reference = MeanRegressor::fit(&train_x, &train_y).unwrap().mean().to_bits();
+        for &i in &fold.test_indices {
+            assert_eq!(report.out_of_fold_predictions[i].to_bits(), reference);
+        }
+        assert!(fold.inner_candidate_scores[1].failure.is_some());
+        assert_eq!(
+            fold.inner_candidate_scores[0].pooled_rmse.map(f64::to_bits),
+            fold.inner_candidate_scores[2].pooled_rmse.map(f64::to_bits)
+        );
+    }
+    x[0][1] = f64::INFINITY;
+    assert_eq!(
+        nested_grouped_regression(&x, &y, &groups, 3, 2, &candidates[..1], 100),
+        Err(SelectionError::NonFinite)
+    );
+}
