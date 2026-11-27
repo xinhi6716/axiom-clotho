@@ -254,3 +254,91 @@ def paired_brier_prevalence_sensitivity(rows, *, expected_roster, prevalence_ran
                                                counts[i] * square) for i in (0, 1))),
         "equal_group_within_label": equal_group,
     }
+
+
+def paired_auc_tie_audit(rows, *, expected_roster):
+    """Audit exact positive-negative score ordering on a frozen binary cohort.
+
+    Pass (row ID, literal integer 0/1 label, score A, score B) tuples and an
+    independently frozen (row ID, group ID) roster. Scores are finite binary64
+    or exactly representable integers; higher ranks indicate class 1.
+    Pooled AUC permits cross-group comparisons; within-group AUC weights
+    each group's own AUC equally and is unavailable if any group lacks a
+    class. Midrank AUC awards half credit for ties. Each model's own tie
+    envelope freezes all strict orderings and permits arbitrary ordering
+    inside tied blocks; its endpoints are attainable but not joint paired
+    bounds or confidence intervals.
+    """
+    from fractions import Fraction
+
+    from ..metrics import _bounded_paired_sequence, _paired_binary64_units, _paired_roster_id
+
+    if not all(map(_bounded_paired_sequence, (rows, expected_roster))):
+        raise ValueError("Paired rows and frozen roster require bounded nonempty sequences.")
+    roster = {}
+    for entry in expected_roster:
+        if type(entry) is not tuple or len(entry) != 2 or not all(map(_paired_roster_id, entry)):
+            raise ValueError("Frozen roster entries require valid (row ID, group ID) tuples.")
+        row_id, group = entry
+        if row_id in roster:
+            raise ValueError("Frozen roster row IDs must be unique.")
+        roster[row_id] = group
+
+    groups, pooled, seen = {}, [], set()
+    for row in rows:
+        if type(row) is not tuple or len(row) != 4 or not _paired_roster_id(row[0]):
+            raise ValueError("Paired rows require one ID, one label and two scores.")
+        row_id, label, a, b = row
+        if row_id not in roster or row_id in seen:
+            raise ValueError("Paired rows must match the frozen roster exactly.")
+        seen.add(row_id)
+        if type(label) is not int or label not in (0, 1):
+            raise ValueError("Paired AUC labels must be literal integers 0 or 1.")
+        sample = (label, _paired_binary64_units(a), _paired_binary64_units(b))
+        groups.setdefault(roster[row_id], []).append(sample)
+        pooled.append(sample)
+    if len(seen) != len(roster):
+        raise ValueError("Paired rows must match the frozen roster exactly.")
+
+    def model_report(samples, column, pairs):
+        blocks = {}
+        for row in samples:
+            counts = blocks.setdefault(row[column], [0, 0])
+            counts[row[0]] += 1
+        wins = ties = negatives_below = 0
+        for score in sorted(blocks):
+            neg, pos = blocks[score]
+            wins += pos * negatives_below
+            ties += neg * pos
+            negatives_below += neg
+        return {"wins": wins, "ties": ties, "losses": pairs - wins - ties,
+                "auc": Fraction(2 * wins + ties, 2 * pairs),
+                "tie_refinement_auc_bounds": (Fraction(wins, pairs), Fraction(wins + ties, pairs))}
+
+    def report(samples):
+        pos = sum(row[0] for row in samples)
+        pairs = pos * (len(samples) - pos)
+        if not pairs:
+            return None
+        a, b = (model_report(samples, column, pairs) for column in (1, 2))
+        return {"n_positive_negative_pairs": pairs, "a": a, "b": b,
+                "auc_b_minus_a": b["auc"] - a["auc"]}
+
+    pooled_report = report(pooled)
+    if pooled_report is None:
+        raise ValueError("Pooled paired AUC requires both observed classes.")
+    per_group = {group: report(groups[group]) for group in sorted(groups)}
+    incomplete = tuple(group for group, item in per_group.items() if item is None)
+    balanced = None
+    if not incomplete:
+        def balanced_model(model):
+            return {
+                "auc": sum(item[model]["auc"] for item in per_group.values()) / len(per_group),
+                "tie_refinement_auc_bounds": tuple(
+                    sum(item[model]["tie_refinement_auc_bounds"][j] for item in per_group.values())
+                    / len(per_group) for j in (0, 1)),
+            }
+        a, b = map(balanced_model, ("a", "b"))
+        balanced = {"a": a, "b": b, "auc_b_minus_a": b["auc"] - a["auc"]}
+    return {"n_rows": len(rows), "pooled": pooled_report, "per_group": per_group,
+            "groups_without_comparable_classes": incomplete, "equal_group": balanced}
