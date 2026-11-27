@@ -358,3 +358,15 @@ that a single native timer segment was not shared; otherwise missing labels
 leave continuity unresolved. Even a matching triplet does not authenticate
 the log, synchronize timers, validate elapsed time, or change timing
 eligibility.
+
+Use `--timing-envelope-windows windows.csv` when an independent record
+specifies the counter interval for which an episode's timestamp-error
+envelope was declared valid. Fields:
+`lot,wafer,die,cell,episode,clock,epoch,valid_from_tick_us,valid_through_tick_us`.
+Declare at most one closed interval for each exact episode/clock/epoch.
+Compare the full reported tick ± error interval with those bounds; partial
+overlap is not full validity, including a single point of edge contact.
+An unmatched epoch or unusable timestamp is reported separately. The
+declared interval must be in the capture tick coordinates; this diagnostic
+does not validate metrology or prove that error bounds are accurate and
+does not alter timing admission.

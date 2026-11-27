@@ -24,7 +24,7 @@ def episode(key=BASE, early=1_000_000, final=100_000_000_000, error=0):
 
 
 class RetentionAnchorAudit(unittest.TestCase):
-    def run_capture(self, roster, rows, capture_header=IDS + TIMES, *, extra=(), block_map=None, stress=None, readout_paths=None, read_bias=None, apertures=None, schedule=None, terminations=None, planned_paths=None, native_reads=None, planned_bias=None, planned_roles=None, logged_roles=None, aperture_widths=None, event_orders=None, timer_segments=None):
+    def run_capture(self, roster, rows, capture_header=IDS + TIMES, *, extra=(), block_map=None, stress=None, readout_paths=None, read_bias=None, apertures=None, schedule=None, terminations=None, planned_paths=None, native_reads=None, planned_bias=None, planned_roles=None, logged_roles=None, aperture_widths=None, event_orders=None, timer_segments=None, envelopes=None):
         with tempfile.TemporaryDirectory() as tmp:
             folder = Path(tmp)
             for name, header, payload in (
@@ -100,6 +100,12 @@ class RetentionAnchorAudit(unittest.TestCase):
                 with path.open("w", newline="", encoding="utf-8") as stream:
                     csv.writer(stream).writerows((IDS + ("nominal_us", "native_timer_segment"), *timer_segments))
                 extra = (*extra, "--native-timer-segments", str(path))
+            if envelopes is not None:
+                path = folder / "envelopes.csv"
+                with path.open("w", newline="", encoding="utf-8") as stream:
+                    fields = IDS + ("clock", "epoch", "valid_from_tick_us", "valid_through_tick_us")
+                    csv.writer(stream).writerows((fields, *envelopes))
+                extra = (*extra, "--timing-envelope-windows", str(path))
             if schedule is not None:
                 schedule_path = folder / "schedule.csv"
                 with schedule_path.open("w", newline="", encoding="utf-8") as stream:
@@ -201,6 +207,45 @@ class RetentionAnchorAudit(unittest.TestCase):
         self.assertEqual(invalid.returncode, 2)
         self.assertIn("timestamp capture SHA-256 must be 64 lowercase", invalid.stderr)
         self.assertFalse(invalid.stdout)
+
+    def test_timing_envelope_validity_is_separate_from_elapsed_time_gate(self):
+        roster = [(*BASE[:4], f"E{i}") for i in range(5)]
+        endpoint = 100_000_000_000
+        rows = sum((episode(key, error=2) for key in roster[:4]), [])
+        end_tick = endpoint + 47
+        windows = [
+            (*roster[0], "counter", "epoch", 45, end_tick + 2),
+            (*roster[1], "counter", "epoch", 45, end_tick - 2),  # Exact boundary contact.
+            (*roster[2], "counter", "epoch", 45, end_tick - 3),
+            (*roster[3], "counter", "otherEpoch", 45, end_tick + 2),
+        ]
+        ordinary = self.run_capture(roster, rows)
+        result = self.run_capture(roster, rows, envelopes=windows)
+        self.assertEqual((ordinary.returncode, result.returncode), (1, 1))
+        report = json.loads(result.stdout)
+        support = report.pop("declared_timing_envelope_support_by_us")
+        self.assertEqual(support[str(endpoint)]["timing_eligible_by_status"], {
+            "timestamp_interval_within_declared_window": 1,
+            "timestamp_interval_partially_overlaps_declared_window": 1,
+            "timestamp_interval_outside_declared_window": 1,
+            "no_declared_window_for_anchor_clock_epoch": 1,
+        })
+        self.assertEqual(support[str(endpoint)]["frozen_attempted_by_status"]["unusable_anchor_timestamp"], 1)
+        self.assertEqual(support["0"]["timing_eligible_by_status"]["timestamp_interval_within_declared_window"], 3)
+        self.assertEqual(report, json.loads(ordinary.stdout))
+
+    def test_timing_envelope_rejects_ambiguous_or_invalid_metadata(self):
+        seal = (*BASE, "counter", "epoch", 0, 100)
+        for sidecar, diagnostic in (
+            ([seal, seal], "duplicate timing envelope"),
+            ([(*BASE, "counter", "epoch", 101, 100)], "bounds must be ordered"),
+            ([(*BASE, "counter", "", 0, 100)], "requires exact clock and epoch"),
+            ([(*BASE[:4], "not_frozen", "counter", "epoch", 0, 100)], "non-roster episode"),
+        ):
+            r = self.run_capture([BASE], episode(), envelopes=sidecar)
+            self.assertEqual(r.returncode, 2)
+            self.assertFalse(r.stdout)
+            self.assertIn(diagnostic, r.stderr)
 
     def test_reset_qualified_timer_segments_do_not_follow_export_epoch_labels(self):
         roster = [(*BASE[:4], f"E{i}") for i in range(5)]

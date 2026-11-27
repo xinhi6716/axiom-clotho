@@ -352,6 +352,39 @@ def cross_episode_event_identity_support(orders, reads):
     }
 
 
+def timing_envelope_windows(path, roster):
+    windows = defaultdict(dict)
+    fields = IDENTITY + ("clock", "epoch", "valid_from_tick_us", "valid_through_tick_us")
+    for key, (clock, epoch, start, end) in records(path, fields):
+        if key not in roster:
+            raise ValueError("timing envelope window contains a non-roster episode")
+        if not KEY.fullmatch(clock) or not KEY.fullmatch(epoch):
+            raise ValueError("timing envelope window requires exact clock and epoch labels")
+        identity = clock, epoch
+        if identity in windows[key]:
+            raise ValueError("duplicate timing envelope window for episode clock/epoch")
+        lo, hi = integer(start), integer(end)
+        if lo > hi:
+            raise ValueError("timing envelope window bounds must be ordered")
+        windows[key][identity] = lo, hi
+    return windows
+
+
+def timing_envelope_status(rows, windows):
+    if len(rows) != 1 or rows[0] is None:
+        return "unusable_anchor_timestamp"
+    clock, epoch, tick, error = rows[0]
+    window = windows.get((clock, epoch))
+    if window is None:
+        return "no_declared_window_for_anchor_clock_epoch"
+    lo, hi = window
+    if tick + error < lo or tick - error > hi:
+        return "timestamp_interval_outside_declared_window"
+    if tick - error < lo or tick + error > hi:
+        return "timestamp_interval_partially_overlaps_declared_window"
+    return "timestamp_interval_within_declared_window"
+
+
 def native_timer_segments(path, roster):
     segments = defaultdict(dict)
     fields = IDENTITY + ("nominal_us", "native_timer_segment")
@@ -712,7 +745,7 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
           termination_dispositions_sha256=None, planned_path_table=None, native_read_table=None,
           planned_bias_table=None, planned_role_table=None, logged_role_table=None,
           planned_aperture_width_table=None, event_order_table=None,
-          diagnose_individual_read_counters=False, native_timer_segment_table=None):
+          diagnose_individual_read_counters=False, native_timer_segment_table=None, timing_envelope_table=None):
     if diagnose_individual_read_counters and (event_order_table is None or native_read_table is None):
         raise ValueError("individual-read counter diagnosis requires both event order and native read identities")
     if planned_aperture_width_table is not None and aperture_table is None:
@@ -794,6 +827,10 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
     timer_segments = (native_timer_segments(native_timer_segment_table, expected)
                       if native_timer_segment_table is not None else None)
     attempted_segments, eligible_segments = Counter(), Counter()
+    envelope_windows = (timing_envelope_windows(timing_envelope_table, expected)
+                        if timing_envelope_table is not None else None)
+    attempted_envelopes = {nominal: Counter() for nominal in ANCHORS}
+    eligible_envelopes = {nominal: Counter() for nominal in ANCHORS}
     role_plans = (acquisition_event_roles(planned_role_table, expected, planned=True)
                   if planned_role_table is not None else None)
     logged_roles = (acquisition_event_roles(logged_role_table, expected, planned=False)
@@ -859,6 +896,12 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
             attempted_segments[status] += 1
             if reason == "eligible":
                 eligible_segments[status] += 1
+        if envelope_windows is not None:
+            for nominal in ANCHORS:
+                status = timing_envelope_status(slots.get(nominal, ()), envelope_windows.get(key, {}))
+                attempted_envelopes[nominal][status] += 1
+                if reason == "eligible":
+                    eligible_envelopes[nominal][status] += 1
         if role_plans is not None:
             status = event_role_status(role_plans[key], logged_roles.get(key, {}))
             attempted_roles[status] += 1
@@ -1042,6 +1085,14 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
             "frozen_attempted_by_status": dict(sorted(attempted_segments.items())),
             "timing_eligible_by_status": dict(sorted(eligible_segments.items())),
         }
+    if envelope_windows is not None:
+        report["declared_timing_envelope_support_by_us"] = {
+            str(nominal): {
+                "frozen_attempted_by_status": dict(sorted(attempted_envelopes[nominal].items())),
+                "timing_eligible_by_status": dict(sorted(eligible_envelopes[nominal].items())),
+            }
+            for nominal in ANCHORS
+        }
     if role_plans is not None:
         report["acquisition_event_role_agreement"] = {
             "frozen_attempted_by_status": dict(sorted(attempted_roles.items())),
@@ -1155,6 +1206,8 @@ def main():
                         help="assume one stream counter per individual read, not a fan-out trigger")
     parser.add_argument("--native-timer-segments", type=Path,
                         help="independent reset-qualified physical timer identities at captured anchors")
+    parser.add_argument("--timing-envelope-windows", type=Path,
+                        help="independent validity windows for declared timestamp-error envelopes")
     args = parser.parse_args()
     try:
         report = audit(args.frozen_roster, args.capture, diagnose_anchors=args.diagnose_anchors,
@@ -1179,7 +1232,8 @@ def main():
                        planned_aperture_width_table=args.planned_aperture_widths,
                        event_order_table=args.logged_event_order,
                        diagnose_individual_read_counters=args.diagnose_individual_read_counters,
-                       native_timer_segment_table=args.native_timer_segments)
+                       native_timer_segment_table=args.native_timer_segments,
+                       timing_envelope_table=args.timing_envelope_windows)
     except (OSError, UnicodeError, csv.Error):
         parser.exit(2, "error: input could not be read as UTF-8 CSV\n")
     except ValueError as exc:
