@@ -427,6 +427,9 @@ The groupbench command is an alias for the same CLI.""",
             if result.schema_version == "1.4":
                 print("Declared inner selection and weighted-fit details are consistency-checked, not proof of actual training weights or source truth.")
                 print("Features, other metadata and unlisted files are not validated.")
+            elif result.schema_version in ("1.0", "1.1"):
+                print("When retained, candidate identities and winners are checked against the declared scores; inner scores are not recomputed.")
+                print("Features, other metadata and unlisted files are not validated.")
             else:
                 print("Inner selection, features, other metadata and unlisted files are not validated.")
             return 0

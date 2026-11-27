@@ -100,6 +100,56 @@ class EvaluationSchemaTests(unittest.TestCase):
         self.mutate_json("manifest.json", lambda m: m["environment"].update(numpy="0.0"))
         self.assertEqual(replay().returncode, 0)
 
+    def test_cli_replays_frozen_standard_candidate_winners(self):
+        frame = pd.DataFrame({"g": ["a", "b", "c", "d"] * 2, "x": range(8),
+                              "y": [i * i + 1 for i in range(8)]})
+        result = benchmark(frame, target="y", group="g", baselines=("ridge",),
+                           outer_splits=2, inner_splits=2)
+        result.write(self.root, overwrite=True)
+        command = [sys.executable, "-m", "groupbench.cli", "validate-evaluation-bundle", str(self.root)]
+        env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1] / "src"),
+                   OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1", PYTHONDONTWRITEBYTECODE="1")
+
+        def replay():
+            return subprocess.run(command, env=env, text=True, capture_output=True, timeout=30)
+
+        honest = replay()
+        self.assertEqual(honest.returncode, 0)
+        self.assertIn("inner scores are not recomputed", honest.stdout)
+
+        def change_winning_alpha(manifest):
+            audit = manifest["outer_folds"][0]
+            winner = audit["selected_candidate"]
+            other = next(r["candidate"] for r in audit["inner_selection"] if r["candidate"] != winner)
+            audit["selected_candidate"] = other
+            audit["family_candidates"]["ridge"] = other
+
+        self.mutate_json("manifest.json", change_winning_alpha)
+        self.assertEqual(verify_bundle(self.root).bundle_type, "evaluation")
+        before = {p.name: p.read_bytes() for p in self.root.iterdir()}
+        reply = replay()
+        self.assertEqual(reply.returncode, 2, reply.stderr)
+        self.assertIn("standard candidate winners", reply.stderr)
+        self.assertFalse(reply.stdout)
+        self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
+
+        # Old narrow receipts without a retained ledger remain readable.
+        self.mutate_json("manifest.json", lambda m: m["outer_folds"][0].pop("inner_selection"))
+        self.assertEqual(replay().returncode, 0)
+
+        # The bounded JSON reader rejects huge integers before arithmetic.
+        result.write(self.root, overwrite=True)
+        def oversized_score(manifest):
+            manifest["outer_folds"][0]["inner_selection"][0]["selection_score"] = 10**1000
+        self.mutate_json("manifest.json", oversized_score)
+        before = {p.name: p.read_bytes() for p in self.root.iterdir()}
+        reply = replay()
+        self.assertEqual(reply.returncode, 2, reply.stderr)
+        self.assertIn("JSON numeric token exceeds 100 characters", reply.stderr)
+        self.assertNotIn("Traceback", reply.stderr)
+        self.assertFalse(reply.stdout)
+        self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
+
     def test_cli_requires_selected_predictions_to_match_declared_family_refit(self):
         from groupbench.model import GroupBenchRegressor
 

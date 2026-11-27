@@ -13,7 +13,7 @@ from .data import validate_groups, validate_seed
 from .domain_selection import domain_metadata
 from .evaluation import _evaluation_run_key
 from .metrics import regression_metrics, _checked_arithmetic
-from .model import _check_split_position_budget
+from .model import _check_split_position_budget, candidates_for
 from .splitting import GroupKFold
 from .prediction_schema import (_manifest, _DECIMAL, _optional_selection_metadata, _extension_families,
     _DOMAIN_FIELDS, _domain_config, _domain_selection, _reject_domain_audits, _domain_candidates,
@@ -119,6 +119,37 @@ def _check_seeded_outer_assignment(manifest, config, groups, fold_rows):
             fold_rows, GroupKFold(len(fold_rows), seed).split(groups=groups)):
         if not np.array_equal(saved_rows, expected_rows):
             _fail("retained rows disagree with the seeded outer fold assignment.")
+
+
+def _check_standard_candidate_winners(audit, config, baselines):
+    if "inner_selection" not in audit:
+        # Narrow legacy receipts can omit the whole selection ledger.
+        return
+    records = audit["inner_selection"]
+    candidates = candidates_for(baselines)
+    if not isinstance(records, list) or len(records) != len(candidates):
+        _fail("standard candidate selection coverage differs from the frozen grid.")
+    for candidate, record in zip(candidates, records):
+        if (not isinstance(record, dict)
+                or record.get("candidate") != candidate.name or record.get("family") != candidate.family
+                or not _same_declaration(record.get("params"), candidate.params)
+                or record.get("objective") != config["selection_objective"]):
+            _fail("standard candidate selection identity, parameters, order or objective differ.")
+        score = record.get("selection_score")
+        if (type(score) not in (int, float) or score < 0
+                or (type(score) is float and not math.isfinite(score))):
+            _fail("standard candidate selection scores must be nonnegative finite numbers.")
+    # min is stable, so equal-score winners follow producer candidate order.
+    winner = min(records, key=lambda r: r["selection_score"])
+    by_family = {
+        family: min((r for r in records if r["family"] == family),
+                    key=lambda r: r["selection_score"])["candidate"]
+        for family in baselines
+    }
+    if (audit.get("selected_family") != winner["family"]
+            or audit.get("selected_candidate") != winner["candidate"]
+            or ("family_candidates" in audit and audit["family_candidates"] != by_family)):
+        _fail("standard candidate winners differ from saved scores and candidate tie order.")
 
 
 def _check(manifest, summary, raw):
@@ -264,6 +295,8 @@ def _check(manifest, summary, raw):
         _compare({key: audit.get(key) for key in expected}, expected)
         if version != "1.3":
             _reject_domain_audits(audit)
+        if version in ("1.0", "1.1"):
+            _check_standard_candidate_winners(audit, config, baselines)
         if version in ("1.2", "1.3", "1.4"):
             inner = _count(inner_counts[fold] if version == "1.3" else config.get("inner_splits"), len(train_groups), 2)
             seed = _count(config.get("random_state"), 2**32 - 1)
