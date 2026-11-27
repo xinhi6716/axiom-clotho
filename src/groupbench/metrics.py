@@ -1783,3 +1783,57 @@ def paired_window_slope_mae(rows, *, expected_roster):
         "equal_group": summarize(*(sum(g[i] / g[0] for g in groups.values()) / len(groups)
                                    for i in (1, 2))),
     }
+
+
+def paired_fixed_lower_cutoff_tie_audit(rows, *, expected_roster, cutoff_a, cutoff_b):
+    """Audit outcome-free boundary sensitivity at two externally fixed cutoffs.
+
+    Records are (row ID, score A, score B) with a separately frozen (row ID,
+    group ID) roster. Quantities are compared at represented binary64
+    precision. Strict alerts use score < cutoff; inclusive alerts use <=.
+    Neither outcomes nor calibration inputs are accepted. The two policies
+    are descriptive counterfactuals, not estimated alert accuracy or a
+    recommendation to change the cutoff or its operational policy.
+    """
+    if (not _bounded_paired_sequence(rows)
+            or any(type(row) is not tuple or len(row) != 3 for row in rows)):
+        raise ValueError("Rows require an ID and two finite scores on a bounded nonempty roster.")
+    a_cut, b_cut = map(_paired_binary64_units, (cutoff_a, cutoff_b))
+    # The common zero anchor reuses the exact validated numeric/roster contract.
+    triples = [(key, 0, a, b) for key, a, b in rows]
+    cells = {}
+    for group, a, b in _paired_group_residual_units(triples, expected_roster):
+        # Index 0 means below, 1 equal, and 2 above.
+        i = 0 if a < a_cut else 1 if a == a_cut else 2
+        j = 0 if b < b_cut else 1 if b == b_cut else 2
+        cells.setdefault(group, [0] * 9)[3 * i + j] += 1
+
+    def report(table):
+        n = sum(table)
+        def policy(bound):
+            binary = dict.fromkeys(("00", "01", "10", "11"), 0)
+            for k, count in enumerate(table):
+                i, j = divmod(k, 3)
+                binary[f"{int(i <= bound)}{int(j <= bound)}"] += count
+            return {"cells": binary,
+                    "alert_rate_b_minus_a": Fraction(binary["01"] - binary["10"], n)}
+
+        a_tied, b_tied = sum(table[3:6]), sum(table[1::3])
+        strict = policy(0)
+        strict_net = strict["alert_rate_b_minus_a"]
+        return {
+            "n_rows": n,
+            "below_equal_above_table": tuple(tuple(table[k:k + 3]) for k in (0, 3, 6)),
+            "a_tie_fraction": Fraction(a_tied, n),
+            "b_tie_fraction": Fraction(b_tied, n),
+            "strict": strict,
+            "inclusive": policy(1),
+            "separate_tie_policy_alert_rate_b_minus_a_bounds": (
+                strict_net - Fraction(a_tied, n), strict_net + Fraction(b_tied, n)),
+        }
+
+    return {
+        "n_rows": len(rows), "n_groups": len(cells),
+        "pooled": report([sum(table[k] for table in cells.values()) for k in range(9)]),
+        "per_group": {group: report(cells[group]) for group in sorted(cells)},
+    }
