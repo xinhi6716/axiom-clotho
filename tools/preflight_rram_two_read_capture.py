@@ -1,0 +1,105 @@
+"""Check a PBA-like nominal-one-second ADC-code capture, not retention eligibility."""
+import argparse
+import csv
+from decimal import Decimal
+import io
+import json
+import os
+from pathlib import Path
+import re
+import stat
+
+FIELDS = ("addr", "i", "timept", "time", "after_write", "after_relax")
+INTEGER = re.compile(r"[0-9]{1,9}", re.ASCII)
+DECIMAL = re.compile(r"[0-9]{1,2}(?:\.[0-9]{1,30})?", re.ASCII)
+CAPTURE_ID = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.:-]{0,127}", re.ASCII)
+LANES = frozenset(range(16))
+MAX_BYTES = 8 * 1024 * 1024
+
+
+def checked_integer(value):
+    if not INTEGER.fullmatch(value):
+        raise ValueError("address, lane, timepoint and ADC codes must be unsigned decimal integers")
+    return int(value)
+
+
+def audit(path, seen_files):
+    with os.fdopen(os.open(path, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0)
+                           | getattr(os, "O_BINARY", 0)), "rb") as file:
+        info = os.fstat(file.fileno())
+        if not stat.S_ISREG(info.st_mode):
+            raise ValueError("capture must be a regular file")
+        physical_file = info.st_dev, info.st_ino
+        if physical_file in seen_files:
+            raise ValueError("same input file assigned to multiple capture/chip identities")
+        seen_files.add(physical_file)
+        raw = file.read(MAX_BYTES + 1)
+    if len(raw) > MAX_BYTES:
+        raise ValueError("capture exceeds byte limit")
+    reader = csv.reader(io.StringIO(raw.decode("utf-8-sig"), newline=""), strict=True)
+    header = next(reader, [])
+    if len(set(header)) != len(header) or not set(FIELDS).issubset(header):
+        raise ValueError("capture requires distinct header fields including all six native columns")
+    indices = tuple(header.index(name) for name in FIELDS)
+    groups = {}
+    for row in reader:
+        if len(row) != len(header):
+            raise ValueError("capture row column count differs from header")
+        address, lane, nominal, elapsed, initial, final = (row[i] for i in indices)
+        addr, lane, timepoint, initial, final = map(checked_integer, (address, lane, nominal, initial, final))
+        if lane not in LANES or timepoint != 1 or not (2 <= initial <= 64 and 2 <= final <= 64):
+            raise ValueError("capture requires lanes 0–15, nominal timepoint 1 and ADC codes 2–64")
+        if not DECIMAL.fullmatch(elapsed) or not Decimal("0.98") < Decimal(elapsed) < Decimal("1.02"):
+            raise ValueError("shared elapsed time must be a decimal strictly between 0.98 and 1.02 seconds")
+        elapsed = Decimal(elapsed)
+        shared, pairs = groups.setdefault(addr, (elapsed, {}))
+        if lane in pairs:
+            raise ValueError("duplicate native address/lane assignment")
+        if shared != elapsed:
+            raise ValueError("lanes at an address do not share one elapsed time")
+        pairs[lane] = (initial, final)
+    if not groups or any(pairs.keys() != LANES for _, pairs in groups.values()):
+        raise ValueError("capture requires nonempty complete 16-lane address groups")
+    return {
+        "complete_address_groups": len(groups),
+        "native_paired_rows": len(groups) * len(LANES),
+        "same_row_persistence_abs_error_sum_adc_codes": sum(
+            abs(initial - final) for _, pairs in groups.values() for initial, final in pairs.values()
+        ),
+    }
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--capture", action="append", nargs=3, required=True, metavar=("CAPTURE_ID", "CHIP_ID", "CSV"))
+    args = parser.parse_args()
+    try:
+        seen = set()
+        files = set()
+        reports = []
+        for capture_id, chip_id, filename in args.capture:
+            if not CAPTURE_ID.fullmatch(capture_id) or not CAPTURE_ID.fullmatch(chip_id):
+                raise ValueError("invalid capture or chip identity")
+            key = capture_id, chip_id
+            if key in seen:
+                raise ValueError("duplicate capture/chip identity")
+            seen.add(key)
+            reports.append({"capture_id": capture_id, "chip_id": chip_id,
+                            **audit(Path(filename), files)})
+    except (OSError, UnicodeError, csv.Error):
+        parser.exit(2, "error: capture could not be read as UTF-8 CSV\n")
+    except ValueError as exc:
+        parser.exit(2, f"error: {exc}\n")
+    print(json.dumps({
+        "schema": "clotho.rram_two_read_capture_preflight.v1",
+        "captures": reports,
+        "scope": "paired ADC codes at a nominal one-second timepoint; elapsed time shared by address",
+        "verified_nominal_zero_timestamp": False,
+        "native_100ks_endpoint": False,
+        "retention_gate_eligible": False,
+    }, indent=2, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
