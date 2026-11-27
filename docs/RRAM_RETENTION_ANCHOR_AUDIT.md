@@ -298,3 +298,16 @@ unresolved, including a touch at one edge that is not full containment.
 This distinguishes internally consistent but wrong polarity from planned
 operation, does not infer voltage at the device from unverified logs, and
 does not change timing eligibility.
+
+Use `--planned-event-roles` and `--logged-event-roles` together to compare
+capture roles with an independently specified recipe. Both tables use
+`lot,wafer,die,cell,episode,nominal_us` and, respectively,
+`planned_event_role` or `logged_event_role`. The exact role vocabulary is
+`state_write_end`, `measurement_read`, `stress_start`, `stress_end`, and
+`scheduler_marker`; logs also permit `unknown`. The plan covers all three
+anchors per frozen attempt, and logged roles must identify unique captured
+anchors. A logged stress-end or scheduler marker can have valid timing
+without being a measurement read. Any known mismatch disproves role
+agreement; otherwise unknown or absent roles leave it unresolved. An event
+role does not prove electrical delivery or a continuous stress interval,
+and the diagnostic changes no timing admission.

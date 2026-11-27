@@ -257,6 +257,38 @@ def planned_path_status(slots, observed, plan):
     return "unresolved_route" if unresolved else "all_logged_routes_match_plan"
 
 
+def acquisition_event_roles(path, roster, *, planned):
+    roles = defaultdict(dict)
+    field = "planned_event_role" if planned else "logged_event_role"
+    vocabulary = {"state_write_end", "measurement_read", "stress_start", "stress_end", "scheduler_marker"}
+    for key, (raw_nominal, role) in records(path, IDENTITY + ("nominal_us", field)):
+        nominal = integer(raw_nominal)
+        if key not in roster or nominal not in ANCHORS:
+            raise ValueError("event role does not identify a frozen anchor")
+        if not planned and len(roster[key].get(nominal, ())) != 1:
+            raise ValueError("logged event role does not identify one captured frozen anchor")
+        if role not in vocabulary and (planned or role != "unknown"):
+            raise ValueError("invalid event role")
+        if nominal in roles[key]:
+            raise ValueError("duplicate event role for a frozen anchor")
+        roles[key][nominal] = role
+    if planned and (len(roles) != len(roster)
+                    or any(len(plan) != len(ANCHORS) for plan in roles.values())):
+        raise ValueError("planned event roles must cover all frozen anchors")
+    return roles
+
+
+def event_role_status(plan, evidence):
+    unresolved = False
+    for nominal, expected in plan.items():
+        logged = evidence.get(nominal, "unknown")
+        if logged == "unknown":
+            unresolved = True
+        elif logged != expected:
+            return "logged_event_role_differs_from_plan"
+    return "unresolved_event_role" if unresolved else "all_logged_event_roles_match_plan"
+
+
 def native_read_identity_statuses(path, roster):
     reads_by_anchor, anchors_by_read = {}, defaultdict(set)
     fields = IDENTITY + ("nominal_us", "native_read_namespace", "native_read_id")
@@ -562,7 +594,9 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
           diagnose_common_read_error_aperture=False, commanded_schedule_path=None,
           termination_table_path=None, commanded_schedule_sha256=None,
           termination_dispositions_sha256=None, planned_path_table=None, native_read_table=None,
-          planned_bias_table=None):
+          planned_bias_table=None, planned_role_table=None, logged_role_table=None):
+    if (planned_role_table is None) != (logged_role_table is None):
+        raise ValueError("event role audit requires both planned and logged event role tables")
     if planned_bias_table is not None and read_bias_table is None:
         raise ValueError("planned bias requires observed read bias")
     if planned_path_table is not None and readout_path_table is None:
@@ -633,6 +667,11 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
     native_reads = (native_read_identity_statuses(native_read_table, expected)
                     if native_read_table is not None else None)
     attempted_native_reads, eligible_native_reads = Counter(), Counter()
+    role_plans = (acquisition_event_roles(planned_role_table, expected, planned=True)
+                  if planned_role_table is not None else None)
+    logged_roles = (acquisition_event_roles(logged_role_table, expected, planned=False)
+                    if logged_role_table is not None else None)
+    attempted_roles, eligible_roles = Counter(), Counter()
     biases = read_bias_intervals(read_bias_table, expected) if read_bias_table is not None else None
     attempted_bias, eligible_bias = Counter(), Counter()
     bias_plans = planned_read_bias(planned_bias_table, expected) if planned_bias_table is not None else None
@@ -679,6 +718,11 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
             attempted_native_reads[status] += 1
             if reason == "eligible":
                 eligible_native_reads[status] += 1
+        if role_plans is not None:
+            status = event_role_status(role_plans[key], logged_roles.get(key, {}))
+            attempted_roles[status] += 1
+            if reason == "eligible":
+                eligible_roles[status] += 1
         if biases is not None:
             status = read_bias_status(slots, biases.get(key, {}))
             attempted_bias[status] += 1
@@ -837,6 +881,11 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
             "frozen_attempted_by_status": dict(sorted(attempted_native_reads.items())),
             "timing_eligible_by_status": dict(sorted(eligible_native_reads.items())),
         }
+    if role_plans is not None:
+        report["acquisition_event_role_agreement"] = {
+            "frozen_attempted_by_status": dict(sorted(attempted_roles.items())),
+            "timing_eligible_by_status": dict(sorted(eligible_roles.items())),
+        }
     if biases is not None:
         report["reported_read_bias_support"] = {
             "frozen_attempted_by_status": dict(sorted(attempted_bias.items())),
@@ -925,6 +974,10 @@ def main():
                         help="optional instrument-native individual read identity per captured anchor")
     parser.add_argument("--planned-read-bias", type=Path,
                         help="independent allowed signed bias window at each frozen anchor")
+    parser.add_argument("--planned-event-roles", type=Path,
+                        help="independent frozen recipe of anchor event roles")
+    parser.add_argument("--logged-event-roles", type=Path,
+                        help="independent acquisition log of roles at existing unique anchors")
     args = parser.parse_args()
     try:
         report = audit(args.frozen_roster, args.capture, diagnose_anchors=args.diagnose_anchors,
@@ -944,7 +997,8 @@ def main():
                        termination_dispositions_sha256=args.termination_dispositions_sha256,
                        planned_path_table=args.planned_readout_paths,
                        native_read_table=args.native_read_identities,
-                       planned_bias_table=args.planned_read_bias)
+                       planned_bias_table=args.planned_read_bias,
+                       planned_role_table=args.planned_event_roles, logged_role_table=args.logged_event_roles)
     except (OSError, UnicodeError, csv.Error):
         parser.exit(2, "error: input could not be read as UTF-8 CSV\n")
     except ValueError as exc:

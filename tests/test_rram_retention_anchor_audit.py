@@ -24,7 +24,7 @@ def episode(key=BASE, early=1_000_000, final=100_000_000_000, error=0):
 
 
 class RetentionAnchorAudit(unittest.TestCase):
-    def run_capture(self, roster, rows, capture_header=IDS + TIMES, *, extra=(), block_map=None, stress=None, readout_paths=None, read_bias=None, apertures=None, schedule=None, terminations=None, planned_paths=None, native_reads=None, planned_bias=None):
+    def run_capture(self, roster, rows, capture_header=IDS + TIMES, *, extra=(), block_map=None, stress=None, readout_paths=None, read_bias=None, apertures=None, schedule=None, terminations=None, planned_paths=None, native_reads=None, planned_bias=None, planned_roles=None, logged_roles=None):
         with tempfile.TemporaryDirectory() as tmp:
             folder = Path(tmp)
             for name, header, payload in (
@@ -70,6 +70,13 @@ class RetentionAnchorAudit(unittest.TestCase):
                     cols = IDS + ("nominal_us", "planned_bias_min_uV", "planned_bias_max_uV")
                     csv.writer(stream).writerows((cols, *planned_bias))
                 extra = (*extra, "--planned-read-bias", str(path))
+            for mode, role_rows in (("planned", planned_roles), ("logged", logged_roles)):
+                if role_rows is not None:
+                    path = folder / f"{mode}_roles.csv"
+                    with path.open("w", newline="", encoding="utf-8") as stream:
+                        cols = IDS + ("nominal_us", f"{mode}_event_role")
+                        csv.writer(stream).writerows((cols, *role_rows))
+                    extra = (*extra, f"--{mode}-event-roles", str(path))
             if apertures is not None:
                 aperture_file = folder / "apertures.csv"
                 with aperture_file.open("w", newline="", encoding="utf-8") as stream:
@@ -177,6 +184,41 @@ class RetentionAnchorAudit(unittest.TestCase):
         self.assertEqual(invalid.returncode, 2)
         self.assertIn("timestamp capture SHA-256 must be 64 lowercase", invalid.stderr)
         self.assertFalse(invalid.stdout)
+
+    def test_event_role_audit_distinguishes_timed_stress_marker_from_read(self):
+        roster = [(*BASE[:4], f"E{i}") for i in range(4)]
+        t = (0, 1_000_000, 100_000_000_000)
+        expected = ("state_write_end", "measurement_read", "measurement_read")
+        plan = [(*key, tick, role) for key in roster for tick, role in zip(t, expected)]
+        rows = sum((episode(key) for key in roster[:3]), [])
+        evidence = plan[:3] + [(*roster[1], t[1], "stress_end"), (*roster[2], t[2], "unknown")]
+        ordinary = self.run_capture(roster, rows)
+        r = self.run_capture(roster, rows, planned_roles=plan, logged_roles=evidence)
+        self.assertEqual((r.returncode, ordinary.returncode), (1, 1))
+        report = json.loads(r.stdout)
+        self.assertEqual(report.pop("acquisition_event_role_agreement"), {
+            "frozen_attempted_by_status": {"all_logged_event_roles_match_plan": 1,
+                "logged_event_role_differs_from_plan": 1, "unresolved_event_role": 2},
+            "timing_eligible_by_status": {"all_logged_event_roles_match_plan": 1,
+                "logged_event_role_differs_from_plan": 1, "unresolved_event_role": 1},
+        })
+        self.assertEqual(report, json.loads(ordinary.stdout))
+        self.assertNotIn("privateLot", r.stdout)
+
+    def test_event_role_audit_validates_independent_plan_and_unique_capture(self):
+        plan = [(*BASE, t, role) for t, role in zip((0, 1_000_000, 100_000_000_000),
+                ("state_write_end", "measurement_read", "measurement_read"))]
+        for rows, recipe, log, diagnostic in (
+            (episode(), plan, None, "requires both"),
+            (episode(), plan[:1], plan, "must cover"),
+            (episode(), plan[:-1] + [(*BASE, plan[-1][5], "unknown")], plan, "invalid event role"),
+            (episode() + episode()[:1], plan, plan, "does not identify one captured"),
+            (episode(), plan, plan + plan[:1], "duplicate event role"),
+        ):
+            r = self.run_capture([BASE], rows, planned_roles=recipe, logged_roles=log)
+            self.assertEqual(r.returncode, 2)
+            self.assertFalse(r.stdout)
+            self.assertIn(diagnostic, r.stderr)
 
     def test_planned_bias_distinguishes_wrong_polarity_and_boundary_uncertainty(self):
         roster = [(*BASE[:4], f"E{i}") for i in range(5)]
