@@ -402,6 +402,25 @@ def _check_prediction_v13_selected_candidate(manifest, config):
     if (manifest["selected_candidate"], manifest["selected_family"]) != (winner["candidate"], winner["family"]):
         _fail("selected extended candidate differs from saved scores and candidate tie order.")
 
+    # Earlier checks already bind these positive held-out counts to the
+    # complete grouped-validation schedule. True inner predictions are absent.
+    key = "test_group_count" if config["selection_objective"] == "group_mae" else "test_rows"
+    weights = [fold[key] for fold in manifest["inner_folds"]]
+    total = sum(weights)
+    for record in records:
+        scores = record.get("inner_fold_scores")
+        if (not isinstance(scores, list) or len(scores) != len(weights)
+                or any(type(x) not in (int, float) or x < 0
+                       or (type(x) is float and not math.isfinite(x)) for x in scores)):
+            _fail("pooled extended inner selection score requires finite nonnegative scores for all folds.")
+        maximum = max(scores)
+        pooled = 0.0 if maximum == 0 else maximum * math.fsum(
+            (x / maximum) * (weight / total) for x, weight in zip(scores, weights))
+        saved = record["selection_score"]
+        if ((saved == 0) != (maximum == 0) or not math.isfinite(pooled)
+                or not math.isclose(saved, pooled, rel_tol=1e-10, abs_tol=0.0)):
+            _fail("pooled extended inner selection score differs from retained weighted fold scores.")
+
 
 def _same_declaration(actual, expected):
     # Reject bools masquerading as numeric parameters, but allow JSON 1 / 1.0.

@@ -405,6 +405,44 @@ class PredictionSchemaTests(unittest.TestCase):
         self.assertFalse(reply.stdout)
         self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
 
+    def test_cli_rejects_v13_pooled_score_with_winner_unchanged(self):
+        import pandas as pd
+        from groupbench import fit_predict
+
+        sizes = [6, 5, 4, 2, 2]
+        groups = [group for group, size in zip("abcde", sizes) for _ in range(size)]
+        n = len(groups)
+        frame = pd.DataFrame({"g": groups, "x": range(n), "y": [float(i*i) for i in range(n)]})
+        command = [sys.executable, "-m", "groupbench.cli", "validate-prediction-bundle", str(self.root)]
+        env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1] / "src"),
+                   PYTHONDONTWRITEBYTECODE="1", OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1")
+
+        def replay():
+            return subprocess.run(command, env=env, capture_output=True, text=True, timeout=30)
+
+        for objective in ("mae", "group_mae"):
+            with self.subTest(objective=objective):
+                result = fit_predict(frame, frame[["x"]].head(2), target="y", group="g",
+                                     baselines=("dummy", "group_median"),
+                                     inner_splits=2, objective=objective)
+                result.write(self.root, overwrite=True)
+                self.assertEqual(result.manifest["schema_version"], "1.3")
+                self.assertEqual(replay().returncode, 0)
+                raw = (self.root / "predictions.csv").read_bytes()
+                changed = copy.deepcopy(result.manifest)
+                other = next(r for r in changed["inner_selection"]
+                             if r["candidate"] != changed["selected_candidate"])
+                other["selection_score"] *= 1.5
+                self.assertGreater(other["selection_score"], 0.0)
+                write_bundle(self.root, changed, csv=raw)
+                self.assertEqual(verify_bundle(self.root).bundle_type, "prediction")
+                before = {p.name: p.read_bytes() for p in self.root.iterdir()}
+                reply = replay()
+                self.assertEqual(reply.returncode, 2, reply.stderr)
+                self.assertIn("pooled extended inner selection score", reply.stderr)
+                self.assertFalse(reply.stdout)
+                self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
+
     def test_cli_binds_v13_selected_prediction_candidate_to_inner_scores(self):
         import pandas as pd
         from groupbench import fit_predict
