@@ -330,7 +330,10 @@ pub fn extract_cohort(branches: &[Branch], p: Settings) -> Result<Vec<Features>,
     let mut repeats = BTreeMap::new();
     let mut acquisitions = BTreeSet::new();
     let mut rows = BTreeSet::new();
-    let mut pairs: BTreeMap<(&str, &str), BTreeMap<State, Readpoint>> = BTreeMap::new();
+    // Compact keys keep canonical device/cycle order. Fixed state slots
+    // share one allocation rather than putting a separate tree on each cycle.
+    let mut pairs: BTreeMap<(&str, &str), usize> = BTreeMap::new();
+    let mut states = Vec::with_capacity(branches.len() / 2);
     for b in branches {
         let point = extract_branch(b, p)?;
         let a = &b.acquisition;
@@ -353,19 +356,25 @@ pub fn extract_cohort(branches: &[Branch], p: Settings) -> Result<Vec<Features>,
         if b.samples.iter().any(|q| !rows.insert(q.source_row)) {
             return Err(RramError::InvalidSample);
         }
-        if pairs
-            .entry((&a.device, &a.cycle))
-            .or_default()
-            .insert(a.state, point)
-            .is_some()
-        {
+        let index = *pairs.entry((&a.device, &a.cycle)).or_insert_with(|| {
+            let index = states.len();
+            states.push([None, None]);
+            index
+        });
+        let [hrs, lrs] = &mut states[index];
+        let slot = match a.state {
+            State::Hrs => hrs,
+            State::Lrs => lrs,
+        };
+        if slot.replace(point).is_some() {
             return Err(RramError::DuplicateState);
         }
     }
     let mut groups: BTreeMap<(String, String), Vec<Pair>> = BTreeMap::new();
-    for (_, mut states) in pairs {
-        let hrs = states.remove(&State::Hrs).ok_or(RramError::MissingState)?;
-        let lrs = states.remove(&State::Lrs).ok_or(RramError::MissingState)?;
+    for (_, index) in pairs {
+        let [hrs, lrs] = std::mem::take(&mut states[index]);
+        let hrs = hrs.ok_or(RramError::MissingState)?;
+        let lrs = lrs.ok_or(RramError::MissingState)?;
         if hrs.acquisition.replicate != lrs.acquisition.replicate {
             return Err(RramError::ReplicateMismatch);
         }

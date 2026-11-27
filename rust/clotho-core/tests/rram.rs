@@ -545,3 +545,33 @@ fn readpoint_lookup_preserves_literal_source_keys_and_error_precedence() {
         Err(RramError::InvalidVoltageOrder)
     ));
 }
+
+#[test]
+fn paired_state_slots_keep_cycle_order_and_duplicate_priority() {
+    let mut branches = vec![
+        branch(State::Lrs, "02", 0.1, 2),
+        branch(State::Hrs, "01", 0.01, 3),
+        branch(State::Hrs, "02", 0.02, 4),
+        branch(State::Lrs, "01", 0.2, 5),
+    ];
+    let features = extract_cohort(&branches, settings()).unwrap();
+    let pairs = &features[0].pairs;
+    assert_eq!(pairs[0].hrs.acquisition.cycle, "01");
+    assert_eq!(pairs[0].lrs.selected_source_rows, [5]);
+    assert_eq!(pairs[1].hrs.acquisition.cycle, "02");
+    assert_eq!(pairs[1].lrs.selected_source_rows, [2]);
+
+    let mut duplicate = branch(State::Lrs, "02", 0.1, 6);
+    duplicate.acquisition.branch = "another LRS".into();
+    branches.push(duplicate);
+    branches.push(branch(State::Hrs, "03", f64::NAN, 7));
+    assert!(matches!(
+        extract_cohort(&branches, settings()),
+        Err(RramError::DuplicateState)
+    ));
+    branches.truncate(3);
+    assert!(matches!(
+        extract_cohort(&branches, settings()),
+        Err(RramError::MissingState)
+    ));
+}
