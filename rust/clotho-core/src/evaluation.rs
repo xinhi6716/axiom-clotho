@@ -74,10 +74,23 @@ pub fn regression_rmse(y_true: &[f64], y_pred: &[f64]) -> Result<f64, Evaluation
     if y_true.iter().chain(y_pred).any(|v| !v.is_finite()) {
         return Err(EvaluationError::NonFinite);
     }
+    validated_rmse(y_true, y_pred)
+}
+
+fn validated_rmse(y_true: &[f64], y_pred: &[f64]) -> Result<f64, EvaluationError> {
     // The usual path discovers the maximum finite difference in one pass,
     // then reduces normalized errors without a row-sized scratch vector.
+    let (scale, factor) = difference_scale(|| y_true.iter().copied().zip(y_pred.iter().copied()))?;
+    rmse_with_scale(y_true, y_pred, scale, factor)
+}
+
+fn rmse_with_scale(
+    y_true: &[f64],
+    y_pred: &[f64],
+    scale: f64,
+    factor: f64,
+) -> Result<f64, EvaluationError> {
     let pairs = || y_true.iter().copied().zip(y_pred.iter().copied());
-    let (scale, factor) = difference_scale(pairs)?;
     if scale == 0.0 {
         return Ok(0.0);
     }
@@ -102,6 +115,50 @@ pub fn regression_rmse(y_true: &[f64], y_pred: &[f64]) -> Result<f64, Evaluation
         scale,
         factor,
     )
+}
+
+/// Evaluate two arms after their shared finite, nonempty roster is verified.
+pub(crate) fn paired_validated_rmse(
+    observed: &[f64],
+    model: &[f64],
+    baseline: &[f64],
+) -> Result<(f64, f64), EvaluationError> {
+    debug_assert!(!observed.is_empty());
+    debug_assert_eq!(observed.len(), model.len());
+    debug_assert_eq!(observed.len(), baseline.len());
+    let triples = || observed.iter().zip(model).zip(baseline);
+    let mut model_scale = 0.0_f64;
+    let mut base_scale = 0.0_f64;
+    for ((&actual, &predicted), &reference) in triples() {
+        model_scale = model_scale.max((actual - predicted).abs());
+        base_scale = base_scale.max((actual - reference).abs());
+    }
+    if !model_scale.is_finite() || !base_scale.is_finite() || model_scale == 0.0 || base_scale == 0.0 {
+        let rmse = |arm: &[f64], scale: f64| {
+            if scale.is_finite() {
+                rmse_with_scale(observed, arm, scale, 1.0)
+            } else {
+                // Retain the existing half-scale rescue for raw overflow.
+                validated_rmse(observed, arm)
+            }
+        };
+        return Ok((rmse(model, model_scale)?, rmse(baseline, base_scale)?));
+    }
+
+    // Both arms retain their own error scales and their original row order.
+    let mut model_squares = CompensatedSum::default();
+    let mut base_squares = CompensatedSum::default();
+    for ((&actual, &predicted), &reference) in triples() {
+        let model_error = normalize_error(actual - predicted, model_scale)?;
+        let base_error = normalize_error(actual - reference, base_scale)?;
+        model_squares.add(model_error * model_error);
+        base_squares.add(base_error * base_error);
+    }
+    let count = observed.len() as f64;
+    Ok((
+        restore_scale((model_squares.total() / count).sqrt(), model_scale, 1.0)?,
+        restore_scale((base_squares.total() / count).sqrt(), base_scale, 1.0)?,
+    ))
 }
 
 /// Relative squared-error improvement against explicit baseline predictions.

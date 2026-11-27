@@ -262,3 +262,54 @@ fn monotone_and_shuffled_rosters_preserve_values_and_validation_precedence() {
         assert_eq!(compare_saved_regression(input, input, input), Err(expected));
     }
 }
+
+#[test]
+fn paired_scores_keep_independent_scales_and_validate_before_arithmetic() {
+    use clotho_core::evaluation::{regression_mse_skill, regression_rmse};
+
+    let ids = ["a", "b", "c", "d", "e"];
+    let actual = [f64::MAX, 0.0, 0.0, 0.0, 0.0];
+    let opposite = [-f64::MAX, 0.0, 0.0, 0.0, 0.0];
+    let zero = [0.0; 5];
+    for (model, baseline) in [
+        (&opposite, &zero),
+        (&zero, &opposite),
+        (&zero, &actual),
+        (&actual, &zero),
+        (&opposite, &opposite),
+    ] {
+        let report = compare_saved_regression(
+            series(&ids, &actual),
+            series(&ids, model),
+            series(&ids, baseline),
+        )
+        .unwrap();
+        assert_eq!(
+            report.model_rmse.to_bits(),
+            regression_rmse(&actual, model).unwrap().to_bits()
+        );
+        assert_eq!(
+            report.baseline_rmse.to_bits(),
+            regression_rmse(&actual, baseline).unwrap().to_bits()
+        );
+        assert_eq!(report.mse_skill, regression_mse_skill(&actual, model, baseline).unwrap());
+    }
+    let failing_model = [-f64::MAX, f64::from_bits(1), 0.0, 0.0, 0.0];
+    assert_eq!(
+        compare_saved_regression(
+            series(&ids, &actual),
+            series(&ids, &failing_model),
+            series(&ids, &zero)
+        ),
+        Err(SavedComparisonError::Numeric(EvaluationError::NumericOverflow))
+    );
+    let bad_baseline = [f64::NAN; 5];
+    assert_eq!(
+        compare_saved_regression(
+            series(&ids, &actual),
+            series(&ids, &failing_model),
+            series(&ids, &bad_baseline)
+        ),
+        Err(SavedComparisonError::Numeric(EvaluationError::NonFinite))
+    );
+}

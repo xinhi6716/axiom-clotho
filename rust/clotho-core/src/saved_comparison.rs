@@ -2,7 +2,7 @@
 //!
 //! Labels are caller declarations, not authenticated query bytes or physical
 //! identity. This module does not load models, files, or fit any parameters.
-use crate::evaluation::{mse_skill_from_checked_rmse, regression_rmse, EvaluationError};
+use crate::evaluation::{mse_skill_from_checked_rmse, paired_validated_rmse, EvaluationError};
 use std::collections::HashSet;
 use std::fmt;
 
@@ -148,8 +148,8 @@ pub fn compare_saved_regression<'a>(
     if !model_roster_matches || !baseline_roster_matches {
         return Err(SavedComparisonError::RowOrderMismatch);
     }
-    let model_rmse = regression_rmse(observed.values, model.values)?;
-    let baseline_rmse = regression_rmse(observed.values, baseline.values)?;
+    let (model_rmse, baseline_rmse) =
+        paired_validated_rmse(observed.values, model.values, baseline.values)?;
     let mse_skill = mse_skill_from_checked_rmse(model_rmse, baseline_rmse)?;
     Ok(SavedRegressionComparison {
         contract: observed.contract,
