@@ -428,6 +428,20 @@ def schedule_coverage(commands, observed):
     return totals
 
 
+def termination_dispositions(path, roster):
+    allowed = {"completed", "value_threshold_stop", "instrument_abort", "operator_abort", "unknown"}
+    dispositions = {}
+    for key, (reason,) in records(path, IDENTITY + ("termination_disposition",)):
+        if key not in roster:
+            raise ValueError("termination table contains a non-roster episode")
+        if key in dispositions:
+            raise ValueError("duplicate episode in termination table")
+        if reason not in allowed:
+            raise ValueError("invalid termination disposition")
+        dispositions[key] = reason
+    return dispositions
+
+
 def validate_digest(digest, label):
     if digest is not None and (not isinstance(digest, str) or not SHA256.fullmatch(digest)):
         raise ValueError(f"{label} SHA-256 must be 64 lowercase hexadecimal digits")
@@ -438,7 +452,8 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
           diagnose_die_stress=False, diagnose_duplicate_anchors=False,
           diagnose_terminal_alternatives=False, capture_sha256=None, readout_path_table=None,
           read_bias_table=None, aperture_table=None, diagnose_joint_aperture=False,
-          diagnose_common_read_error_aperture=False, commanded_schedule_path=None):
+          diagnose_common_read_error_aperture=False, commanded_schedule_path=None,
+          termination_table_path=None):
     validate_digest(roster_sha256, "frozen roster")
     validate_digest(capture_sha256, "timestamp capture")
     validate_digest(block_map_sha256, "acquisition block map")
@@ -462,6 +477,9 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
     commands = (commanded_slots(commanded_schedule_path, expected)
                 if commanded_schedule_path is not None else None)
     observed_slots = defaultdict(Counter) if commands is not None else None
+    terminations = (termination_dispositions(termination_table_path, expected)
+                    if termination_table_path is not None else None)
+    termination_counts = defaultdict(Counter)
     present, unexpected = set(), set()
     off_anchor_rows = 0
     off_anchor_stamps = defaultdict(list) if diagnose_terminal_alternatives else None
@@ -509,6 +527,15 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
     for key, slots in expected.items():
         reason = verdict(slots) if key in present else "missing_capture"
         classifications[reason] += 1
+        if terminations is not None:
+            stats = termination_counts[terminations.get(key, "missing_declaration")]
+            stats["frozen_attempted_episodes"] += 1
+            stats["episodes_with_capture"] += int(key in present)
+            stats["episodes_with_nominal_terminal_row"] += int(ANCHORS[-1] in slots)
+            stats["episodes_within_terminal_time_window"] += int(
+                tuple(anchor_statuses(slots))[-1] == "within_window"
+            )
+            stats["timing_eligible_episodes"] += int(reason == "eligible")
         if paths is not None:
             path_status = readout_path_status(slots, paths.get(key, {}))
             attempted_paths[path_status] += 1
@@ -678,6 +705,10 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
         }
     if commands is not None:
         report["commanded_nominal_slot_coverage"] = schedule_coverage(commands, observed_slots)
+    if terminations is not None:
+        report["declared_termination_disposition_support"] = {
+            reason: dict(counts) for reason, counts in sorted(termination_counts.items())
+        }
     return report
 
 
@@ -717,6 +748,8 @@ def main():
                         help="conditional joint fit if both read corrections must be equal")
     parser.add_argument("--commanded-schedule", type=Path,
                         help="independent exact nominal-slot declaration per frozen episode")
+    parser.add_argument("--termination-dispositions", type=Path,
+                        help="optional episode-keyed controller/log termination dispositions")
     args = parser.parse_args()
     try:
         report = audit(args.frozen_roster, args.capture, diagnose_anchors=args.diagnose_anchors,
@@ -730,7 +763,8 @@ def main():
                        read_bias_table=args.read_bias, aperture_table=args.read_apertures,
                        diagnose_joint_aperture=args.diagnose_joint_aperture,
                        diagnose_common_read_error_aperture=args.diagnose_common_read_error_aperture,
-                       commanded_schedule_path=args.commanded_schedule)
+                       commanded_schedule_path=args.commanded_schedule,
+                       termination_table_path=args.termination_dispositions)
     except (OSError, UnicodeError, csv.Error):
         parser.exit(2, "error: input could not be read as UTF-8 CSV\n")
     except ValueError as exc:

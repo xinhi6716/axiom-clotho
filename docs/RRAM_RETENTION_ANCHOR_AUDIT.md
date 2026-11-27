@@ -221,3 +221,16 @@ two early reads and no terminal read. This reports nominal-slot structure
 only: a captured row can have unknown timing or unusable measurements.
 It does not establish that commands were issued, repair repeats, or modify
 the primary timestamp gate.
+
+If a controller or independent run log records how attempts ended, add
+`--termination-dispositions terminations.csv` with exact fields
+`lot,wafer,die,cell,episode,termination_disposition`. Acceptable declared
+dispositions are `completed`, `value_threshold_stop`, `instrument_abort`,
+`operator_abort`, and `unknown`. Unreported episodes remain in their
+own category. Do not infer a disposition from the final value or the
+presence or absence of a CSV row. Per disposition, the audit counts frozen
+attempts, any capture, nominal terminal rows, verified time-window metadata
+for the terminal reading, and complete timing eligibility separately.
+The controller saying completed does not establish endpoint observability,
+and a stop value is not a substitute for a scheduled terminal observation.
+No safety setting, timing gate, or missing-outcome rule changes.

@@ -24,7 +24,7 @@ def episode(key=BASE, early=1_000_000, final=100_000_000_000, error=0):
 
 
 class RetentionAnchorAudit(unittest.TestCase):
-    def run_capture(self, roster, rows, capture_header=IDS + TIMES, *, extra=(), block_map=None, stress=None, readout_paths=None, read_bias=None, apertures=None, schedule=None):
+    def run_capture(self, roster, rows, capture_header=IDS + TIMES, *, extra=(), block_map=None, stress=None, readout_paths=None, read_bias=None, apertures=None, schedule=None, terminations=None):
         with tempfile.TemporaryDirectory() as tmp:
             folder = Path(tmp)
             for name, header, payload in (
@@ -63,6 +63,11 @@ class RetentionAnchorAudit(unittest.TestCase):
                 with schedule_path.open("w", newline="", encoding="utf-8") as stream:
                     csv.writer(stream).writerows((IDS + ("nominal_us",), *schedule))
                 extra = (*extra, "--commanded-schedule", str(schedule_path))
+            if terminations is not None:
+                path = folder / "termination.csv"
+                with path.open("w", newline="", encoding="utf-8") as stream:
+                    csv.writer(stream).writerows((IDS + ("termination_disposition",), *terminations))
+                extra = (*extra, "--termination-dispositions", str(path))
             return subprocess.run(
                 [sys.executable, str(TOOL), "--frozen-roster", str(folder / "roster.csv"),
                  "--capture", str(folder / "capture.csv"), *extra],
@@ -806,6 +811,45 @@ class RetentionAnchorAudit(unittest.TestCase):
         self.assertEqual(exact.returncode, 0, exact.stderr)
         self.assertEqual(json.loads(exact.stdout)["commanded_nominal_slot_coverage"]
                          ["episodes_with_exact_slot_coverage"], 1)
+
+    def test_termination_disposition_does_not_substitute_for_observed_endpoint(self):
+        roster = [(*BASE[:4], f"E{i}") for i in range(6)]
+        rows = episode(roster[0])
+        rows += episode(roster[1])[:2] + episode(roster[2])[:2]
+        rows += episode(roster[3], early=0) + episode(roster[4], final=79_999_999_999)
+        dispositions = [(*key, state) for key, state in zip(
+            roster, ("completed", "completed", "value_threshold_stop", "operator_abort", "unknown")
+        )]
+        plain = self.run_capture(roster, rows)
+        checked = self.run_capture(roster, rows, terminations=dispositions)
+        self.assertEqual((plain.returncode, checked.returncode), (1, 1))
+        report = json.loads(checked.stdout)
+        fields = ("frozen_attempted_episodes", "episodes_with_capture",
+                  "episodes_with_nominal_terminal_row", "episodes_within_terminal_time_window",
+                  "timing_eligible_episodes")
+        expected = {
+            "completed": (2, 2, 1, 1, 1), "value_threshold_stop": (1, 1, 0, 0, 0),
+            "operator_abort": (1, 1, 1, 1, 0), "unknown": (1, 1, 1, 0, 0),
+            "missing_declaration": (1, 0, 0, 0, 0),
+        }
+        self.assertEqual(report.pop("declared_termination_disposition_support"), {
+            reason: dict(zip(fields, counts)) for reason, counts in expected.items()
+        })
+        self.assertEqual(report, json.loads(plain.stdout))
+        self.assertNotIn("privateLot", checked.stdout)
+
+    def test_termination_declarations_validate_keys_and_vocabulary(self):
+        valid = (*BASE, "instrument_abort")
+        for mapping, diagnostic in (
+            ([valid, valid], "duplicate episode"),
+            ([(*BASE[:4], "not_frozen", "unknown")], "non-roster episode"),
+            ([(*BASE, "invented_reason")], "invalid termination disposition"),
+        ):
+            result = self.run_capture([BASE], episode(), terminations=mapping)
+            self.assertEqual(result.returncode, 2)
+            self.assertFalse(result.stdout)
+            self.assertIn(diagnostic, result.stderr)
+            self.assertNotIn("invented_reason", result.stderr)
 
     def test_capture_cannot_supply_labels_or_change_frozen_identity_set(self):
         r = self.run_capture([BASE], [(*row, "sensitive-value") for row in episode()],
