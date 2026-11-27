@@ -380,6 +380,29 @@ def _domain_candidates(config):
             for family in config["baselines"] for name, params in _DOMAIN_GRID_V1[family]]
 
 
+def _check_prediction_v13_selected_candidate(manifest, config):
+    if "selected_candidate" not in manifest:
+        return  # Historical narrow receipts can retain extension-only evidence.
+    # Both frozen v1 protocols use the same candidate grid/order; their
+    # difference is which groups are held out, not the available recipes.
+    candidates = _domain_candidates(config)
+    records = manifest["inner_selection"]
+    if len(records) != len(candidates):
+        _fail("selected extended candidate requires the complete frozen score ledger.")
+    for record, candidate in zip(records, candidates):
+        score = record.get("selection_score")
+        if (record.get("candidate") != candidate["name"] or record.get("family") != candidate["family"]
+                or not _same_declaration(record.get("params"), candidate["params"])
+                or record.get("objective") != config.get("selection_objective")
+                or record.get("objective") not in ("mae", "group_mae")
+                or type(score) not in (int, float) or score < 0
+                or (type(score) is float and not math.isfinite(score))):
+            _fail("selected extended candidate ledger differs from the frozen grid or objective.")
+    winner = min(records, key=lambda record: record["selection_score"])
+    if (manifest["selected_candidate"], manifest["selected_family"]) != (winner["candidate"], winner["family"]):
+        _fail("selected extended candidate differs from saved scores and candidate tie order.")
+
+
 def _same_declaration(actual, expected):
     # Reject bools masquerading as numeric parameters, but allow JSON 1 / 1.0.
     if isinstance(expected, dict):
@@ -806,6 +829,7 @@ def _metadata(manifest):
             _optional_selection_metadata(manifest, n_train, manifest["n_training_groups"], inner, config.get("random_state"), optional)
         if version == "1.3":
             _check_prediction_v13_group_identities(manifest["inner_folds"])
+            _check_prediction_v13_selected_candidate(manifest, config)
         if version == "1.4":
             mapping = _domain_config(config, manifest["n_training_groups"])
             _domain_selection(manifest, n_train, list(mapping), mapping, inner, config)

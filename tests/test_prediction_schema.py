@@ -405,6 +405,39 @@ class PredictionSchemaTests(unittest.TestCase):
         self.assertFalse(reply.stdout)
         self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
 
+    def test_cli_binds_v13_selected_prediction_candidate_to_inner_scores(self):
+        import pandas as pd
+        from groupbench import fit_predict
+
+        frame = pd.DataFrame({"g": list("abcdef") * 3, "x": range(18), "y": range(18)})
+        result = fit_predict(frame, frame[["x"]].head(2), target="y", group="g",
+                             baselines=("ridge", "group_median"), inner_splits=3)
+        result.write(self.root)
+        self.assertEqual(result.manifest["schema_version"], "1.3")
+        raw = (self.root / "predictions.csv").read_bytes()
+        env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1] / "src"),
+                   PYTHONDONTWRITEBYTECODE="1", OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1")
+        command = [sys.executable, "-m", "groupbench.cli", "validate-prediction-bundle", str(self.root)]
+
+        def replay():
+            return subprocess.run(command, env=env, capture_output=True, text=True, timeout=30)
+
+        self.assertEqual(replay().returncode, 0)
+        changed = copy.deepcopy(result.manifest)
+        selected = changed["selected_candidate"]
+        self.assertGreater(min(r["selection_score"] for r in changed["inner_selection"]), 0.0)
+        other = next(r for r in changed["inner_selection"]
+                     if r["family"] == "ridge" and r["candidate"] != selected)
+        other["selection_score"] = 0.0
+        write_bundle(self.root, changed, csv=raw)
+        self.assertEqual(verify_bundle(self.root).bundle_type, "prediction")
+        before = {p.name: p.read_bytes() for p in self.root.iterdir()}
+        reply = replay()
+        self.assertEqual(reply.returncode, 2, reply.stderr)
+        self.assertIn("selected extended candidate", reply.stderr)
+        self.assertFalse(reply.stdout)
+        self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
+
     def test_cli_rejects_repeated_held_groups_in_v13_prediction_receipt(self):
         import pandas as pd
         from groupbench import fit_predict
