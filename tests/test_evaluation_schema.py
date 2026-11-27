@@ -279,6 +279,37 @@ class EvaluationSchemaTests(unittest.TestCase):
         self.assertFalse(reply.stdout)
         self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
 
+    def test_cli_reconciles_standard_pooled_score_with_weighted_inner_folds(self):
+        # Unequal group sizes distinguish group from row weighting.
+        frame = pd.DataFrame({"g": list("aaaaaabbbbbccccddee"), "x": range(19),
+                              "y": [float(i * i + 2) for i in range(19)]})
+        command = [sys.executable, "-m", "groupbench.cli", "validate-evaluation-bundle", str(self.root)]
+        env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1] / "src"),
+                   OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1", PYTHONDONTWRITEBYTECODE="1")
+
+        def replay():
+            return subprocess.run(command, env=env, text=True, capture_output=True, timeout=30)
+
+        for objective in ("group_mae", "mae"):
+            with self.subTest(objective=objective):
+                fit = benchmark(frame, target="y", group="g", baselines=("dummy",),
+                                outer_splits=2, inner_splits=2, objective=objective)
+                fit.write(self.root, overwrite=True)
+                self.assertEqual(replay().returncode, 0)
+
+                def corrupt_score(manifest):
+                    row = manifest["outer_folds"][0]["inner_selection"][0]
+                    row["selection_score"] *= 1.5
+
+                self.mutate_json("manifest.json", corrupt_score)
+                self.assertEqual(verify_bundle(self.root).bundle_type, "evaluation")
+                before = {p.name: p.read_bytes() for p in self.root.iterdir()}
+                reply = replay()
+                self.assertEqual(reply.returncode, 2, reply.stderr)
+                self.assertIn("pooled inner selection score", reply.stderr)
+                self.assertFalse(reply.stdout)
+                self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
+
     def test_cli_requires_selected_predictions_to_match_declared_family_refit(self):
         from groupbench.model import GroupBenchRegressor
 

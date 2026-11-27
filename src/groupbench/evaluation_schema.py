@@ -123,6 +123,30 @@ def _check_seeded_outer_assignment(manifest, config, groups, fold_rows):
             _fail("retained rows disagree with the seeded outer fold assignment.")
 
 
+def _valid_selection_score(value):
+    return (type(value) in (int, float) and value >= 0
+            and (type(value) is int or math.isfinite(value)))
+
+
+def _check_pooled_inner_score(record, weights):
+    if not weights or "inner_fold_scores" not in record:
+        return
+    scores = record["inner_fold_scores"]
+    if (not isinstance(scores, list) or len(scores) != len(weights)
+            or not all(_valid_selection_score(value) for value in scores)):
+        _fail("pooled inner selection score requires one finite nonnegative score per held-out fold.")
+    total = sum(weights)
+    scale = max(scores)
+    pooled = (0.0 if scale == 0 else scale * math.fsum(
+        (value / scale) * (weight / total) for value, weight in zip(scores, weights)))
+    score = record["selection_score"]
+    # Different reduction orders round each whole-fold mean before pooling;
+    # accept small relative differences, but never turn a true zero into a gain.
+    if (not math.isfinite(pooled) or (score == 0) != (scale == 0)
+            or not math.isclose(score, pooled, rel_tol=REL_TOL, abs_tol=0.0)):
+        _fail("pooled inner selection score differs from retained weighted fold scores.")
+
+
 def _check_standard_candidate_winners(audit, config, baselines):
     if "inner_selection" not in audit:
         # Narrow legacy receipts can omit the whole selection ledger.
@@ -131,6 +155,9 @@ def _check_standard_candidate_winners(audit, config, baselines):
     candidates = candidates_for(baselines)
     if not isinstance(records, list) or len(records) != len(candidates):
         _fail("standard candidate selection coverage differs from the frozen grid.")
+    # The inner group ledger was already reconciled to retained outer rows.
+    weight_key = "test_group_count" if config["selection_objective"] == "group_mae" else "test_rows"
+    weights = [fold[weight_key] for fold in audit.get("inner_folds", [])]
     for candidate, record in zip(candidates, records):
         if (not isinstance(record, dict)
                 or record.get("candidate") != candidate.name or record.get("family") != candidate.family
@@ -138,9 +165,9 @@ def _check_standard_candidate_winners(audit, config, baselines):
                 or record.get("objective") != config["selection_objective"]):
             _fail("standard candidate selection identity, parameters, order or objective differ.")
         score = record.get("selection_score")
-        if (type(score) not in (int, float) or score < 0
-                or (type(score) is float and not math.isfinite(score))):
+        if not _valid_selection_score(score):
             _fail("standard candidate selection scores must be nonnegative finite numbers.")
+        _check_pooled_inner_score(record, weights)
     # min is stable, so equal-score winners follow producer candidate order.
     winner = min(records, key=lambda r: r["selection_score"])
     by_family = {
