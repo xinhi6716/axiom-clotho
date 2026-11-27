@@ -187,6 +187,57 @@ class SavedComparisonCliTests(unittest.TestCase):
         with self.assertRaisesRegex(scoring.SavedScoringError, "normalized query fingerprint"):
             f.score()
 
+    def test_cli_reconciles_query_side_support_missingness(self):
+        import pandas as pd
+        from groupbench import fit_predict
+
+        f = self.fixture
+        f.query.write_text("x,z,response\n,4,99\n2,,99\n3,6,99\n")
+        incoming, digest = cli._read_csv_with_hash(f.query)
+        training = pd.DataFrame({"x": [1., 2., 3., 4., 5., 6.],
+                                 "z": [1., 2., 3., 4., 5., 6.],
+                                 "g": "A A B B C C".split(), "response": [0., 1., 2., 3., 4., 5.]})
+        result = fit_predict(training, incoming[["x", "z"]], target="response", group="g",
+                             baselines=("dummy",), inner_splits=2, prediction_source_sha256=digest)
+        # Both receipts use the exact same query; use a legacy second receipt
+        # to test that absence of historical support is not treated as failure.
+        f.build(f.a, (0, 0, 0))
+        result.write(f.b, overwrite=True)
+        env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1] / "src"),
+                   OMP_NUM_THREADS="1", OPENBLAS_NUM_THREADS="1", PYTHONDONTWRITEBYTECODE="1")
+        cmd = [sys.executable, "-m", "groupbench", "compare-predictions", *self.args]
+
+        def replay():
+            return subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=30)
+
+        self.assertEqual(replay().returncode, 0)
+
+        def wrong_feature(support):
+            support["features"][0]["prediction_missing_count"] = 0
+            wrong_union(support)
+
+        def wrong_union(support):
+            support["row_flag_counts"]["missing_value"] = 1
+            support["rows_with_any_flag"] = 1
+
+        for amend in (wrong_feature, wrong_union):
+            with self.subTest(amend=amend.__name__):
+                result.write(f.b, overwrite=True)
+                comparison_fixtures.amend(f.b, lambda manifest: amend(manifest["input_support"]))
+                before = snapshot(f.root)
+                reply = replay()
+                self.assertEqual(reply.returncode, 2, reply.stderr)
+                self.assertIn("no comparison was written", reply.stderr)
+                self.assertFalse(reply.stdout)
+                self.assertEqual(before, snapshot(f.root))
+                with self.assertRaisesRegex(scoring.SavedScoringError, "query missingness"):
+                    f.score()
+
+        # Such a receipt cannot be replayed against a potentially different
+        # historical CSV missing-value token policy; exact bytes still match.
+        comparison_fixtures.amend(f.b, lambda manifest: manifest["environment"].update(pandas="0.0"))
+        self.assertEqual(replay().returncode, 0)
+
     def test_root_help_and_existing_dispatch_preserved(self):
         out = io.StringIO()
         with redirect_stdout(out), self.assertRaises(SystemExit) as raised: cli.main(['--help'])

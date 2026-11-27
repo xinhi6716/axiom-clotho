@@ -230,6 +230,29 @@ def _check_normalized_query_fingerprint(manifest, query, features):
         raise SavedScoringError("The normalized query fingerprint differs from the retained query.")
 
 
+def _check_query_support_missingness(manifest, query):
+    support = manifest.get("input_support")
+    if support is None:
+        return
+    import pandas as pd
+    environment = manifest.get("environment")
+    if (isinstance(environment, dict) and "pandas" in environment
+            and environment["pandas"] != pd.__version__):
+        # CSV default missing-token recognition may vary between versions.
+        return
+    import numpy as np
+    rows_with_missing = np.zeros(len(query), dtype=bool)
+    # Normalization and the all-missing-column dtype accommodation preserve
+    # the null mask. Training values are not needed for these two checks.
+    for feature in support["features"]:
+        missing = query[feature["name"]].isna().to_numpy()
+        if int(missing.sum()) != feature["prediction_missing_count"]:
+            raise SavedScoringError("Feature query missingness differs from saved input support.")
+        rows_with_missing |= missing
+    if int(rows_with_missing.sum()) != support["row_flag_counts"]["missing_value"]:
+        raise SavedScoringError("Aggregate query missingness differs from saved input support.")
+
+
 def compare_saved_predictions(run_a, run_b, query_csv, outcomes_csv, contract):
     """Descriptively compare two saved bundles linked to identical query bytes.
 
@@ -267,6 +290,7 @@ def compare_saved_predictions(run_a, run_b, query_csv, outcomes_csv, contract):
         if any(name not in query.columns for name in config["features"]):
             raise SavedScoringError("Original query is missing a declared model feature column.")
         _check_normalized_query_fingerprint(manifest, query, config["features"])
+        _check_query_support_missingness(manifest, query)
     outcome_raw, outcome_hash = _read_outcomes(outcomes_csv)
     outcomes = _outcomes(outcome_raw, n)
     report_a = _score_loaded_bundle(loaded_a, outcomes, outcome_hash)
@@ -320,6 +344,7 @@ def compare_saved_predictions(run_a, run_b, query_csv, outcomes_csv, contract):
         "limitations": list(LIMITATIONS) + [
             "Common query bytes match both producer declarations, not authenticated historical mapping or model execution.",
             "Normalized feature hashes are checked only when retained and the declared pandas version matches this runtime.",
+            "Retained support missingness is checked against the query unless a different pandas version is declared; training-side support is not rebuilt.",
             "Target definitions, units and group/cohort/mapping meanings are caller declarations, not verified facts.",
             "Different training sources, feature subsets and protocols may be compared; this is not a controlled or causal contrast.",
             "Paired contrasts are exact on accepted binary64 inputs before display rounding; they may differ from subtraction of displayed MAEs.",
