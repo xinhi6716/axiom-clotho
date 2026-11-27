@@ -109,7 +109,7 @@ impl KnnRegressor {
                     // Still validate every distance, even after a perfect
                     // match. Strict improvement preserves the first-row tie.
                     self.visit_distances(row, |index, distance| {
-                        if distance.total_cmp(&best_distance).is_lt() {
+                        if distance < best_distance {
                             best_distance = distance;
                             best_index = index;
                         }
@@ -127,7 +127,9 @@ impl KnnRegressor {
                 let distances = distance_workspace
                     .get_or_insert_with(|| Vec::with_capacity(self.training.len()));
                 distances.clear();
-                self.visit_distances(row, |i, d| distances.push((d, i)))?;
+                // Finite Euclidean distances are nonnegative and use +0.
+                // Binary64 bits therefore have exactly the same order.
+                self.visit_distances(row, |i, d| distances.push((d.to_bits(), i)))?;
                 let neighbors = nearest_subset(distances, self.k);
                 exact_mean::checked_mean(neighbors.iter().map(|(_, i)| self.targets[*i]), self.k)
             })
@@ -182,23 +184,21 @@ fn distance_component(a: f64, b: f64, scale: f64) -> Result<f64, KnnError> {
 
 // Only membership matters: the exact mean and its normalization check
 // are independent of target order. Distances arrive in original row order.
-fn nearest_subset(distances: &mut [(f64, usize)], k: usize) -> &[(f64, usize)] {
+fn nearest_subset(distances: &mut [(u64, usize)], k: usize) -> &[(u64, usize)] {
     if k == distances.len() {
         return distances;
     }
     // Fit guarantees 1 <= k; the shorter request leaves at least two rows.
-    if distances[0].0.total_cmp(&distances[1].0).is_le() {
+    if distances[0].0 <= distances[1].0 {
         // Equal distances already follow the training index tie-break.
-        if distances.windows(2).all(|w| w[0].0.total_cmp(&w[1].0).is_le()) {
+        if distances.windows(2).all(|w| w[0].0 <= w[1].0) {
             return &distances[..k];
         }
-    } else if distances.windows(2).all(|w| w[0].0.total_cmp(&w[1].0).is_gt()) {
+    } else if distances.windows(2).all(|w| w[0].0 > w[1].0) {
         // Strict decrease only: a reversed tied run would change membership.
         return &distances[distances.len() - k..];
     }
-    distances.select_nth_unstable_by(k - 1, |a, b| {
-        a.0.total_cmp(&b.0).then(a.1.cmp(&b.1))
-    });
+    distances.select_nth_unstable(k - 1);
     &distances[..k]
 }
 

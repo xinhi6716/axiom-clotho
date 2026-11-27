@@ -55,3 +55,31 @@ fn leading_absolute_component_preserves_selection_at_binary64_boundaries() {
     let fitted = KnnRegressor::fit(&x, &[1.0, 2.0], 1).unwrap();
     assert_eq!(fitted.predict(&[vec![f64::MAX, 2.0]]).unwrap(), [2.0]);
 }
+
+#[test]
+fn ordered_distance_bits_keep_zero_ties_and_subnormal_rank_boundaries() {
+    let tiny = f64::from_bits(1);
+    let x = vec![
+        vec![tiny, -0.0],
+        vec![-0.0, 0.0],
+        vec![0.0, -0.0],
+        vec![-tiny, 0.0],
+        vec![1.0, 1.0],
+    ];
+    let targets = [16.0, 2.0, 4.0, 32.0, 64.0];
+    let queries = [vec![-0.0, -0.0], vec![0.0, 0.0]];
+    assert_eq!(
+        KnnRegressor::fit(&x, &targets, 1).unwrap().predict(&queries),
+        Ok(vec![2.0, 2.0])
+    );
+    assert_eq!(
+        KnnRegressor::fit(&x, &targets, 2).unwrap().predict(&queries),
+        Ok(vec![3.0, 3.0])
+    );
+    // The two nearest zero distances are followed by one tied subnormal
+    // distance, resolved by the lower arrival index.
+    assert_eq!(
+        KnnRegressor::fit(&x, &targets, 3).unwrap().predict(&queries),
+        Ok(vec![22.0 / 3.0; 2])
+    );
+}
