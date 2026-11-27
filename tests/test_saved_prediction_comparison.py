@@ -117,7 +117,7 @@ class SavedPredictionComparisonTests(unittest.TestCase):
     def test_all_versions_and_different_feature_subsets(self):
         for version in ('1.0', '1.1', '1.2', '1.3'):
             with self.subTest(version=version):
-                self.build(self.b, (0, 2, 4), version)
+                self.build(self.b, (2, 2, 2) if version == "1.3" else (0, 2, 4), version)
                 self.assertEqual(self.score()['row_mean_absolute_error_b_minus_a'], 2)
         self.build(self.b, (0, 2, 4))
         amend(self.b, lambda m: (m['config'].update(features=['z']),

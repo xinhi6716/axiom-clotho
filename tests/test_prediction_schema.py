@@ -330,8 +330,8 @@ class PredictionSchemaTests(unittest.TestCase):
         from groupbench import prediction_schema as schema
         write_bundle(self.root)
         original = schema._predictions
-        def mutate(raw, count):
-            original(raw, count)
+        def mutate(raw, count, **kwargs):
+            original(raw, count, **kwargs)
             (self.root / "predictions.csv").write_bytes(b"changed after read")
         with patch.object(schema, "_predictions", mutate), self.assertRaisesRegex(ValueError, "changed"):
             validate_prediction_bundle_schema(self.root)
@@ -376,6 +376,34 @@ class PredictionSchemaTests(unittest.TestCase):
                     if not valid:
                         self.assertFalse(reply.stdout)
                 self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
+
+    def test_cli_checks_selected_group_median_prediction_constant(self):
+        import pandas as pd
+        from groupbench import fit_predict
+
+        frame = pd.DataFrame({"group": ["a", "b", "c"] * 2, "x": range(6), "y": range(6)})
+        result = fit_predict(frame, frame[["x"]].head(2), target="y", group="group",
+                             baselines=("group_median",), inner_splits=2)
+        result.write(self.root)
+        self.assertEqual(result.manifest["selected_family"], "group_median")
+        command = [sys.executable, "-m", "groupbench.cli", "validate-prediction-bundle", str(self.root)]
+        env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1] / "src"),
+                   PYTHONDONTWRITEBYTECODE="1", OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1")
+
+        def replay():
+            return subprocess.run(command, env=env, capture_output=True, text=True, timeout=30)
+
+        self.assertEqual(replay().returncode, 0)
+        constant = result.manifest["family_fit_details"]["group_median"]["constant"]
+        write_bundle(self.root, result.manifest,
+                     csv=f"row_position,prediction\n0,{constant}\n1,{constant + 1}\n".encode())
+        self.assertEqual(verify_bundle(self.root).bundle_type, "prediction")
+        before = {p.name: p.read_bytes() for p in self.root.iterdir()}
+        reply = replay()
+        self.assertEqual(reply.returncode, 2, reply.stderr)
+        self.assertIn("selected group-median refit constant", reply.stderr)
+        self.assertFalse(reply.stdout)
+        self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
 
     def test_cli_checks_total_extended_inner_held_coverage(self):
         import pandas as pd

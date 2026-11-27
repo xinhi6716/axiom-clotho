@@ -809,7 +809,7 @@ def _metadata(manifest):
     return version, n_pred, len(names), support_status
 
 
-def _predictions(raw, n_predictions):
+def _predictions(raw, n_predictions, *, selected_median=None):
     try:
         text = raw.decode("utf-8")
         if "\0" in text:
@@ -822,8 +822,17 @@ def _predictions(raw, n_predictions):
             if count >= n_predictions or len(row) != 2 or row[0] != str(count):
                 _fail("CSV rows must match sequential zero-based positions and declared row count.")
             token = row[1]
-            if len(token) > 64 or _DECIMAL.fullmatch(token) is None or not math.isfinite(float(token)):
+            if len(token) > 64 or _DECIMAL.fullmatch(token) is None:
                 _fail("CSV predictions must be bounded finite decimal numbers.")
+            value = float(token)
+            if not math.isfinite(value):
+                _fail("CSV predictions must be bounded finite decimal numbers.")
+            if selected_median is not None:
+                if token.lstrip("+-").isdigit():
+                    value = int(token)
+                underflows = value == 0 and any(ch in "123456789" for ch in token.lower().split("e", 1)[0])
+                if value != selected_median or underflows:
+                    _fail("CSV predictions differ from the selected group-median refit constant.")
             count += 1
         if count != n_predictions:
             _fail("CSV row count differs from n_predictions.")
@@ -856,7 +865,12 @@ def _load_prediction_bundle(run_dir):
             total += size
         manifest = _manifest(payloads["manifest.json"])
         version, n_pred, n_features, support = _metadata(manifest)
-        _predictions(payloads["predictions.csv"], n_pred)
+        # Only this family declares an output scalar for every query. A
+        # nonselected family audit is not a contract about the saved vector.
+        selected_median = None
+        if version in ("1.3", "1.4", "1.5") and manifest.get("selected_family") == "group_median":
+            selected_median = manifest["family_fit_details"]["group_median"]["constant"]
+        _predictions(payloads["predictions.csv"], n_pred, selected_median=selected_median)
         for name, signature in signatures.items():
             if _signature(os.stat(name, dir_fd=fd, follow_symlinks=False)) != signature:
                 _fail("bundle changed during validation; retry with an idle directory.")
