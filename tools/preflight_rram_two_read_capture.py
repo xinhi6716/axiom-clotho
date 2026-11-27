@@ -24,7 +24,20 @@ def checked_integer(value):
     return int(value)
 
 
-def audit(path, seen_files, seen_payloads):
+def observable_fingerprint(groups):
+    """Digest the six validated native fields, not metadata or user labels."""
+    digest = hashlib.sha256(b"clotho.two_read.required_observables.v1\n")
+    for address, (elapsed, pairs) in sorted(groups.items()):
+        whole, _, fraction = format(elapsed, "f").partition(".")
+        # Strip representational zeros without Decimal.normalize() rounding
+        # ambient-context precision for near-identical elapsed values.
+        timestamp = whole + "." + fraction.rstrip("0")
+        for lane, (initial, final) in sorted(pairs.items()):
+            digest.update(f"{address},{lane},1,{timestamp},{initial},{final}\n".encode("ascii"))
+    return digest.digest()
+
+
+def audit(path, seen_files, seen_payloads, seen_observables):
     with os.fdopen(os.open(path, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0)
                            | getattr(os, "O_BINARY", 0)), "rb") as file:
         info = os.fstat(file.fileno())
@@ -65,6 +78,10 @@ def audit(path, seen_files, seen_payloads):
         pairs[lane] = (initial, final)
     if not groups or any(pairs.keys() != LANES for _, pairs in groups.values()):
         raise ValueError("capture requires nonempty complete 16-lane address groups")
+    semantics = observable_fingerprint(groups)
+    if semantics in seen_observables:
+        raise ValueError("identical required capture observables cannot support separate capture/chip identities")
+    seen_observables.add(semantics)
     return {
         "complete_address_groups": len(groups),
         "native_paired_rows": len(groups) * len(LANES),
@@ -82,6 +99,7 @@ def main():
         seen = set()
         files = set()
         payloads = set()
+        observables = set()
         reports = []
         for capture_id, chip_id, filename in args.capture:
             if not CAPTURE_ID.fullmatch(capture_id) or not CAPTURE_ID.fullmatch(chip_id):
@@ -91,7 +109,7 @@ def main():
                 raise ValueError("duplicate capture/chip identity")
             seen.add(key)
             reports.append({"capture_id": capture_id, "chip_id": chip_id,
-                            **audit(Path(filename), files, payloads)})
+                            **audit(Path(filename), files, payloads, observables)})
     except (OSError, UnicodeError, csv.Error):
         parser.exit(2, "error: capture could not be read as UTF-8 CSV\n")
     except ValueError as exc:
@@ -100,6 +118,7 @@ def main():
         "schema": "clotho.rram_two_read_capture_preflight.v1",
         "captures": reports,
         "scope": "paired ADC codes at a nominal one-second timepoint; elapsed time shared by address",
+        "physical_capture_independence_verified": False,
         "verified_nominal_zero_timestamp": False,
         "native_100ks_endpoint": False,
         "retention_gate_eligible": False,

@@ -113,3 +113,41 @@ class TwoReadCapturePreflight(unittest.TestCase):
             reports = json.loads(accepted.stdout)["captures"]
             self.assertEqual([r["same_row_persistence_abs_error_sum_adc_codes"] for r in reports],
                              [128, 128])
+
+
+    def test_reformatted_observable_copy_and_exact_elapsed_difference(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            original, changed = (Path(tmp) / part for part in ("a.csv", "b.csv"))
+            elapsed = "1.00000000000000000000000000001"
+            rows = group(1, elapsed)
+            capture(original, rows)
+            # Reorder both axes, use a different newline/quoting, pad integer
+            # fields and elapsed values, and relabel non-observable metadata.
+            def rewrite(candidate):
+                with changed.open("w", newline="", encoding="utf-8-sig") as stream:
+                    writer = csv.writer(stream, quoting=csv.QUOTE_ALL, lineterminator="\n")
+                    writer.writerow(FIELDS[::-1])
+                    for addr, lane, t, time, initial, final, _ in reversed(candidate):
+                        writer.writerow(["another metadata", f"0{final}", f"0{initial}",
+                                         f"0{time}0", f"0{t}", f"0{lane}", f"0{addr}"])
+
+            args = ("--capture", "captureA", "chipA", str(original),
+                    "--capture", "captureB", "chipB", str(changed))
+            rewrite(rows)
+            self.assertNotEqual(original.read_bytes(), changed.read_bytes())
+            rejected = cli(*args)
+            self.assertEqual(rejected.returncode, 2)
+            self.assertFalse(rejected.stdout)
+            self.assertIn("identical required capture observables", rejected.stderr)
+            self.assertNotIn(elapsed, rejected.stderr)
+
+            rewrite(group(1, "1.00000000000000000000000000002"))
+            accepted = cli(*args)
+            self.assertEqual(accepted.returncode, 0, accepted.stderr)
+            self.assertIs(json.loads(accepted.stdout)["physical_capture_independence_verified"], False)
+            # Even with equal error summary and elapsed time, swapping the two
+            # ADC vectors at each lane changes the ordered observable.
+            swapped = [[a, lane, t, time, final, start, extra]
+                       for a, lane, t, time, start, final, extra in rows]
+            rewrite(swapped)
+            self.assertEqual(cli(*args).returncode, 0)
