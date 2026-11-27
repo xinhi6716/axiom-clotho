@@ -171,21 +171,21 @@ pub fn extract_branch(a: &Acquisition, s: &[Sample], p: Settings) -> Result<Feat
     {
         return Err(FetError::InvalidGateOrder);
     }
-    let exact: Vec<_> = s
-        .iter()
-        .filter(|q| q.drain_current_a == p.criterion_a)
-        .collect();
-    let crossing: Vec<_> = s
-        .windows(2)
-        .filter(|w| {
-            p.criterion_a > w[0].drain_current_a.min(w[1].drain_current_a)
-                && p.criterion_a < w[0].drain_current_a.max(w[1].drain_current_a)
-        })
-        .collect();
-    match exact.len() + crossing.len() {
-        0 => return Err(FetError::CriterionNotBracketed),
-        1 => {}
-        _ => return Err(FetError::NonUniqueCriterion),
+    let mut exact = s.iter().filter(|q| q.drain_current_a == p.criterion_a);
+    let measured = exact.next();
+    if exact.next().is_some() {
+        return Err(FetError::NonUniqueCriterion);
+    }
+    let mut crossings = s.windows(2).filter(|w| {
+        p.criterion_a > w[0].drain_current_a.min(w[1].drain_current_a)
+            && p.criterion_a < w[0].drain_current_a.max(w[1].drain_current_a)
+    });
+    let crossing = crossings.next();
+    match (measured, crossing) {
+        (None, None) => return Err(FetError::CriterionNotBracketed),
+        (Some(_), Some(_)) => return Err(FetError::NonUniqueCriterion),
+        _ if crossings.next().is_some() => return Err(FetError::NonUniqueCriterion),
+        _ => {}
     }
     if !(s
         .windows(2)
@@ -195,10 +195,10 @@ pub fn extract_branch(a: &Acquisition, s: &[Sample], p: Settings) -> Result<Feat
     {
         return Err(FetError::NonMonotonicCurrent);
     }
-    let (criterion, span, criterion_rows) = if !exact.is_empty() {
-        (exact[0].gate_voltage_v, 0.0, vec![exact[0].source_row])
+    let (criterion, span, criterion_rows) = if let Some(sample) = measured {
+        (sample.gate_voltage_v, 0.0, vec![sample.source_row])
     } else {
-        let w = crossing[0];
+        let w = crossing.unwrap();
         let span = width_at_most(
             w[0].gate_voltage_v.min(w[1].gate_voltage_v),
             w[0].gate_voltage_v.max(w[1].gate_voltage_v),
@@ -246,16 +246,7 @@ pub fn extract_branch(a: &Acquisition, s: &[Sample], p: Settings) -> Result<Feat
         .iter()
         .map(|q| (q.drain_current_a * sign).log10())
         .collect();
-    // Equal finite logarithms have the same bits except for signed zero.
-    // Keep one representative current per log in O(k log k), irrespective
-    // of the order of libm results. Identical original currents are legal.
-    let mut currents_by_log = BTreeMap::new();
-    for (sample, &log) in selected.iter().zip(&logs) {
-        let key = if log == 0.0 { 0 } else { log.to_bits() };
-        if *currents_by_log.entry(key).or_insert(sample.drain_current_a) != sample.drain_current_a {
-            return Err(FetError::NumericalRange);
-        }
-    }
+    validate_distinct_current_logs(&selected, &logs)?;
     let n = selected.len() as f64;
     let lo = selected[0].gate_voltage_v;
     let hi = selected[selected.len() - 1].gate_voltage_v;
@@ -315,4 +306,59 @@ pub fn extract_branch(a: &Acquisition, s: &[Sample], p: Settings) -> Result<Feat
         log_selected_source_rows,
         all_source_rows: s.iter().map(|q| q.source_row).collect(),
     })
+}
+
+fn validate_distinct_current_logs(selected: &[&Sample], logs: &[f64]) -> Result<(), FetError> {
+    // Check that the rounded logarithms themselves are ordered, rather
+    // than relying on the platform's libm to preserve monotonicity. Equal
+    // values in an ordered column are contiguous, including both zeros.
+    let logs_ascending = logs[0] <= logs[logs.len() - 1];
+    for (w, pair) in logs.windows(2).zip(selected.windows(2)) {
+        if w[0] == w[1] && pair[0].drain_current_a != pair[1].drain_current_a {
+            return Err(FetError::NumericalRange);
+        }
+        let ordered = if logs_ascending { w[0] <= w[1] } else { w[0] >= w[1] };
+        if !ordered {
+            // Preserve validation when a math implementation supplies
+            // unordered rounded values with nonadjacent collisions.
+            let mut currents_by_log = BTreeMap::new();
+            for (sample, &log) in selected.iter().zip(logs) {
+                let key = if log == 0.0 { 0 } else { log.to_bits() };
+                if *currents_by_log.entry(key).or_insert(sample.drain_current_a) != sample.drain_current_a {
+                    return Err(FetError::NumericalRange);
+                }
+            }
+            break;
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rounded_log_collisions_are_rejected_in_ordered_and_unordered_sequences() {
+        let sample = |current| Sample {
+            source_row: 2,
+            temperature_k: 300.0,
+            drain_voltage_v: 1.0,
+            body_voltage_v: 0.0,
+            gate_voltage_v: 1.0,
+            drain_current_a: current,
+        };
+        let a = sample(1.0);
+        let b = sample(f64::from_bits(1.0_f64.to_bits() + 1));
+        let c = sample(2.0);
+        assert_eq!(validate_distinct_current_logs(&[&a, &a, &c], &[-0.0, 0.0, 1.0]), Ok(()));
+        assert_eq!(validate_distinct_current_logs(&[&a, &c, &a], &[-0.0, 1.0, 0.0]), Ok(()));
+        for (selected, logs) in [
+            ([&a, &b, &c], [-0.0, 0.0, 1.0]),
+            ([&c, &a, &b], [1.0, 0.0, -0.0]),
+            ([&a, &c, &b], [-0.0, 1.0, 0.0]),
+        ] {
+            assert_eq!(validate_distinct_current_logs(&selected, &logs), Err(FetError::NumericalRange));
+        }
+    }
 }
