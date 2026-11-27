@@ -425,3 +425,26 @@ fn interleaved_partitions_and_exact_prefixes_keep_targets_bound_to_training_keys
         Err(JoinError::GroupOverlap),
     );
 }
+
+#[test]
+fn named_slot_tracking_preserves_wide_reordering_and_exact_zero() {
+    let (features, partitions, endpoints) = fixture();
+    let feature_order: Vec<_> = (0..100).map(|i| format!("f{i:03}")).collect();
+    let mut named: Vec<_> = features.into_iter().map(|r| NamedDeviceFeatures {
+        identity: r.identity,
+        values: feature_order.iter().enumerate().rev().map(|(i, name)| {
+            (name.clone(), if i == 64 { -0.0 } else { i as f64 })
+        }).collect(),
+    }).collect();
+    let got = prepare_named_measurements(&feature_order, &named, &partitions, &endpoints, 1).unwrap();
+    for row in got.training.iter().chain(&got.prediction) {
+        assert_eq!(row.values[63], 63.0);
+        assert_eq!(row.values[64].to_bits(), (-0.0_f64).to_bits());
+        assert_eq!(row.values[99], 99.0);
+    }
+    named[0].values[0].0 = feature_order[5].clone();
+    assert_eq!(
+        prepare_named_measurements(&feature_order, &named, &partitions, &endpoints, 1),
+        Err(JoinError::InvalidFeatures)
+    );
+}

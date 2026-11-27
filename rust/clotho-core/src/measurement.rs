@@ -1,6 +1,6 @@
 //! Exact composite-identity joins for measurement features and separately
 //! supplied training endpoints. No model fitting or inferred/missing labels.
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 #[derive(Clone, Debug, PartialEq)]
 pub struct DeviceFeatures {
@@ -212,7 +212,7 @@ pub fn prepare_named_measurements(
     if width == 0 || width > 100 {
         return Err(JoinError::InvalidFeatures);
     }
-    let mut positions = BTreeMap::new();
+    let mut positions = HashMap::with_capacity(width);
     for (i, name) in feature_order.iter().enumerate() {
         if !valid_id(std::slice::from_ref(name), 1) || positions.insert(name.as_str(), i).is_some()
         {
@@ -235,22 +235,24 @@ pub fn prepare_named_measurements(
         if row.values.len() != width {
             return Err(JoinError::InvalidFeatures);
         }
-        let mut assigned = vec![None; width];
-        for (name, value) in &row.values {
-            if !valid_id(std::slice::from_ref(name), 1) {
+        let mut values = vec![0.0; width];
+        let mut assigned = 0_u128;
+        for (declared, (name, value)) in row.values.iter().enumerate() {
+            // An exact match to an already validated frozen name needs no
+            // per-row text validation; matching the position avoids a lookup.
+            let i = if name == &feature_order[declared] {
+                declared
+            } else {
+                *positions.get(name.as_str()).ok_or(JoinError::InvalidFeatures)?
+            };
+            let bit = 1_u128 << i; // width is capped at 100 above.
+            if !value.is_finite() || assigned & bit != 0 {
                 return Err(JoinError::InvalidFeatures);
             }
-            let i = *positions
-                .get(name.as_str())
-                .ok_or(JoinError::InvalidFeatures)?;
-            if !value.is_finite() || assigned[i].replace(*value).is_some() {
-                return Err(JoinError::InvalidFeatures);
-            }
+            assigned |= bit;
+            values[i] = *value;
         }
-        let values = assigned
-            .into_iter()
-            .collect::<Option<Vec<_>>>()
-            .ok_or(JoinError::InvalidFeatures)?;
+        // Exactly width distinct assignments into width slots cover all slots.
         aligned.push(DeviceFeatures {
             identity: row.identity.clone(),
             values,
