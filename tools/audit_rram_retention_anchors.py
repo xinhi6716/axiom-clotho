@@ -2,6 +2,7 @@
 import argparse
 from collections import Counter, defaultdict
 import csv
+from fractions import Fraction
 import hashlib
 import io
 import json
@@ -22,6 +23,7 @@ MAX_ROWS = 100_000
 KEY = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.:-]{0,127}", re.ASCII)
 INTEGER = re.compile(r"[0-9]{1,18}", re.ASCII)
 SIGNED_INTEGER = re.compile(r"[+-]?[0-9]{1,18}", re.ASCII)
+DECIMAL_TIME = re.compile(r"[0-9]{1,18}(?:\.[0-9]{1,30})?", re.ASCII)
 SHA256 = re.compile(r"[a-f0-9]{64}", re.ASCII)
 
 
@@ -350,6 +352,42 @@ def cross_episode_event_identity_support(orders, reads):
         "cross_episode_shared_stream_counter_groups": sum(support.values()),
         "groups_by_status": dict(sorted(support.items())),
     }
+
+
+def decimal_time_tokens(path, roster):
+    result = defaultdict(dict)
+    fields = IDENTITY + ("nominal_us", "token_s", "declared_resolution_s")
+    for key, (raw_nominal, token, resolution) in records(path, fields):
+        nominal = integer(raw_nominal)
+        if key not in roster or nominal not in ANCHORS or len(roster[key].get(nominal, ())) != 1:
+            raise ValueError("decimal time token does not identify one captured frozen anchor")
+        if nominal in result[key]:
+            raise ValueError("duplicate decimal time token for a frozen anchor")
+        if not DECIMAL_TIME.fullmatch(token) or not DECIMAL_TIME.fullmatch(resolution):
+            raise ValueError("decimal token and resolution require nonnegative fixed-point seconds")
+        center = Fraction(token)
+        half = Fraction(resolution) / 2
+        result[key][nominal] = (center - half, center + half)
+    return result
+
+
+def decimal_time_order(evidence):
+    rightmost_lower = previous_upper = None
+    separated = True
+    for nominal in ANCHORS:
+        if nominal not in evidence:
+            continue
+        lo, hi = evidence[nominal]
+        if rightmost_lower is not None and hi <= rightmost_lower:
+            return "strict_order_ruled_out_by_declared_token_bounds"
+        rightmost_lower = max(rightmost_lower, lo) if rightmost_lower is not None else lo
+        if previous_upper is not None and previous_upper >= lo:
+            separated = False
+        previous_upper = hi
+    if len(evidence) != len(ANCHORS):
+        return "incomplete_decimal_time_tokens"
+    return ("strict_order_certified_by_disjoint_token_bounds" if separated
+            else "strict_order_unresolved_by_declared_token_bounds")
 
 
 def timing_envelope_windows(path, roster):
@@ -745,7 +783,7 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
           termination_dispositions_sha256=None, planned_path_table=None, native_read_table=None,
           planned_bias_table=None, planned_role_table=None, logged_role_table=None,
           planned_aperture_width_table=None, event_order_table=None,
-          diagnose_individual_read_counters=False, native_timer_segment_table=None, timing_envelope_table=None):
+          diagnose_individual_read_counters=False, native_timer_segment_table=None, timing_envelope_table=None, decimal_time_token_table=None):
     if diagnose_individual_read_counters and (event_order_table is None or native_read_table is None):
         raise ValueError("individual-read counter diagnosis requires both event order and native read identities")
     if planned_aperture_width_table is not None and aperture_table is None:
@@ -827,6 +865,9 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
     timer_segments = (native_timer_segments(native_timer_segment_table, expected)
                       if native_timer_segment_table is not None else None)
     attempted_segments, eligible_segments = Counter(), Counter()
+    decimal_tokens = (decimal_time_tokens(decimal_time_token_table, expected)
+                      if decimal_time_token_table is not None else None)
+    attempted_token_order, eligible_token_order = Counter(), Counter()
     envelope_windows = (timing_envelope_windows(timing_envelope_table, expected)
                         if timing_envelope_table is not None else None)
     attempted_envelopes = {nominal: Counter() for nominal in ANCHORS}
@@ -902,6 +943,11 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
                 attempted_envelopes[nominal][status] += 1
                 if reason == "eligible":
                     eligible_envelopes[nominal][status] += 1
+        if decimal_tokens is not None:
+            status = decimal_time_order(decimal_tokens.get(key, {}))
+            attempted_token_order[status] += 1
+            if reason == "eligible":
+                eligible_token_order[status] += 1
         if role_plans is not None:
             status = event_role_status(role_plans[key], logged_roles.get(key, {}))
             attempted_roles[status] += 1
@@ -1093,6 +1139,11 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
             }
             for nominal in ANCHORS
         }
+    if decimal_tokens is not None:
+        report["conditional_decimal_time_token_order_support"] = {
+            "frozen_attempted_by_status": dict(sorted(attempted_token_order.items())),
+            "timing_eligible_by_status": dict(sorted(eligible_token_order.items())),
+        }
     if role_plans is not None:
         report["acquisition_event_role_agreement"] = {
             "frozen_attempted_by_status": dict(sorted(attempted_roles.items())),
@@ -1208,6 +1259,8 @@ def main():
                         help="independent reset-qualified physical timer identities at captured anchors")
     parser.add_argument("--timing-envelope-windows", type=Path,
                         help="independent validity windows for declared timestamp-error envelopes")
+    parser.add_argument("--decimal-time-tokens", type=Path,
+                        help="independent common-clock rounded time tokens and declared resolutions")
     args = parser.parse_args()
     try:
         report = audit(args.frozen_roster, args.capture, diagnose_anchors=args.diagnose_anchors,
@@ -1233,7 +1286,8 @@ def main():
                        event_order_table=args.logged_event_order,
                        diagnose_individual_read_counters=args.diagnose_individual_read_counters,
                        native_timer_segment_table=args.native_timer_segments,
-                       timing_envelope_table=args.timing_envelope_windows)
+                       timing_envelope_table=args.timing_envelope_windows,
+                       decimal_time_token_table=args.decimal_time_tokens)
     except (OSError, UnicodeError, csv.Error):
         parser.exit(2, "error: input could not be read as UTF-8 CSV\n")
     except ValueError as exc:

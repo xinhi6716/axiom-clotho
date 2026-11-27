@@ -24,7 +24,7 @@ def episode(key=BASE, early=1_000_000, final=100_000_000_000, error=0):
 
 
 class RetentionAnchorAudit(unittest.TestCase):
-    def run_capture(self, roster, rows, capture_header=IDS + TIMES, *, extra=(), block_map=None, stress=None, readout_paths=None, read_bias=None, apertures=None, schedule=None, terminations=None, planned_paths=None, native_reads=None, planned_bias=None, planned_roles=None, logged_roles=None, aperture_widths=None, event_orders=None, timer_segments=None, envelopes=None):
+    def run_capture(self, roster, rows, capture_header=IDS + TIMES, *, extra=(), block_map=None, stress=None, readout_paths=None, read_bias=None, apertures=None, schedule=None, terminations=None, planned_paths=None, native_reads=None, planned_bias=None, planned_roles=None, logged_roles=None, aperture_widths=None, event_orders=None, timer_segments=None, envelopes=None, time_tokens=None):
         with tempfile.TemporaryDirectory() as tmp:
             folder = Path(tmp)
             for name, header, payload in (
@@ -106,6 +106,12 @@ class RetentionAnchorAudit(unittest.TestCase):
                     fields = IDS + ("clock", "epoch", "valid_from_tick_us", "valid_through_tick_us")
                     csv.writer(stream).writerows((fields, *envelopes))
                 extra = (*extra, "--timing-envelope-windows", str(path))
+            if time_tokens is not None:
+                path = folder / "time_tokens.csv"
+                with path.open("w", newline="", encoding="utf-8") as stream:
+                    cols = IDS + ("nominal_us", "token_s", "declared_resolution_s")
+                    csv.writer(stream).writerows((cols, *time_tokens))
+                extra = (*extra, "--decimal-time-tokens", str(path))
             if schedule is not None:
                 schedule_path = folder / "schedule.csv"
                 with schedule_path.open("w", newline="", encoding="utf-8") as stream:
@@ -207,6 +213,50 @@ class RetentionAnchorAudit(unittest.TestCase):
         self.assertEqual(invalid.returncode, 2)
         self.assertIn("timestamp capture SHA-256 must be 64 lowercase", invalid.stderr)
         self.assertFalse(invalid.stdout)
+
+    def test_declared_time_resolution_preserves_exact_order_and_unknown_ties(self):
+        keys = [(*BASE[:4], f"E{i}") for i in range(7)]
+        anchors = (0, 1_000_000, 100_000_000_000)
+        eps = "0.000000000000000000000000000002"
+        native = (
+            (("0", "0"), ("1.000000000000000000000000000001", "0"),
+             ("1.000000000000000000000000000002", "0")),
+            (("0", "0"), ("1.000", "0.001"), ("1.000", "0.001")),
+            (("0", "0"), ("1", "0"), ("1.0", "0")),
+            (("0", "0"), ("1", eps), ("1.000000000000000000000000000002", eps)),
+            (("2", "0"), ("3", "0"), ("1", "0")),
+            (("0", "0"), ("1", "0")),
+        )
+        tokens = [(*key, nominal, time, step) for key, group in zip(keys, native)
+                  for nominal, (time, step) in zip(anchors, group)]
+        capture = sum((episode(key) for key in keys[:6]), [])
+        plain = self.run_capture(keys, capture)
+        checked = self.run_capture(keys, capture, time_tokens=list(reversed(tokens)))
+        self.assertEqual((plain.returncode, checked.returncode), (1, 1))
+        report = json.loads(checked.stdout)
+        support = report.pop("conditional_decimal_time_token_order_support")
+        expected = {"strict_order_certified_by_disjoint_token_bounds": 1,
+                    "strict_order_unresolved_by_declared_token_bounds": 2,
+                    "strict_order_ruled_out_by_declared_token_bounds": 2,
+                    "incomplete_decimal_time_tokens": 1}
+        self.assertEqual(support["timing_eligible_by_status"], expected)
+        self.assertEqual(support["frozen_attempted_by_status"], expected | {"incomplete_decimal_time_tokens": 2})
+        self.assertEqual(report, json.loads(plain.stdout))
+        self.assertNotIn("1.000000000000000000000000000002", checked.stdout)
+
+    def test_decimal_time_tokens_validate_declared_slots_and_fixed_point(self):
+        valid = (*BASE, 0, "0", "0.001")
+        for rows, tokens, diagnostic in (
+            (episode(), [valid, valid], "duplicate decimal time token"),
+            (episode(), [(*BASE, 7, "0", "0")], "does not identify one captured"),
+            (episode() + episode()[:1], [valid], "does not identify one captured"),
+            (episode(), [(*BASE, 0, "NaN", "0")], "nonnegative fixed-point seconds"),
+            (episode(), [(*BASE, 0, "0", "1e-3")], "nonnegative fixed-point seconds"),
+        ):
+            result = self.run_capture([BASE], rows, time_tokens=tokens)
+            self.assertEqual(result.returncode, 2)
+            self.assertFalse(result.stdout)
+            self.assertIn(diagnostic, result.stderr)
 
     def test_timing_envelope_validity_is_separate_from_elapsed_time_gate(self):
         roster = [(*BASE[:4], f"E{i}") for i in range(5)]

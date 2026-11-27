@@ -370,3 +370,18 @@ An unmatched epoch or unusable timestamp is reported separately. The
 declared interval must be in the capture tick coordinates; this diagnostic
 does not validate metrology or prove that error bounds are accurate and
 does not alter timing admission.
+
+Use `--decimal-time-tokens tokens.csv` only when independent source metadata
+identifies existing captured anchors and all its decimal tokens use a common
+time coordinate. Fields: `lot,wafer,die,cell,episode,nominal_us,token_s,declared_resolution_s`.
+Provide nonnegative fixed-point seconds and the declared rounding step,
+not the number of visible decimal places. The conditional model bounds
+possible source time by token ± half the step (closed); a zero step
+declares an exact token. Order is certified only when all three bounds
+force strictly increasing time. A non-increasing ordering forced by two
+bounds rules out strict order, even when a third bound is missing.
+Otherwise complete overlapping or touching bounds leave order unresolved,
+and incomplete evidence is reported separately. Equal printed times need
+not be equal exact events. This tool never infers anchor identity from
+printed time, applies no correction to the capture, and does not change
+timing eligibility.
