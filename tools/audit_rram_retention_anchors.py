@@ -392,14 +392,19 @@ def commanded_slots(path, roster):
     return commands
 
 
-def schedule_coverage(commands, observed):
-    totals = dict.fromkeys((
+def empty_schedule_coverage():
+    return dict.fromkeys((
         "commanded_slots", "observed_rows_in_frozen_episodes",
         "missing_commanded_slots", "commanded_slots_observed_once",
         "commanded_slots_observed_more_than_once", "extra_rows_at_commanded_slots",
         "uncommanded_slots_observed", "uncommanded_rows",
         "episodes_with_exact_slot_coverage", "episodes_with_equal_row_count_but_slot_mismatch",
     ), 0)
+
+
+def schedule_coverage(commands, observed, terminations=None):
+    totals = Counter(empty_schedule_coverage())
+    groups = defaultdict(lambda: Counter(empty_schedule_coverage()))
     for key, scheduled in commands.items():
         counts = observed.get(key, {})
         rows = sum(counts.values())
@@ -415,17 +420,24 @@ def schedule_coverage(commands, observed):
                 extra += count - 1
         uncommanded = counts.keys() - scheduled
         exact = not (missing or repeated or uncommanded)
-        totals["commanded_slots"] += len(scheduled)
-        totals["observed_rows_in_frozen_episodes"] += rows
-        totals["missing_commanded_slots"] += missing
-        totals["commanded_slots_observed_once"] += exact_once
-        totals["commanded_slots_observed_more_than_once"] += repeated
-        totals["extra_rows_at_commanded_slots"] += extra
-        totals["uncommanded_slots_observed"] += len(uncommanded)
-        totals["uncommanded_rows"] += sum(counts[nominal] for nominal in uncommanded)
-        totals["episodes_with_exact_slot_coverage"] += int(exact)
-        totals["episodes_with_equal_row_count_but_slot_mismatch"] += int(not exact and rows == len(scheduled))
-    return totals
+        episode = {
+            "commanded_slots": len(scheduled),
+            "observed_rows_in_frozen_episodes": rows,
+            "missing_commanded_slots": missing,
+            "commanded_slots_observed_once": exact_once,
+            "commanded_slots_observed_more_than_once": repeated,
+            "extra_rows_at_commanded_slots": extra,
+            "uncommanded_slots_observed": len(uncommanded),
+            "uncommanded_rows": sum(counts[nominal] for nominal in uncommanded),
+            "episodes_with_exact_slot_coverage": int(exact),
+            "episodes_with_equal_row_count_but_slot_mismatch": int(not exact and rows == len(scheduled)),
+        }
+        totals.update(episode)
+        if terminations is not None:
+            group = groups[terminations.get(key, "missing_declaration")]
+            group.update(episode)
+            group["frozen_attempted_episodes"] += 1
+    return dict(totals), {status: dict(counts) for status, counts in sorted(groups.items())}
 
 
 def termination_dispositions(path, roster):
@@ -704,7 +716,10 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
             "timing_eligible_by_status": dict(sorted(eligible_common_error.items())),
         }
     if commands is not None:
-        report["commanded_nominal_slot_coverage"] = schedule_coverage(commands, observed_slots)
+        coverage, by_termination = schedule_coverage(commands, observed_slots, terminations)
+        report["commanded_nominal_slot_coverage"] = coverage
+        if terminations is not None:
+            report["commanded_nominal_slot_coverage_by_declared_termination"] = by_termination
     if terminations is not None:
         report["declared_termination_disposition_support"] = {
             reason: dict(counts) for reason, counts in sorted(termination_counts.items())

@@ -838,6 +838,37 @@ class RetentionAnchorAudit(unittest.TestCase):
         self.assertEqual(report, json.loads(plain.stdout))
         self.assertNotIn("privateLot", checked.stdout)
 
+    def test_joint_termination_and_schedule_audit_recovers_both_marginals(self):
+        roster = [(*BASE[:4], f"E{i}") for i in range(5)]
+        ref = (0, 1_000_000, 100_000_000_000)
+        schedule = [(*key, nominal) for key in roster for nominal in ref]
+        schedule.append((*roster[3], 90_000_000_000))
+        bad, threshold, unknown, no_declaration = (episode(key) for key in
+                                                 (roster[0], roster[1], roster[2], roster[3]))
+        bad[-1][5] = ref[1]  # Same row total, distinct commanded terminal slot lost.
+        rows = bad + threshold[:2] + unknown + no_declaration
+        states = ("completed", "value_threshold_stop", "unknown")
+        dispositions = [(*key, state) for key, state in zip(roster, states)]
+        schedule_only = self.run_capture(roster, rows, schedule=schedule)
+        result = self.run_capture(roster, rows, schedule=schedule, terminations=dispositions)
+        self.assertEqual((schedule_only.returncode, result.returncode), (1, 1))
+        report = json.loads(result.stdout)
+        joint = report.pop("commanded_nominal_slot_coverage_by_declared_termination")
+        disposition_support = report.pop("declared_termination_disposition_support")
+        self.assertEqual(report, json.loads(schedule_only.stdout))
+        self.assertEqual(set(joint), set(states) | {"missing_declaration"})
+        for field, total in report["commanded_nominal_slot_coverage"].items():
+            self.assertEqual(sum(group[field] for group in joint.values()), total)
+        for disposition, group in joint.items():
+            self.assertEqual(group["frozen_attempted_episodes"],
+                             disposition_support[disposition]["frozen_attempted_episodes"])
+        self.assertEqual(joint["completed"]["episodes_with_equal_row_count_but_slot_mismatch"], 1)
+        self.assertEqual(joint["value_threshold_stop"]["missing_commanded_slots"], 1)
+        self.assertEqual(joint["unknown"]["episodes_with_exact_slot_coverage"], 1)
+        self.assertEqual(joint["missing_declaration"]["missing_commanded_slots"], 4)
+        self.assertEqual(joint["missing_declaration"]["episodes_with_exact_slot_coverage"], 0)
+        self.assertNotIn("privateLot", result.stdout)
+
     def test_termination_declarations_validate_keys_and_vocabulary(self):
         valid = (*BASE, "instrument_abort")
         for mapping, diagnostic in (

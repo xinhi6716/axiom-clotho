@@ -234,3 +234,12 @@ for the terminal reading, and complete timing eligibility separately.
 The controller saying completed does not establish endpoint observability,
 and a stop value is not a substitute for a scheduled terminal observation.
 No safety setting, timing gate, or missing-outcome rule changes.
+
+When both optional tables are supplied, the audit also reports commanded
+nominal-slot coverage by declared termination disposition. Each group
+includes its frozen-attempt denominator and the same slot counters as the
+unstratified report. Missing declarations and declared unknowns are
+distinct. This distinguishes equal-count slot mismatches in purportedly
+completed attempts from missing slots in declared threshold stops, without
+assuming whether either explains the missing rows or how often commands
+were actually issued.
