@@ -1487,3 +1487,63 @@ def paired_group_mae_win_profile(rows, *, expected_roster, margin=0):
         "equal_group_mae_b_minus_a": sum(item["mae_b_minus_a"] for item in details) / len(totals),
         "per_group": tuple(details),
     }
+
+
+def three_level_endpoint_contrast(rows, *, expected_strata, levels):
+    """Summarize unequal-step endpoint slopes on a fully crossed frozen panel.
+
+    Each row is (stratum ID, condition level, endpoint). Supply independently
+    frozen unique strata and exactly three strict ascending numeric levels.
+    Each stratum must contribute one endpoint at each level. Values are finite
+    binary64 or exactly representable integers; slopes use exact arithmetic.
+    The second divided difference is (right slope - left slope)/(high - low).
+    Reversals require strictly opposite slope signs; flat steps are separate.
+    This descriptive comparison assumes neither independent adjacent steps
+    nor a causal interpretation of the condition.
+    """
+    if not all(map(_bounded_paired_sequence, (rows, expected_strata))):
+        raise ValueError("Rows and expected strata require bounded nonempty sequences.")
+    if not all(map(_paired_roster_id, expected_strata)):
+        raise ValueError("Expected stratum IDs must be valid strings.")
+    panel = {stratum: {} for stratum in expected_strata}
+    if len(panel) != len(expected_strata):
+        raise ValueError("Expected stratum IDs must be unique.")
+    if type(levels) is not tuple or len(levels) != 3:
+        raise ValueError("Exactly three ascending levels are required.")
+    low, mid, high = map(_paired_binary64_units, levels)
+    if not low < mid < high:
+        raise ValueError("Exactly three strictly ascending levels are required.")
+    for row in rows:
+        if type(row) is not tuple or len(row) != 3 or not _paired_roster_id(row[0]):
+            raise ValueError("Each endpoint row requires a stratum, level and endpoint.")
+        stratum, x, y = row
+        x = _paired_binary64_units(x)
+        if stratum not in panel or x not in (low, mid, high) or x in panel[stratum]:
+            raise ValueError("Each declared stratum-level cell must occur exactly once.")
+        panel[stratum][x] = _paired_binary64_units(y)
+    if any(len(values) != 3 for values in panel.values()):
+        raise ValueError("Each declared stratum-level cell must occur exactly once.")
+
+    unit = _BINARY64_QUANTUM_DENOMINATOR
+    details = {}
+    for stratum, values in sorted(panel.items()):
+        left = Fraction(values[mid] - values[low], mid - low)
+        right = Fraction(values[high] - values[mid], high - mid)
+        details[stratum] = {
+            "left_slope": left,
+            "right_slope": right,
+            "right_minus_left_slope": right - left,
+            "second_divided_difference": (right - left) * Fraction(unit, high - low),
+            "strict_reversal": "peak" if left > 0 > right else "valley" if left < 0 < right else None,
+            "has_flat_step": left == 0 or right == 0,
+        }
+    fields = ("left_slope", "right_slope", "right_minus_left_slope", "second_divided_difference")
+    return {
+        "n_strata": len(details),
+        "levels": tuple(Fraction(x, unit) for x in (low, mid, high)),
+        "per_stratum": details,
+        "equal_stratum_mean": {k: sum(item[k] for item in details.values()) / len(details) for k in fields},
+        "n_peaks": sum(item["strict_reversal"] == "peak" for item in details.values()),
+        "n_valleys": sum(item["strict_reversal"] == "valley" for item in details.values()),
+        "n_strata_with_flat_step": sum(item["has_flat_step"] for item in details.values()),
+    }
