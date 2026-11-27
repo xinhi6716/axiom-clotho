@@ -346,3 +346,15 @@ only in incomparable namespaces, leave the distinction unresolved. This
 conditional diagnostic reports counts, does not authenticate read IDs,
 and cannot diagnose distinct physical reads from counters alone. Timing
 eligibility remains unchanged.
+
+Use `--native-timer-segments segments.csv` when an independent instrument
+log preserves reset-qualified physical timer segments that may be lost in
+an export's normalized clock/epoch labels. The fields are
+`lot,wafer,die,cell,episode,nominal_us,native_timer_segment`. Each nonblank
+opaque segment identifies one timer and one uninterrupted epoch in the
+same namespace; assign a distinct label after a reset or wrap. Bind the
+segment to a unique captured frozen anchor. Different known labels show
+that a single native timer segment was not shared; otherwise missing labels
+leave continuity unresolved. Even a matching triplet does not authenticate
+the log, synchronize timers, validate elapsed time, or change timing
+eligibility.

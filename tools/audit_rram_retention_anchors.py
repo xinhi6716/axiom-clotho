@@ -352,6 +352,30 @@ def cross_episode_event_identity_support(orders, reads):
     }
 
 
+def native_timer_segments(path, roster):
+    segments = defaultdict(dict)
+    fields = IDENTITY + ("nominal_us", "native_timer_segment")
+    for key, (raw_nominal, segment) in records(path, fields):
+        nominal = integer(raw_nominal)
+        if key not in roster or nominal not in ANCHORS or len(roster[key].get(nominal, ())) != 1:
+            raise ValueError("native timer segment does not identify one captured frozen anchor")
+        if nominal in segments[key]:
+            raise ValueError("duplicate native timer segment declaration at one anchor")
+        if segment and not KEY.fullmatch(segment):
+            raise ValueError("invalid native timer segment identity")
+        segments[key][nominal] = segment
+    return segments
+
+
+def native_timer_segment_status(evidence):
+    known = [segment for segment in evidence.values() if segment]
+    if len(set(known)) > 1:
+        return "multiple_logged_native_timer_segments"
+    if len(known) == len(ANCHORS):
+        return "all_anchors_share_logged_native_timer_segment"
+    return "native_timer_segment_continuity_not_established"
+
+
 def logged_event_order(path, roster):
     records_by_episode = defaultdict(dict)
     fields = IDENTITY + ("nominal_us", "ordered_stream", "event_counter")
@@ -688,7 +712,7 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
           termination_dispositions_sha256=None, planned_path_table=None, native_read_table=None,
           planned_bias_table=None, planned_role_table=None, logged_role_table=None,
           planned_aperture_width_table=None, event_order_table=None,
-          diagnose_individual_read_counters=False):
+          diagnose_individual_read_counters=False, native_timer_segment_table=None):
     if diagnose_individual_read_counters and (event_order_table is None or native_read_table is None):
         raise ValueError("individual-read counter diagnosis requires both event order and native read identities")
     if planned_aperture_width_table is not None and aperture_table is None:
@@ -767,6 +791,9 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
     attempted_native_reads, eligible_native_reads = Counter(), Counter()
     event_orders = logged_event_order(event_order_table, expected) if event_order_table is not None else None
     attempted_event_orders, eligible_event_orders = Counter(), Counter()
+    timer_segments = (native_timer_segments(native_timer_segment_table, expected)
+                      if native_timer_segment_table is not None else None)
+    attempted_segments, eligible_segments = Counter(), Counter()
     role_plans = (acquisition_event_roles(planned_role_table, expected, planned=True)
                   if planned_role_table is not None else None)
     logged_roles = (acquisition_event_roles(logged_role_table, expected, planned=False)
@@ -827,6 +854,11 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
             attempted_event_orders[status] += 1
             if reason == "eligible":
                 eligible_event_orders[status] += 1
+        if timer_segments is not None:
+            status = native_timer_segment_status(timer_segments.get(key, {}))
+            attempted_segments[status] += 1
+            if reason == "eligible":
+                eligible_segments[status] += 1
         if role_plans is not None:
             status = event_role_status(role_plans[key], logged_roles.get(key, {}))
             attempted_roles[status] += 1
@@ -1005,6 +1037,11 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
         report["conditional_individual_read_counter_support"] = cross_episode_event_identity_support(
             event_orders, native_read_assignments
         )
+    if timer_segments is not None:
+        report["declared_native_timer_segment_support"] = {
+            "frozen_attempted_by_status": dict(sorted(attempted_segments.items())),
+            "timing_eligible_by_status": dict(sorted(eligible_segments.items())),
+        }
     if role_plans is not None:
         report["acquisition_event_role_agreement"] = {
             "frozen_attempted_by_status": dict(sorted(attempted_roles.items())),
@@ -1116,6 +1153,8 @@ def main():
                         help="independent event sequence for captured anchors on monotone streams")
     parser.add_argument("--diagnose-individual-read-counters", action="store_true",
                         help="assume one stream counter per individual read, not a fan-out trigger")
+    parser.add_argument("--native-timer-segments", type=Path,
+                        help="independent reset-qualified physical timer identities at captured anchors")
     args = parser.parse_args()
     try:
         report = audit(args.frozen_roster, args.capture, diagnose_anchors=args.diagnose_anchors,
@@ -1139,7 +1178,8 @@ def main():
                        planned_role_table=args.planned_event_roles, logged_role_table=args.logged_event_roles,
                        planned_aperture_width_table=args.planned_aperture_widths,
                        event_order_table=args.logged_event_order,
-                       diagnose_individual_read_counters=args.diagnose_individual_read_counters)
+                       diagnose_individual_read_counters=args.diagnose_individual_read_counters,
+                       native_timer_segment_table=args.native_timer_segments)
     except (OSError, UnicodeError, csv.Error):
         parser.exit(2, "error: input could not be read as UTF-8 CSV\n")
     except ValueError as exc:

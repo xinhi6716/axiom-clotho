@@ -24,7 +24,7 @@ def episode(key=BASE, early=1_000_000, final=100_000_000_000, error=0):
 
 
 class RetentionAnchorAudit(unittest.TestCase):
-    def run_capture(self, roster, rows, capture_header=IDS + TIMES, *, extra=(), block_map=None, stress=None, readout_paths=None, read_bias=None, apertures=None, schedule=None, terminations=None, planned_paths=None, native_reads=None, planned_bias=None, planned_roles=None, logged_roles=None, aperture_widths=None, event_orders=None):
+    def run_capture(self, roster, rows, capture_header=IDS + TIMES, *, extra=(), block_map=None, stress=None, readout_paths=None, read_bias=None, apertures=None, schedule=None, terminations=None, planned_paths=None, native_reads=None, planned_bias=None, planned_roles=None, logged_roles=None, aperture_widths=None, event_orders=None, timer_segments=None):
         with tempfile.TemporaryDirectory() as tmp:
             folder = Path(tmp)
             for name, header, payload in (
@@ -95,6 +95,11 @@ class RetentionAnchorAudit(unittest.TestCase):
                     fields = IDS + ("nominal_us", "ordered_stream", "event_counter")
                     csv.writer(stream).writerows((fields, *event_orders))
                 extra = (*extra, "--logged-event-order", str(order))
+            if timer_segments is not None:
+                path = folder / "timer_segments.csv"
+                with path.open("w", newline="", encoding="utf-8") as stream:
+                    csv.writer(stream).writerows((IDS + ("nominal_us", "native_timer_segment"), *timer_segments))
+                extra = (*extra, "--native-timer-segments", str(path))
             if schedule is not None:
                 schedule_path = folder / "schedule.csv"
                 with schedule_path.open("w", newline="", encoding="utf-8") as stream:
@@ -196,6 +201,51 @@ class RetentionAnchorAudit(unittest.TestCase):
         self.assertEqual(invalid.returncode, 2)
         self.assertIn("timestamp capture SHA-256 must be 64 lowercase", invalid.stderr)
         self.assertFalse(invalid.stdout)
+
+    def test_reset_qualified_timer_segments_do_not_follow_export_epoch_labels(self):
+        roster = [(*BASE[:4], f"E{i}") for i in range(5)]
+        slots = (0, 1_000_000, 100_000_000_000)
+        complete = sum((episode(key) for key in roster[:3]), [])
+        rows = complete + episode(roster[3])[:2]
+        timer = [
+            (*roster[0], slots[0], "privateTimer:before"),
+            (*roster[0], slots[1], "privateTimer:before"),
+            (*roster[0], slots[2], "privateTimer:after"),
+            *[(*roster[1], tick, "privateTimer:before") for tick in slots],
+            (*roster[2], slots[0], "privateTimer:before"),
+            (*roster[2], slots[2], ""),
+            (*roster[3], slots[0], "otherTimer:before"),
+            (*roster[3], slots[1], "otherTimer:after"),
+        ]
+        # Every exported row uses the same textual clock and epoch despite
+        # independent native reset metadata for two episodes.
+        plain = self.run_capture(roster, rows)
+        audited = self.run_capture(roster, rows, timer_segments=timer)
+        self.assertEqual((plain.returncode, audited.returncode), (1, 1))
+        report = json.loads(audited.stdout)
+        self.assertEqual(report.pop("declared_native_timer_segment_support"), {
+            "frozen_attempted_by_status": {"all_anchors_share_logged_native_timer_segment": 1,
+                "multiple_logged_native_timer_segments": 2,
+                "native_timer_segment_continuity_not_established": 2},
+            "timing_eligible_by_status": {"all_anchors_share_logged_native_timer_segment": 1,
+                "multiple_logged_native_timer_segments": 1,
+                "native_timer_segment_continuity_not_established": 1},
+        })
+        self.assertEqual(report, json.loads(plain.stdout))
+        self.assertNotIn("privateTimer", audited.stdout)
+
+    def test_native_timer_segments_bind_unique_captured_anchor_without_guessing(self):
+        known = (*BASE, 0, "clock:epoch")
+        for rows, sidecar, message in (
+            (episode(), [known, (*BASE, "00", "clock:epoch")], "duplicate native timer segment"),
+            (episode()[1:], [known], "does not identify one captured"),
+            (episode() + episode()[:1], [known], "does not identify one captured"),
+            (episode(), [(*BASE, 0, "bad space")], "invalid native timer segment"),
+        ):
+            result = self.run_capture([BASE], rows, timer_segments=sidecar)
+            self.assertEqual(result.returncode, 2)
+            self.assertFalse(result.stdout)
+            self.assertIn(message, result.stderr)
 
     def test_counter_reuse_requires_distinct_native_read_ids_in_comparable_namespace(self):
         roster = [(*BASE[:4], f"E{i}") for i in range(8)]
