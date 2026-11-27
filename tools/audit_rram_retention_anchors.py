@@ -378,6 +378,56 @@ def joint_aperture_status(slots, metadata, *, common_read_error=False):
     return "joint_fit_possible_under_read_residual_box"
 
 
+def commanded_slots(path, roster):
+    commands = defaultdict(set)
+    for key, (raw_nominal,) in records(path, IDENTITY + ("nominal_us",)):
+        nominal = integer(raw_nominal)
+        if key not in roster:
+            raise ValueError("commanded schedule contains a non-roster episode")
+        if nominal in commands[key]:
+            raise ValueError("duplicate nominal slot in commanded schedule")
+        commands[key].add(nominal)
+    if len(commands) != len(roster):
+        raise ValueError("commanded schedule does not cover the frozen roster")
+    return commands
+
+
+def schedule_coverage(commands, observed):
+    totals = dict.fromkeys((
+        "commanded_slots", "observed_rows_in_frozen_episodes",
+        "missing_commanded_slots", "commanded_slots_observed_once",
+        "commanded_slots_observed_more_than_once", "extra_rows_at_commanded_slots",
+        "uncommanded_slots_observed", "uncommanded_rows",
+        "episodes_with_exact_slot_coverage", "episodes_with_equal_row_count_but_slot_mismatch",
+    ), 0)
+    for key, scheduled in commands.items():
+        counts = observed.get(key, {})
+        rows = sum(counts.values())
+        exact_once = repeated = missing = extra = 0
+        for nominal in scheduled:
+            count = counts.get(nominal, 0)
+            if not count:
+                missing += 1
+            elif count == 1:
+                exact_once += 1
+            else:
+                repeated += 1
+                extra += count - 1
+        uncommanded = counts.keys() - scheduled
+        exact = not (missing or repeated or uncommanded)
+        totals["commanded_slots"] += len(scheduled)
+        totals["observed_rows_in_frozen_episodes"] += rows
+        totals["missing_commanded_slots"] += missing
+        totals["commanded_slots_observed_once"] += exact_once
+        totals["commanded_slots_observed_more_than_once"] += repeated
+        totals["extra_rows_at_commanded_slots"] += extra
+        totals["uncommanded_slots_observed"] += len(uncommanded)
+        totals["uncommanded_rows"] += sum(counts[nominal] for nominal in uncommanded)
+        totals["episodes_with_exact_slot_coverage"] += int(exact)
+        totals["episodes_with_equal_row_count_but_slot_mismatch"] += int(not exact and rows == len(scheduled))
+    return totals
+
+
 def validate_digest(digest, label):
     if digest is not None and (not isinstance(digest, str) or not SHA256.fullmatch(digest)):
         raise ValueError(f"{label} SHA-256 must be 64 lowercase hexadecimal digits")
@@ -388,7 +438,7 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
           diagnose_die_stress=False, diagnose_duplicate_anchors=False,
           diagnose_terminal_alternatives=False, capture_sha256=None, readout_path_table=None,
           read_bias_table=None, aperture_table=None, diagnose_joint_aperture=False,
-          diagnose_common_read_error_aperture=False):
+          diagnose_common_read_error_aperture=False, commanded_schedule_path=None):
     validate_digest(roster_sha256, "frozen roster")
     validate_digest(capture_sha256, "timestamp capture")
     validate_digest(block_map_sha256, "acquisition block map")
@@ -409,6 +459,9 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
     blocks = (acquisition_blocks(block_map_path, expected, expected_sha256=block_map_sha256)
               if block_map_path is not None else None)
     stress = stress_history(stress_history_path, expected) if stress_history_path is not None else None
+    commands = (commanded_slots(commanded_schedule_path, expected)
+                if commanded_schedule_path is not None else None)
+    observed_slots = defaultdict(Counter) if commands is not None else None
     present, unexpected = set(), set()
     off_anchor_rows = 0
     off_anchor_stamps = defaultdict(list) if diagnose_terminal_alternatives else None
@@ -425,6 +478,8 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
             unexpected.add(key)
             continue
         present.add(key)
+        if observed_slots is not None:
+            observed_slots[key][nominal] += 1
         if nominal not in ANCHORS:
             off_anchor_rows += 1
             if off_anchor_stamps is not None:
@@ -621,6 +676,8 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
             "frozen_attempted_by_status": dict(sorted(attempted_common_error.items())),
             "timing_eligible_by_status": dict(sorted(eligible_common_error.items())),
         }
+    if commands is not None:
+        report["commanded_nominal_slot_coverage"] = schedule_coverage(commands, observed_slots)
     return report
 
 
@@ -658,6 +715,8 @@ def main():
                         help="conditional shared-origin aperture test under separate bounded residuals")
     parser.add_argument("--diagnose-common-read-error-aperture", action="store_true",
                         help="conditional joint fit if both read corrections must be equal")
+    parser.add_argument("--commanded-schedule", type=Path,
+                        help="independent exact nominal-slot declaration per frozen episode")
     args = parser.parse_args()
     try:
         report = audit(args.frozen_roster, args.capture, diagnose_anchors=args.diagnose_anchors,
@@ -670,7 +729,8 @@ def main():
                        capture_sha256=args.capture_sha256, readout_path_table=args.readout_paths,
                        read_bias_table=args.read_bias, aperture_table=args.read_apertures,
                        diagnose_joint_aperture=args.diagnose_joint_aperture,
-                       diagnose_common_read_error_aperture=args.diagnose_common_read_error_aperture)
+                       diagnose_common_read_error_aperture=args.diagnose_common_read_error_aperture,
+                       commanded_schedule_path=args.commanded_schedule)
     except (OSError, UnicodeError, csv.Error):
         parser.exit(2, "error: input could not be read as UTF-8 CSV\n")
     except ValueError as exc:

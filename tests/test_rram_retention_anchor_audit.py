@@ -24,7 +24,7 @@ def episode(key=BASE, early=1_000_000, final=100_000_000_000, error=0):
 
 
 class RetentionAnchorAudit(unittest.TestCase):
-    def run_capture(self, roster, rows, capture_header=IDS + TIMES, *, extra=(), block_map=None, stress=None, readout_paths=None, read_bias=None, apertures=None):
+    def run_capture(self, roster, rows, capture_header=IDS + TIMES, *, extra=(), block_map=None, stress=None, readout_paths=None, read_bias=None, apertures=None, schedule=None):
         with tempfile.TemporaryDirectory() as tmp:
             folder = Path(tmp)
             for name, header, payload in (
@@ -58,6 +58,11 @@ class RetentionAnchorAudit(unittest.TestCase):
                     fields = IDS + ("nominal_us", "aperture_open_offset_us", "aperture_close_offset_us")
                     csv.writer(stream).writerows((fields, *apertures))
                 extra = (*extra, "--read-apertures", str(aperture_file))
+            if schedule is not None:
+                schedule_path = folder / "schedule.csv"
+                with schedule_path.open("w", newline="", encoding="utf-8") as stream:
+                    csv.writer(stream).writerows((IDS + ("nominal_us",), *schedule))
+                extra = (*extra, "--commanded-schedule", str(schedule_path))
             return subprocess.run(
                 [sys.executable, str(TOOL), "--frozen-roster", str(folder / "roster.csv"),
                  "--capture", str(folder / "capture.csv"), *extra],
@@ -754,6 +759,53 @@ class RetentionAnchorAudit(unittest.TestCase):
         result = self.run_capture(roster, capture, extra=(common,))
         self.assertEqual(result.returncode, 2)
         self.assertIn("requires a read aperture table", result.stderr)
+
+    def test_equal_counts_do_not_prove_commanded_slot_completeness(self):
+        roster = [(*BASE[:4], f"E{i}") for i in range(4)]
+        ref = (0, 1_000_000, 100_000_000_000)
+        off_anchor = 90_000_000_000
+        schedule = [(*key, nominal) for key in roster for nominal in ref]
+        schedule.append((*roster[2], off_anchor))
+        complete, wrong_anchor, repeated_off_anchor = (episode(key) for key in roster[:3])
+        wrong_anchor[-1][5] = ref[1]  # Duplicated early, missing terminal; 3 rows still.
+        dense = repeated_off_anchor[-1].copy()
+        dense[5] = off_anchor
+        repeated_off_anchor += [dense, dense]
+        extra = complete[0].copy()
+        extra[5] = 7_000
+        complete.append(extra)
+        capture = complete + wrong_anchor + repeated_off_anchor
+        ordinary = self.run_capture(roster, capture)
+        checked = self.run_capture(roster, capture, schedule=schedule)
+        self.assertEqual((ordinary.returncode, checked.returncode), (1, 1))
+        report = json.loads(checked.stdout)
+        self.assertEqual(report.pop("commanded_nominal_slot_coverage"), {
+            "commanded_slots": 13, "observed_rows_in_frozen_episodes": 12,
+            "missing_commanded_slots": 4, "commanded_slots_observed_once": 7,
+            "commanded_slots_observed_more_than_once": 2, "extra_rows_at_commanded_slots": 2,
+            "uncommanded_slots_observed": 1, "uncommanded_rows": 1,
+            "episodes_with_exact_slot_coverage": 0,
+            "episodes_with_equal_row_count_but_slot_mismatch": 1,
+        })
+        self.assertEqual(report, json.loads(ordinary.stdout))
+        self.assertNotIn("privateLot", checked.stdout)
+
+    def test_commanded_schedule_requires_exact_frozen_episodes_and_unique_nominal(self):
+        rows = episode()
+        for schedule, diagnostic in (
+            ([], "does not cover"),
+            ([(*BASE, 7), (*BASE, "0007")], "duplicate nominal slot"),
+            ([(*BASE[:4], "not_frozen", 0)], "non-roster episode"),
+        ):
+            result = self.run_capture([BASE], rows, schedule=schedule)
+            self.assertEqual(result.returncode, 2)
+            self.assertFalse(result.stdout)
+            self.assertIn(diagnostic, result.stderr)
+        exact = self.run_capture([BASE], rows,
+                                 schedule=[(*BASE, nominal) for nominal in (0, 1_000_000, 100_000_000_000)])
+        self.assertEqual(exact.returncode, 0, exact.stderr)
+        self.assertEqual(json.loads(exact.stdout)["commanded_nominal_slot_coverage"]
+                         ["episodes_with_exact_slot_coverage"], 1)
 
     def test_capture_cannot_supply_labels_or_change_frozen_identity_set(self):
         r = self.run_capture([BASE], [(*row, "sensitive-value") for row in episode()],

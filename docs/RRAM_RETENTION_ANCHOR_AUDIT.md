@@ -208,3 +208,16 @@ from a common instrument, path or clock. It can make some individually
 possible corrections jointly impossible, or make a fit robust on its
 narrower error set. Use alongside `--diagnose-joint-aperture` to see both
 models; neither asserts the actual error coupling or alters the gate.
+
+Add `--commanded-schedule schedule.csv` to compare capture slots against an
+independently retained plan. The exact columns are
+`lot,wafer,die,cell,episode,nominal_us`. Every frozen episode must have at
+least one unique commanded slot; include planned dense or off-anchor slots
+explicitly. Do not recreate the plan from the observed row count. Each
+configured opportunity is counted as missing, observed once, or observed
+more than once. Uncommanded slots and rows are reported separately. An
+episode with an equal row total can still have wrong slot coverage, such as
+two early reads and no terminal read. This reports nominal-slot structure
+only: a captured row can have unknown timing or unusable measurements.
+It does not establish that commands were issued, repair repeats, or modify
+the primary timestamp gate.
