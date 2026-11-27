@@ -1349,3 +1349,91 @@ def lower_tail_rank_floor_audit(calibration_scores, query_scores, *, alpha, scor
             score(observed_minimum - cutoff) if cutoff is not None else None),
         "queries_at_cutoff": queries.count(cutoff) if cutoff is not None else None,
     }
+
+
+def held_group_condition_lookup_mae(training, held, *, expected_train, expected_held):
+    """Measure a train-only exact-condition lookup against a training mean.
+
+    Training and held records are (row ID, observed target). The independent
+    frozen rosters contain (row ID, group ID, canonical condition ID); freeze
+    their canonical IDs before viewing outcomes. Fit the pooled training mean
+    within each condition, falling back to the pooled global training mean
+    if unseen. Scores use micro weighting and equal held-group weighting on
+    the same full panel. Seen/unseen subreports are micro only and descriptive:
+    they need not have the same support or difficulty. This split does not
+    validate physical independence or establish portability to new conditions.
+    """
+    def aligned(records, expected):
+        if not all(map(_bounded_paired_sequence, (records, expected))):
+            raise ValueError("Records and rosters require bounded nonempty sequences.")
+        roster, seen = {}, set()
+        for entry in expected:
+            if type(entry) is not tuple or len(entry) != 3 or not all(map(_paired_roster_id, entry)):
+                raise ValueError("Frozen memberships require (row ID, group ID, condition ID).")
+            key, group, condition = entry
+            if key in roster:
+                raise ValueError("Frozen roster row IDs must be unique.")
+            roster[key] = (group, condition)
+        for row in records:
+            if type(row) is not tuple or len(row) != 2 or not _paired_roster_id(row[0]):
+                raise ValueError("Each record requires one row ID and one target.")
+            key, value = row
+            if key not in roster or key in seen:
+                raise ValueError("Records must match their frozen roster exactly.")
+            seen.add(key)
+            yield key, *roster[key], _paired_binary64_units(value)
+        if len(seen) != len(roster):
+            raise ValueError("Records must match their frozen roster exactly.")
+
+    q = _BINARY64_QUANTUM_DENOMINATOR
+    totals, training_ids, training_groups = {}, set(), set()
+    training_sum = 0
+    for key, group, condition, value in aligned(training, expected_train):
+        training_ids.add(key)
+        training_groups.add(group)
+        training_sum += value
+        stats = totals.setdefault(condition, [0, 0])
+        stats[0] += 1
+        stats[1] += value
+    global_mean = Fraction(training_sum, len(training))
+    means = {condition: Fraction(total, count) for condition, (count, total) in totals.items()}
+
+    by_group, subgroups = {}, {True: [0, 0, 0], False: [0, 0, 0]}
+    def accumulate(stats, lookup_loss, global_loss):
+        stats[0] += 1
+        stats[1] += lookup_loss
+        stats[2] += global_loss
+
+    for key, group, condition, value in aligned(held, expected_held):
+        if key in training_ids or group in training_groups:
+            raise ValueError("Training and held rows and groups must be disjoint.")
+        observed = condition in means
+        lookup_loss = abs(value - means.get(condition, global_mean))
+        global_loss = abs(value - global_mean)
+        accumulate(by_group.setdefault(group, [0, 0, 0]), lookup_loss, global_loss)
+        accumulate(subgroups[observed], lookup_loss, global_loss)
+
+    def report(lookup, global_loss):
+        return {"lookup_mae": lookup, "global_mean_mae": global_loss,
+                "lookup_minus_global_mae": lookup - global_loss}
+
+    def weighted(groups, balanced):
+        if balanced:
+            return report(*(sum(g[i] / (g[0] * q) for g in groups) / len(groups)
+                            for i in (1, 2)))
+        count = sum(g[0] for g in groups)
+        return report(*(sum(g[i] for g in groups) / (count * q) for i in (1, 2)))
+
+    return {
+        "n_training_rows": len(training),
+        "n_training_conditions": len(means),
+        "n_held_rows": len(held),
+        "n_held_groups": len(by_group),
+        "micro": weighted(tuple(by_group.values()), False),
+        "equal_held_group": weighted(tuple(by_group.values()), True),
+        "by_condition_support": {
+            name: {"n_held_rows": subgroups[status][0],
+                   "micro": weighted((subgroups[status],), False) if subgroups[status][0] else None}
+            for status, name in ((True, "seen"), (False, "unseen"))
+        },
+    }
