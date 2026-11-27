@@ -250,6 +250,35 @@ class EvaluationSchemaTests(unittest.TestCase):
         self.mutate_json("manifest.json", lambda m: m.pop("feature_schema"))
         self.assertEqual(replay().returncode, 0)
 
+    def test_cli_rejects_outer_test_group_in_inner_audit(self):
+        command = [sys.executable, "-m", "groupbench.cli", "validate-evaluation-bundle", str(self.root)]
+        env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1] / "src"),
+                   OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1", PYTHONDONTWRITEBYTECODE="1")
+
+        def replay():
+            return subprocess.run(command, env=env, text=True, capture_output=True, timeout=30)
+
+        self.assertEqual(replay().returncode, 0)
+
+        def replace_inner_group(manifest):
+            outer = manifest["outer_folds"][0]
+            expected = outer["train_groups"][0]
+            leaked = outer["test_groups"][0]
+            # All groups have equal size. Substitute throughout the inner
+            # ledger, preserving sizes, disjointness and test coverage count.
+            for inner in outer["inner_folds"]:
+                for role in ("train_groups", "test_groups"):
+                    inner[role] = sorted(leaked if g == expected else g for g in inner[role])
+
+        self.mutate_json("manifest.json", replace_inner_group)
+        self.assertEqual(verify_bundle(self.root).bundle_type, "evaluation")
+        before = {p.name: p.read_bytes() for p in self.root.iterdir()}
+        reply = replay()
+        self.assertEqual(reply.returncode, 2, reply.stderr)
+        self.assertIn("inner group ledger", reply.stderr)
+        self.assertFalse(reply.stdout)
+        self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
+
     def test_cli_requires_selected_predictions_to_match_declared_family_refit(self):
         from groupbench.model import GroupBenchRegressor
 

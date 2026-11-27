@@ -228,6 +228,39 @@ def _check_declared_feature_order(manifest, config):
         _fail("ordered feature schema and target, group or domain roles must be disjoint.")
 
 
+def _check_nested_inner_group_ledger(audit, config, outer_training_groups, group_rows):
+    if "inner_folds" not in audit:
+        return  # Historical narrow receipts may not retain an inner ledger.
+    records = audit["inner_folds"]
+    message = "inner group ledger disagrees with the retained outer-training partition."
+    expected_groups = set(outer_training_groups)
+    if (not isinstance(records, list) or type(config.get("inner_splits")) is not int
+            or len(records) != config["inner_splits"] or not 2 <= len(records) <= len(expected_groups)):
+        _fail(message)
+    held_groups = set()
+    for fold, record in enumerate(records):
+        if not isinstance(record, dict):
+            _fail(message)
+        train, test = record.get("train_groups"), record.get("test_groups")
+        if any(not isinstance(side, list) or not side or any(type(g) is not str for g in side)
+               for side in (train, test)):
+            _fail(message)
+        train_set, test_set = set(train), set(test)
+        if (sorted(train_set) != train or sorted(test_set) != test
+                or train_set & test_set or train_set | test_set != expected_groups
+                or held_groups & test_set):
+            _fail(message)
+        expected = dict(fold=fold, overlap_count=0, train_group_count=len(train), test_group_count=len(test),
+                        train_rows=sum(len(group_rows[g]) for g in train),
+                        test_rows=sum(len(group_rows[g]) for g in test))
+        if any(type(record.get(field)) is not int or record[field] != value
+               for field, value in expected.items()):
+            _fail(message)
+        held_groups.update(test_set)
+    if held_groups != expected_groups:
+        _fail(message)
+
+
 def _check(manifest, summary, raw):
     version = manifest.get("schema_version")
     protocols = {"1.0": "nested-group-kfold-v1", "1.1": "nested-group-kfold-distinct-v2",
@@ -373,6 +406,8 @@ def _check(manifest, summary, raw):
         _compare({key: audit.get(key) for key in expected}, expected)
         if version != "1.3":
             _reject_domain_audits(audit)
+        if version in ("1.0", "1.1", "1.2"):
+            _check_nested_inner_group_ledger(audit, config, train_groups, group_rows)
         if version in ("1.0", "1.1"):
             _check_standard_candidate_winners(audit, config, baselines)
         if version in ("1.2", "1.3", "1.4"):
