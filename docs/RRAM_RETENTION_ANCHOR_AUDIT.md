@@ -198,3 +198,13 @@ of feasibility under the actual constraints. Two possible marginal fits
 can disagree on the shared origin. The diagnostic distinguishes no fit,
 some fit, and all-error fit under the stated box on both denominators.
 It still does not change eligibility or certify the stated bounds.
+
+For a separate sensitivity check, `--diagnose-common-read-error-aperture`
+assumes the two read corrections are exactly equal and satisfy both reported
+bounds. The common correction is then bounded by the smaller read bound;
+the same shared origin correction applies as before. This is an explicit
+alternative to separate bounded read corrections, not a setting inferred
+from a common instrument, path or clock. It can make some individually
+possible corrections jointly impossible, or make a fit robust on its
+narrower error set. Use alongside `--diagnose-joint-aperture` to see both
+models; neither asserts the actual error coupling or alters the gate.

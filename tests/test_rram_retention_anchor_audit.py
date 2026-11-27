@@ -723,6 +723,38 @@ class RetentionAnchorAudit(unittest.TestCase):
         self.assertIn("requires a read aperture table", missing.stderr)
         self.assertFalse(missing.stdout)
 
+    def test_common_read_error_is_distinct_from_independently_bounded_read_errors(self):
+        roster = [(*BASE[:4], f"E{i}") for i in range(2)]
+        early, terminal = 1_000_000, 100_000_000_000
+        rows = [episode(key, early=1_019_998, final=80_000_000_002) for key in roster]
+        for stamps in rows:
+            stamps[1][9] = stamps[2][9] = 2
+        rows[1][1][9] = 1
+        apertures = [
+            (*roster[0], early, 1, 3), (*roster[0], terminal, -3, -1),
+            (*roster[1], early, -1, 0), (*roster[1], terminal, -1, 0),
+        ]
+        capture = [row for triple in rows for row in triple]
+        flags = ("--diagnose-joint-aperture",)
+        common = "--diagnose-common-read-error-aperture"
+        baseline = self.run_capture(roster, capture, apertures=apertures, extra=flags)
+        checked = self.run_capture(roster, capture, apertures=apertures, extra=(*flags, common))
+        self.assertEqual((baseline.returncode, checked.returncode), (0, 0))
+        report = json.loads(checked.stdout)
+        statuses = {"no_joint_fit_under_common_read_error": 1,
+                    "joint_fit_for_all_errors_under_common_read_error": 1}
+        self.assertEqual(report.pop("conditional_common_read_error_aperture_support"), {
+            "frozen_attempted_by_status": statuses, "timing_eligible_by_status": statuses,
+        })
+        self.assertEqual(report, json.loads(baseline.stdout))
+        self.assertEqual(report["conditional_shared_origin_aperture_support"]
+                         ["timing_eligible_by_status"],
+                         {"joint_fit_possible_under_read_residual_box": 2})
+
+        result = self.run_capture(roster, capture, extra=(common,))
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("requires a read aperture table", result.stderr)
+
     def test_capture_cannot_supply_labels_or_change_frozen_identity_set(self):
         r = self.run_capture([BASE], [(*row, "sensitive-value") for row in episode()],
                              IDS + TIMES + ("conductance_S",))
