@@ -8,6 +8,7 @@ import os
 import re
 
 import numpy as np
+from sklearn import __version__ as _SKLEARN_VERSION
 
 from .baselines import _lower_group_median
 from .data import validate_groups, validate_seed
@@ -182,6 +183,28 @@ def _check_duplicate_diagnostic_bounds(manifest, observed, groups):
             or (across_rows == 0) != (across_patterns == 0)
             or across_patterns > min(across_rows // 2, possible_patterns)):
         _fail("duplicate diagnostics are impossible for the retained targets and groups.")
+
+
+def _check_dummy_fold_predictions(manifest, observed, folds, fold_rows, predictions):
+    # All versions' documented unweighted Dummy mean broadcasts one scalar.
+    # Only replay its exact binary64 reduction with the producer versions.
+    environment = manifest.get("environment")
+    replay_mean = (isinstance(environment, dict)
+                   and environment.get("numpy") == np.__version__
+                   and environment.get("scikit_learn") == _SKLEARN_VERSION)
+    if replay_mean:
+        _check_split_position_budget(len(observed) * len(fold_rows))
+        targets = np.asarray(observed, dtype=float)
+        held = np.asarray(folds)
+    for fold, rows in enumerate(fold_rows):
+        saved = predictions[rows[0]]
+        if any(predictions[i] != saved for i in rows):
+            _fail("Dummy mean predictions are not constant within an outer fold.")
+        if replay_mean:
+            with np.errstate(over="ignore", invalid="ignore"):
+                expected = np.average(targets[held != fold].reshape(-1, 1), axis=0)[0]
+            if not np.isfinite(expected) or saved != expected:
+                _fail("Dummy mean differs from retained training labels.")
 
 
 def _check(manifest, summary, raw):
@@ -368,6 +391,8 @@ def _check(manifest, summary, raw):
                 _fail("selected family is not a declared baseline.")
             if any(predictions["selected"][i] != predictions[family][i] for i in fold_rows[fold]):
                 _fail("selected predictions differ from their declared family refit.")
+    if "dummy" in baselines:
+        _check_dummy_fold_predictions(manifest, observed, folds, fold_rows, predictions["dummy"])
     for name in names:
         _compare(summary["models"][name], _partitioned_metrics(
             observed, predictions[name], group_rows, fold_rows, fold_groups))

@@ -184,6 +184,39 @@ class EvaluationSchemaTests(unittest.TestCase):
                 self.assertFalse(reply.stdout)
                 self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
 
+    def test_cli_replays_dummy_mean_from_outer_training_targets(self):
+        from groupbench.model import GroupBenchRegressor
+
+        frame = pd.DataFrame({"g": ["a", "b", "c", "d"] * 2, "x": range(8),
+                              "y": [i * i + 1 for i in range(8)]})
+        options = dict(target="y", group="g", baselines=("dummy",), outer_splits=2, inner_splits=2)
+        benchmark(frame, **options).write(self.root, overwrite=True)
+        command = [sys.executable, "-m", "groupbench.cli", "validate-evaluation-bundle", str(self.root)]
+        env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1] / "src"),
+                   OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1", PYTHONDONTWRITEBYTECODE="1")
+
+        def replay():
+            return subprocess.run(command, env=env, text=True, capture_output=True, timeout=30)
+
+        self.assertEqual(replay().returncode, 0)
+        original = GroupBenchRegressor.predict_baselines
+
+        def shifted_constant(estimator, features):
+            predicted = original(estimator, features)["dummy"] + 1.0
+            return {"dummy": predicted, "selected": predicted}
+
+        with patch.object(GroupBenchRegressor, "predict_baselines", shifted_constant):
+            # Writer recomputes all summaries and fresh checksums from the
+            # shifted constants; only the documented predictor contradicts them.
+            benchmark(frame, **options).write(self.root, overwrite=True)
+        self.assertEqual(verify_bundle(self.root).bundle_type, "evaluation")
+        before = {p.name: p.read_bytes() for p in self.root.iterdir()}
+        reply = replay()
+        self.assertEqual(reply.returncode, 2, reply.stderr)
+        self.assertIn("Dummy mean differs from retained training labels", reply.stderr)
+        self.assertFalse(reply.stdout)
+        self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
+
     def test_cli_requires_selected_predictions_to_match_declared_family_refit(self):
         from groupbench.model import GroupBenchRegressor
 
@@ -387,9 +420,9 @@ class EvaluationSchemaTests(unittest.TestCase):
                               "x": range(8), "y": range(8)})
         def perfect(features):
             prediction = features["x"].to_numpy(dtype=float)
-            return {"dummy": prediction, "selected": prediction}
+            return {"ridge": prediction, "selected": prediction}
         with patch("groupbench.model.GroupBenchRegressor.predict_baselines", side_effect=perfect):
-            result = benchmark(frame, target="y", group="g", baselines=("dummy",),
+            result = benchmark(frame, target="y", group="g", baselines=("ridge",),
                                outer_splits=2, inner_splits=2)
         result.write(self.root, overwrite=True)
         self.assertEqual(validate_evaluation_bundle(self.root).n_rows, 8)
