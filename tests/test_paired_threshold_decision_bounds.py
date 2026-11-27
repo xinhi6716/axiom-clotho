@@ -63,3 +63,52 @@ class PairedThresholdDecisionBoundsTests(unittest.TestCase):
                                ([('r', 0, None, 0, 1)], roster), ([row], [('r', True)])):
             with self.assertRaises(ValueError):
                 bounds(rows, expected_roster=expected, **good)
+
+    def test_total_event_count_tightens_independent_bounds(self):
+        rows = [('a', 0, 1, 0, 1), ('b', 0, 1, 0, 1)]
+        roster = [('a', 'x'), ('b', 'y')]
+        policy = dict(threshold=1, false_positive_cost=2, false_negative_cost=5)
+        original = bounds(rows, expected_roster=roster, **policy)
+        self.assertEqual(original[ROW], (-5, 2))
+        self.assertNotIn('known_total_events', original)
+        for n, answered in ((0, 2), (1, Fraction(-3, 2)), (2, -5)):
+            result = bounds(rows, expected_roster=roster, known_total_events=n, **policy)
+            self.assertEqual(result['known_total_events'], n)
+            self.assertEqual(result[ROW], (answered, answered))
+            self.assertEqual(result[GROUP], result[ROW])
+
+    def test_agreed_actions_can_absorb_an_unresolved_event(self):
+        rows = [('same action', -1, 0, 0, 0), ('different', -1, 0, -1, 0),
+                ('definite event', 0, 0, -1, 0)]
+        policy = dict(threshold=0, false_positive_cost=2, false_negative_cost=5)
+        roster = [('same action', 'large'), ('different', 'large'), ('definite event', 'small')]
+        result = bounds(rows, expected_roster=roster, known_total_events=2, **policy)
+        self.assertEqual(result[ROW], (Fraction(-10, 3), -1))
+        self.assertEqual(result[GROUP], (Fraction(-15, 4), -2))
+        for invalid in (0, 4, True, 2., '2'):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                bounds(rows, expected_roster=roster, known_total_events=invalid, **policy)
+
+    def test_count_constrained_bounds_match_complete_outcome_enumeration(self):
+        roster = [('a', 'large'), ('b', 'large'), ('c', 'small')]
+        policy = dict(threshold=0, false_positive_cost=Fraction(3, 2),
+                      false_negative_cost=4)
+        # A zero, +1 or -1 predicted action difference; all truths ambiguous.
+        choices = ((0, 0), (-1, 0), (0, -1))
+        for arms in product(choices, repeat=3):
+            rows = [(key, -1, 0, a, b) for (key, _), (a, b) in zip(roster, arms)]
+            for n in range(4):
+                expected = []
+                for actuals in product((False, True), repeat=3):
+                    if sum(actuals) != n:
+                        continue
+                    def cost(actual, positive):
+                        return (policy['false_positive_cost'] if not actual and positive
+                                else policy['false_negative_cost'] if actual and not positive else 0)
+                    deltas = [cost(y, b >= 0) - cost(y, a >= 0) for y, (a, b) in zip(actuals, arms)]
+                    expected.append((Fraction(sum(deltas), 3),
+                                     Fraction(sum(deltas[:2]), 4) + Fraction(deltas[2], 2)))
+                report = bounds(rows[::-1], expected_roster=roster, known_total_events=n,
+                                **(policy | {'false_positive_cost': 1.5}))
+                for key, candidates in zip((ROW, GROUP), zip(*expected)):
+                    self.assertEqual(report[key], (min(candidates), max(candidates)))

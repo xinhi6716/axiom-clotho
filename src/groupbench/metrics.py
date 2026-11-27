@@ -848,7 +848,8 @@ def paired_group_mse_components(rows, *, expected_roster):
 
 
 def paired_threshold_decision_cost_bounds(rows, *, expected_roster, threshold,
-                                           false_positive_cost, false_negative_cost):
+                                          false_positive_cost, false_negative_cost,
+                                          known_total_events=None):
     """Bound paired threshold decision costs for independently bounded truths.
 
     Supply (row_id, truth_lower, truth_upper, prediction_a, prediction_b)
@@ -859,12 +860,21 @@ def paired_threshold_decision_cost_bounds(rows, *, expected_roster, threshold,
 
     The caller freezes common target units, nonnegative cost penalties,
     and the complete roster before comparing models. Bounds are exact for
-    represented binary64 inputs and independently varying row truths.
-    They are descriptive cost sensitivities, not a probability model or
+    represented binary64 inputs. By default truths can vary independently.
+    Optionally constrain the total count of events to a known integer from
+    the same frozen cohort and threshold, obtained independently of model
+    comparisons. No other dependence is assumed and the caller establishes
+    count provenance. Each weighting's extrema may be attained by different
+    admissible event assignments; no assignments are returned or imputed.
+    These are descriptive cost sensitivities, not a probability model or
     authorization to deploy a decision rule.
     """
     if not all(map(_bounded_paired_sequence, (rows, expected_roster))):
         raise ValueError("Rows and frozen roster must be bounded nonempty lists or tuples.")
+    if known_total_events is not None and (
+        type(known_total_events) is not int or not 0 <= known_total_events <= len(expected_roster)
+    ):
+        raise ValueError("Known total events must be a nonnegative integer within the frozen roster size.")
     t, fp, fn = map(_paired_binary64_units, (threshold, false_positive_cost, false_negative_cost))
     if min(fp, fn) < 0 or fp + fn == 0:
         raise ValueError("Both costs must be nonnegative, with at least one positive.")
@@ -879,7 +889,9 @@ def paired_threshold_decision_cost_bounds(rows, *, expected_roster, threshold,
         roster[key] = group
 
     seen, totals = set(), {}
-    ambiguous = ambiguous_disagreement = 0
+    ambiguous = ambiguous_disagreement = n_definite_event = 0
+    constrained = known_total_events is not None
+    event_shifts = []
     for row in rows:
         if type(row) is not tuple or len(row) != 5 or not _paired_roster_id(row[0]):
             raise ValueError("Paired rows require an ID, two truth bounds and two predictions.")
@@ -891,14 +903,22 @@ def paired_threshold_decision_cost_bounds(rows, *, expected_roster, threshold,
         if lower > upper:
             raise ValueError("Each truth interval must have ordered endpoints.")
         different = int(b >= t) - int(a >= t)
+        group = roster[key]
         if lower < t <= upper:
             ambiguous += 1
             ambiguous_disagreement += different != 0
             cost_if_negative, cost_if_positive = different * fp, -different * fn
-            low, high = min(cost_if_negative, cost_if_positive), max(cost_if_negative, cost_if_positive)
+            if constrained:
+                low = high = cost_if_negative
+                # Include zero shifts: an agreed decision can still absorb
+                # one of the required unknown events.
+                event_shifts.append((group, cost_if_positive - cost_if_negative))
+            else:
+                low, high = min(cost_if_negative, cost_if_positive), max(cost_if_negative, cost_if_positive)
         else:
+            n_definite_event += lower >= t
             low = high = different * fp if upper < t else -different * fn
-        pooled = totals.setdefault(roster[key], [0, 0, 0])
+        pooled = totals.setdefault(group, [0, 0, 0])
         pooled[0] += 1
         pooled[1] += low
         pooled[2] += high
@@ -906,7 +926,7 @@ def paired_threshold_decision_cost_bounds(rows, *, expected_roster, threshold,
         raise ValueError("Paired rows must match the frozen roster exactly.")
 
     quantum = _BINARY64_QUANTUM_DENOMINATOR
-    return {
+    report = {
         "n_rows": len(seen), "n_declared_groups": len(totals),
         "n_ambiguous_truth_rows": ambiguous,
         "n_ambiguous_truth_rows_with_action_disagreement": ambiguous_disagreement,
@@ -917,6 +937,31 @@ def paired_threshold_decision_cost_bounds(rows, *, expected_roster, threshold,
             sum(Fraction(group[i], group[0] * quantum) for group in totals.values()) / len(totals)
             for i in (1, 2)),
     }
+    if constrained:
+        remaining = known_total_events - n_definite_event
+        if not 0 <= remaining <= ambiguous:
+            raise ValueError("Known total events conflict with the closed truth intervals.")
+
+        def extrema(shifts, baseline, divisor):
+            ordered = sorted(shifts)
+            # The same k event assignments affect both arms. Relative to the
+            # all-non-event baseline for unresolved rows, each switched row
+            # contributes a fixed additive change. Sorting finds sharp extrema.
+            return ((baseline + sum(ordered[:remaining])) / divisor,
+                    (baseline + sum(ordered[len(ordered) - remaining:])) / divisor)
+
+        row_low, _ = report["row_weighted_b_minus_a_cost_bounds"]
+        group_low, _ = report["equal_group_b_minus_a_cost_bounds"]
+        row_divisor, group_divisor = len(seen) * quantum, len(totals) * quantum
+        report.update(
+            known_total_events=known_total_events,
+            row_weighted_b_minus_a_cost_bounds=extrema(
+                (shift for _, shift in event_shifts), row_low * row_divisor, row_divisor),
+            equal_group_b_minus_a_cost_bounds=extrema(
+                (Fraction(shift, totals[group][0]) for group, shift in event_shifts),
+                group_low * group_divisor, group_divisor),
+        )
+    return report
 
 
 def paired_quantile_pinball_loss(rows, *, expected_roster, quantile):
