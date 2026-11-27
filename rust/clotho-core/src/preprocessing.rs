@@ -129,10 +129,7 @@ impl Preprocessor {
             let output_start = feature_names.len();
             let (values, training_missing_count) = match &column.values {
                 FeatureValues::Numeric(values) => {
-                    observed_numeric.clear();
-                    observed_numeric.extend(values.iter().flatten().copied());
-                    let training_missing_count = values.len() - observed_numeric.len();
-                    let fill = median(&mut observed_numeric);
+                    let (fill, training_missing_count) = numeric_fill(values, &mut observed_numeric);
                     feature_names.push(format!("feature_{}__numeric", source_index));
                     (FittedValues::Numeric { fill }, training_missing_count)
                 }
@@ -392,35 +389,53 @@ fn validate_table(columns: &[FeatureColumn]) -> Result<usize, PreprocessingError
     Ok(rows)
 }
 
-fn median(values: &mut [f64]) -> f64 {
-    if values.is_empty() {
-        return 0.0;
-    }
-    let len = values.len();
-    let middle = len / 2;
-    let odd = len % 2 == 1;
-
-    // Avoid partitioning already ordered input. Use total_cmp here too so
-    // mixed signs of zero cannot disguise a non-monotonic run.
-    let descending = values[0].total_cmp(&values[len - 1]).is_gt();
-    let ordered = if descending {
-        values
-            .windows(2)
-            .all(|pair| !pair[0].total_cmp(&pair[1]).is_lt())
-    } else {
-        values
-            .windows(2)
-            .all(|pair| !pair[0].total_cmp(&pair[1]).is_gt())
+// Finite values were validated already. Check the borrowed column first so
+// a monotonic column, including a constant column, needs no scratch copy.
+fn numeric_fill(values: &[Option<f64>], scratch: &mut Vec<f64>) -> (f64, usize) {
+    let mut iter = values.iter().flatten().copied();
+    let Some(mut previous) = iter.next() else {
+        return (0.0, values.len());
     };
-    if ordered {
-        let rank = |index| values[if descending { len - 1 - index } else { index }];
-        return if odd {
-            rank(middle)
-        } else {
-            midpoint(rank(middle - 1), rank(middle))
-        };
+    let mut observations = 1;
+    let mut order = std::cmp::Ordering::Equal;
+    for current in iter {
+        let direction = previous.total_cmp(&current);
+        if direction != std::cmp::Ordering::Equal {
+            if order == direction.reverse() {
+                // A genuine inversion requires selection on mutable storage.
+                scratch.clear();
+                scratch.extend(values.iter().flatten().copied());
+                return (unordered_median(scratch), values.len() - scratch.len());
+            }
+            order = direction;
+        }
+        previous = current;
+        observations += 1;
     }
 
+    let descending = order.is_gt();
+    let odd = observations % 2 != 0;
+    let low_index = (observations - 1) / 2;
+    let missing = values.len() - observations;
+    let (first, second) = if missing == 0 {
+        (values[low_index].unwrap(), values.get(low_index + 1).copied().flatten())
+    } else {
+        let mut middle_values = values.iter().flatten().skip(low_index);
+        (*middle_values.next().unwrap(), middle_values.next().copied())
+    };
+    let fill = if odd {
+        first
+    } else if descending {
+        midpoint(second.unwrap(), first)
+    } else {
+        midpoint(first, second.unwrap())
+    };
+    (fill, missing)
+}
+
+fn unordered_median(values: &mut [f64]) -> f64 {
+    let middle = values.len() / 2;
+    let odd = values.len() % 2 == 1;
     let (lower_half, upper, _) = values.select_nth_unstable_by(middle, f64::total_cmp);
     if odd {
         *upper
@@ -439,5 +454,57 @@ fn midpoint(lower: f64, upper: f64) -> f64 {
         sum * 0.5
     } else {
         lower * 0.5 + upper * 0.5
+    }
+}
+
+#[cfg(test)]
+mod median_tests {
+    use super::*;
+
+    #[test]
+    fn borrowed_median_skips_scratch_and_preserves_full_sort_bits() {
+        let tiny = f64::from_bits(1);
+        let candidates = [
+            None,
+            Some(-f64::MAX),
+            Some(-tiny),
+            Some(-0.0),
+            Some(0.0),
+            Some(tiny),
+            Some(f64::MAX),
+        ];
+        let mut scratch = vec![72.0, 91.0];
+        for value in [
+            vec![None; 8],
+            vec![Some(-0.0); 3],
+            vec![None, Some(-tiny), Some(-0.0), None, Some(0.0), Some(tiny)],
+            vec![None, Some(f64::MAX), Some(f64::MAX), None],
+        ] {
+            let (a, missing) = numeric_fill(&value, &mut scratch);
+            let mut reversed = value;
+            reversed.reverse();
+            let (b, reverse_missing) = numeric_fill(&reversed, &mut scratch);
+            assert_eq!(a.to_bits(), b.to_bits());
+            assert_eq!(missing, reverse_missing);
+            assert_eq!(scratch, [72.0, 91.0]);
+        }
+
+        for mut code in 0..7_usize.pow(5) {
+            let values: Vec<_> = (0..5).map(|_| {
+                let v = candidates[code % candidates.len()];
+                code /= candidates.len();
+                v
+            }).collect();
+            let mut ordered: Vec<_> = values.iter().flatten().copied().collect();
+            ordered.sort_unstable_by(f64::total_cmp);
+            let fill = match ordered.len() {
+                0 => 0.0,
+                n if n % 2 == 1 => ordered[n / 2],
+                n => midpoint(ordered[n / 2 - 1], ordered[n / 2]),
+            };
+            let (actual, missing) = numeric_fill(&values, &mut scratch);
+            assert_eq!(actual.to_bits(), fill.to_bits());
+            assert_eq!(missing, values.len() - ordered.len());
+        }
     }
 }
