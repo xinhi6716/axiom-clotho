@@ -371,6 +371,36 @@ def compare_saved_interval_scores(document_a, document_b):
     }
 
 
+def _paired_bounded_interval_rows(rows, expected_roster):
+    if not all(type(value) in (list, tuple) and 1 <= len(value) <= MAX_ROWS
+               for value in (rows, expected_roster)):
+        raise ValueError("Rows and the expected roster must be bounded nonempty sequences.")
+    ids, groups = [], []
+    for entry in expected_roster:
+        if type(entry) is not tuple or len(entry) != 2:
+            raise ValueError("Expected roster entries must be (row_id, group) tuples.")
+        ids.append(_label(entry[0]))
+        groups.append(entry[1])
+    if len(set(ids)) != len(ids):
+        raise ValueError("Expected row identifiers must be unique.")
+    expected = dict(zip(ids, _groups(groups)))
+
+    seen = set()
+    for row in rows:
+        if type(row) is not tuple or len(row) != 7:
+            raise ValueError("Each row must supply one ID and six closed endpoints.")
+        key = _label(row[0])
+        if key not in expected or key in seen:
+            raise ValueError("Rows must match the expected roster exactly.")
+        seen.add(key)
+        lo, hi, al, ah, bl, bh = map(_number, row[1:])
+        if lo > hi or al > ah or bl > bh:
+            raise ValueError("Truth and forecast endpoints must be ordered.")
+        yield expected[key], lo, hi, al, ah, bl, bh
+    if len(seen) != len(expected):
+        raise ValueError("Rows must match the expected roster exactly.")
+
+
 def bound_paired_interval_scores(rows, *, expected_roster, alpha):
     """Sharp B-minus-A interval-score bounds for independently bounded truths.
 
@@ -384,55 +414,72 @@ def bound_paired_interval_scores(rows, *, expected_roster, alpha):
     within its supplied range; a shared calibration error is a different
     model. These sensitivity bounds establish neither coverage nor inference.
     """
-    if not all(type(value) in (list, tuple) and 1 <= len(value) <= MAX_ROWS
-               for value in (rows, expected_roster)):
-        raise ValueError("Rows and the expected roster must be bounded nonempty sequences.")
     alpha = _number(alpha)
     if not 0 < alpha < 1:
         raise ValueError("Paired interval bounds require one fixed miscoverage in (0, 1).")
-    ids, groups = [], []
-    for entry in expected_roster:
-        if type(entry) is not tuple or len(entry) != 2:
-            raise ValueError("Expected roster entries must be (row_id, group) tuples.")
-        ids.append(_label(entry[0]))
-        groups.append(entry[1])
-    if len(set(ids)) != len(ids):
-        raise ValueError("Expected row identifiers must be unique.")
-    expected = dict(zip(ids, _groups(groups)))
-
     slope = 2 / alpha
 
     def score(y, lo, hi):
         return hi - lo + slope * max(lo - y, y - hi, 0)
 
-    seen, group_totals = set(), {}
-    for row in rows:
-        if type(row) is not tuple or len(row) != 7:
-            raise ValueError("Each row must supply one ID and six closed endpoints.")
-        key = _label(row[0])
-        if key not in expected or key in seen:
-            raise ValueError("Rows must match the expected roster exactly.")
-        seen.add(key)
-        lo, hi, al, ah, bl, bh = map(_number, row[1:])
-        if lo > hi or al > ah or bl > bh:
-            raise ValueError("Truth and forecast endpoints must be ordered.")
+    group_totals = {}
+    for group, lo, hi, al, ah, bl, bh in _paired_bounded_interval_rows(rows, expected_roster):
         # The difference is linear between any successive forecast endpoints.
         # Include internal knots, not just truth-range endpoints.
         candidates = {lo, hi} | {point for point in (al, ah, bl, bh) if lo < point < hi}
         gaps = [score(y, bl, bh) - score(y, al, ah) for y in candidates]
-        count, lower, upper = group_totals.get(expected[key], (0, Fraction(), Fraction()))
-        group_totals[expected[key]] = count + 1, lower + min(gaps), upper + max(gaps)
-    if len(seen) != len(expected):
-        raise ValueError("Rows must match the expected roster exactly.")
+        count, lower, upper = group_totals.get(group, (0, Fraction(), Fraction()))
+        group_totals[group] = count + 1, lower + min(gaps), upper + max(gaps)
 
     return {
-        "n_rows": len(seen),
+        "n_rows": len(rows),
         "n_declared_groups": len(group_totals),
         "alpha_exact": alpha,
         "row_weighted_b_minus_a_bounds": tuple(
-            sum(stats[i] for stats in group_totals.values()) / len(seen) for i in (1, 2)),
+            sum(stats[i] for stats in group_totals.values()) / len(rows) for i in (1, 2)),
         "equal_group_b_minus_a_bounds": tuple(
             _mean([stats[i] / stats[0] for stats in group_totals.values()]) for i in (1, 2)),
+    }
+
+
+
+def bound_paired_interval_coverage(rows, *, expected_roster):
+    """Bound B-minus-A empirical coverage under a shared, bounded truth per row.
+
+    Use the same frozen tuple and row/group roster contract as
+    bound_paired_interval_scores. Each interval and truth range is closed.
+    The caller matches target, units and nominal coverage between arms.
+    Marginal truths can vary independently across rows but cannot differ
+    between arms on a row. No labels are imputed, no rows are dropped, and
+    these are descriptive finite-roster rate bounds, not coverage guarantees.
+    """
+    def possibly_only(lo, hi, al, ah, bl, bh):
+        # Clip A to the admissible range. There is an A-only value exactly
+        # when the clip is nonempty and is not contained in B.
+        left, right = max(lo, al), min(hi, ah)
+        return left <= right and (left < bl or right > bh)
+
+    def necessarily_only(lo, hi, al, ah, bl, bh):
+        return al <= lo <= hi <= ah and (hi < bl or lo > bh)
+
+    group_totals = {}
+    n_uncertain = 0
+    for group, lo, hi, al, ah, bl, bh in _paired_bounded_interval_rows(rows, expected_roster):
+        lower = (-1 if possibly_only(lo, hi, al, ah, bl, bh)
+                 else int(necessarily_only(lo, hi, bl, bh, al, ah)))
+        upper = (1 if possibly_only(lo, hi, bl, bh, al, ah)
+                 else -int(necessarily_only(lo, hi, al, ah, bl, bh)))
+        n_uncertain += lower != upper
+        count, a, b = group_totals.get(group, (0, 0, 0))
+        group_totals[group] = count + 1, a + lower, b + upper
+    return {
+        "n_rows": len(rows),
+        "n_declared_groups": len(group_totals),
+        "n_rows_with_unresolved_coverage_difference": n_uncertain,
+        "row_weighted_coverage_b_minus_a_bounds": tuple(
+            Fraction(sum(stats[i] for stats in group_totals.values()), len(rows)) for i in (1, 2)),
+        "equal_group_coverage_b_minus_a_bounds": tuple(
+            _mean([Fraction(stats[i], stats[0]) for stats in group_totals.values()]) for i in (1, 2)),
     }
 
 
