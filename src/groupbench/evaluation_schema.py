@@ -288,6 +288,41 @@ def _check_nested_inner_group_ledger(audit, config, outer_training_groups, group
         _fail(message)
 
 
+
+def _check_seeded_inner_assignment(manifest, config, groups, membership, audits):
+    environment = manifest.get("environment")
+    if ("random_state" not in config or not isinstance(environment, dict)
+            or environment.get("numpy") != np.__version__):
+        return  # Same compatibility rule as seeded outer replay.
+    rows_by_outer_fold = Counter(membership[group] for group in groups)
+    enabled = [(fold, audit) for fold, audit in enumerate(audits)
+               if "inner_folds" in audit]
+    if not enabled:
+        return
+    message = "retained inner group ledger disagrees with the seeded inner fold assignment."
+    try:
+        _check_split_position_budget(len(groups) * len(audits) + sum(
+            (len(groups) - rows_by_outer_fold[fold]) * len(audit["inner_folds"])
+            for fold, audit in enabled))
+        seed = validate_seed(config["random_state"])
+        for fold, audit in enabled:
+            inner_seed = validate_seed(seed + fold + 1)
+            if ("inner_seed" in audit and
+                    (type(audit["inner_seed"]) is not int or audit["inner_seed"] != inner_seed)):
+                _fail(message)
+            # The writer subsets the outer-training rows in original input
+            # order. GroupKFold factorizes by first encounter, so sorting or
+            # repeating the group roster in a different order is not valid.
+            training = np.asarray([group for group in groups if membership[group] != fold], dtype=object)
+            inner = audit["inner_folds"]
+            splitter = GroupKFold(len(inner), inner_seed)
+            for record, (_, held) in zip(inner, splitter.split(groups=training), strict=True):
+                if sorted(set(training[held])) != record["test_groups"]:
+                    _fail(message)
+    except ValueError:
+        _fail(message)
+
+
 def _check(manifest, summary, raw):
     version = manifest.get("schema_version")
     protocols = {"1.0": "nested-group-kfold-v1", "1.1": "nested-group-kfold-distinct-v2",
@@ -481,6 +516,9 @@ def _check(manifest, summary, raw):
                 _fail("selected predictions differ from their declared family refit.")
     if "dummy" in baselines:
         _check_dummy_fold_predictions(manifest, observed, folds, fold_rows, predictions["dummy"])
+    if version in ("1.0", "1.1", "1.2"):
+        _check_seeded_inner_assignment(manifest, config, groups, membership, audits)
+
     for name in names:
         _compare(summary["models"][name], _partitioned_metrics(
             observed, predictions[name], group_rows, fold_rows, fold_groups))

@@ -279,6 +279,31 @@ class EvaluationSchemaTests(unittest.TestCase):
         self.assertFalse(reply.stdout)
         self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
 
+    def test_same_environment_rejects_renumbered_legacy_inner_folds(self):
+        self.assertEqual(validate_evaluation_bundle(self.root).n_rows, 12)
+
+        def renumber(manifest):
+            one, two = manifest["outer_folds"][0]["inner_folds"]
+            # Preserve aggregate reconstruction by moving complete fold
+            # records and their scores together; only seeded membership differs.
+            one["fold"], two["fold"] = 1, 0
+            manifest["outer_folds"][0]["inner_folds"] = [two, one]
+            for candidate in manifest["outer_folds"][0]["inner_selection"]:
+                candidate["inner_fold_scores"].reverse()
+
+        self.mutate_json("manifest.json", renumber)
+        self.assertEqual(verify_bundle(self.root).bundle_type, "evaluation")
+        before = {p.name: p.read_bytes() for p in self.root.iterdir()}
+        with self.assertRaisesRegex(ValueError, "seeded inner fold assignment"):
+            validate_evaluation_bundle(self.root)
+        self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
+        self.mutate_json("manifest.json", lambda m: m["environment"].update(numpy="0.0"))
+        self.assertEqual(validate_evaluation_bundle(self.root).n_rows, 12)
+
+        self.results[0].write(self.root, overwrite=True)
+        self.mutate_json("manifest.json", lambda m: m["outer_folds"][0].pop("inner_folds"))
+        self.assertEqual(validate_evaluation_bundle(self.root).n_rows, 12)
+
     def test_cli_reconciles_standard_pooled_score_with_weighted_inner_folds(self):
         # Unequal group sizes distinguish group from row weighting.
         frame = pd.DataFrame({"g": list("aaaaaabbbbbccccddee"), "x": range(19),
