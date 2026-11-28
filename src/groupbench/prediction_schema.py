@@ -625,7 +625,7 @@ def _extended_selection_v2(value, rows, groups, inner, seed, config, *, group_si
     objective = config.get("selection_objective")
     if objective not in ("mae", "group_mae"):
         _fail("extended-families-v2 selection objective differs.")
-    widths, ridge_summaries = {}, {}
+    widths, ridge_summaries, kernel_bases = {}, {}, {}
     for record, candidate in zip(records, candidates):
         record = _object(record)
         keys = _SELECTION_RECORD_V2 | ({"inner_fit_details"} if candidate["family"] in optional else set())
@@ -667,6 +667,12 @@ def _extended_selection_v2(value, rows, groups, inner, seed, config, *, group_si
                 width = item["details"]["transformed_features"]
                 if widths.setdefault(fold, width) != width:
                     _fail("extended-families-v2 preprocessing widths differ for the same inner training slice.")
+                if candidate["family"] == "nystroem_ridge":
+                    # Basis sampling is independent of Ridge alpha and uses
+                    # the same seed and training slice for each candidate.
+                    digest = item["details"]["basis_indices_sha256"]
+                    if kernel_bases.setdefault(fold, digest) != digest:
+                        _fail("extended-families-v2 kernel basis differs across alpha candidates in one fold.")
                 if candidate["family"] == "group_balanced_ridge":
                     summary = {k: v for k, v in item["details"].items() if k != "alpha"}
                     if not _same_declaration(ridge_summaries.setdefault(fold, summary), summary):

@@ -229,6 +229,44 @@ class GroupBalancedRidgeSchemaTests(unittest.TestCase):
                 result.write(root)
                 validate(root)
 
+    def test_v2_shared_slices_require_same_kernel_basis_across_alphas(self):
+        import pandas as pd
+        from groupbench import benchmark, fit_predict
+
+        frame = pd.DataFrame({"g": list("abcdef") * 2, "x": range(12),
+                              "y": [i * i for i in range(12)]})
+        opts = dict(target="y", group="g", baselines=(FAMILY, "nystroem_ridge"), inner_splits=2)
+        runs = ((fit_predict(frame, frame[["x"]].iloc[:2], **opts), validate_prediction_bundle_schema),
+                (benchmark(frame, outer_splits=3, **opts), validate_evaluation_bundle))
+        for result, validate in runs:
+            with tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                result.write(root)
+                validate(root)
+                saved = json.loads((root / "manifest.json").read_text())
+                summary = getattr(result, "summary", None)
+                raw = (root / "predictions.csv").read_bytes()
+                location = saved if summary is None else saved["outer_folds"][0]
+                kernels = [item["inner_fit_details"][0]["details"]
+                           for item in location["inner_selection"] if item["family"] == "nystroem_ridge"]
+                digests = {detail["basis_indices_sha256"] for detail in kernels}
+                self.assertEqual(len(digests), 1)
+                different = "0" * 64 if "0" * 64 not in digests else "1" * 64
+                kernels[1]["basis_indices_sha256"] = different
+                write_bundle(root, saved, summary, raw)
+                verify_bundle(root)
+                before = {path.name: path.read_bytes() for path in root.iterdir()}
+                with self.assertRaisesRegex(ValueError, "kernel basis differs across alpha candidates"):
+                    validate(root)
+                self.assertEqual(before, {path.name: path.read_bytes() for path in root.iterdir()})
+
+                # Consistency of declarations is narrower than verifying
+                # actual sampled indices, even if every candidate agrees.
+                for detail in kernels:
+                    detail["basis_indices_sha256"] = different
+                write_bundle(root, saved, summary, raw)
+                validate(root)
+
     def test_new_versions_combinations_objectives_and_encodings(self):
         for families in [(FAMILY,), ("dummy", FAMILY), (FAMILY, "ridge", "extra_trees", "group_median", "nystroem_ridge")]:
             for encoding in ("legacy-v1", "distinct-v2"):
