@@ -11,10 +11,10 @@ TOOL = Path(__file__).resolve().parents[1] / "tools" / "audit_rram_retention_sta
 BOUNDS = runpy.run_path(str(TOOL))["identified_bounds"]
 
 
-def cli(*counts):
+def cli(*counts, extra=()):
     flags = ("attempted", "ramp-failures", "ramp-unknown", "later-failures", "later-unknown")
     args = [arg for flag, count in zip(flags, counts) for arg in (f"--{flag}", str(count))]
-    return subprocess.run([sys.executable, str(TOOL), *args], text=True, capture_output=True, check=False)
+    return subprocess.run([sys.executable, str(TOOL), *args, *extra], text=True, capture_output=True, check=False)
 
 
 def endpoints(record):
@@ -68,3 +68,35 @@ class RetentionStageBounds(unittest.TestCase):
                                  (min(conditional), max(conditional)))
                 cases += 1
         self.assertEqual(cases, 756)
+
+
+    def test_later_failure_does_not_label_survival_through_ramp(self):
+        flag = "--later-failures-with-unknown-ramp"
+        r = cli(128, 16, 8, 14, 7, extra=(flag, "4"))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        report = json.loads(r.stdout)
+        self.assertEqual(endpoints(report["attempted_cohort_bounds"]), (Fraction(34, 128), Fraction(45, 128)))
+        self.assertEqual(endpoints(report["conditional_on_actual_ramp_survival_bounds"]),
+                         (Fraction(14, 108), Fraction(29, 112)))
+        self.assertEqual(report["conditional_bound_extremizing_survivor_counts"],
+                         {"at_lower_bound_witness": 108, "at_upper_bound_witness": 112})
+        self.assertEqual(cli(128, 16, 8, 14, 7, extra=(flag, "9")).returncode, 2)
+
+    def test_extended_bounds_are_sharp_over_unknown_first_stage(self):
+        for n in range(1, 7):
+            for ramp, unknown, late, censor, observed in product(range(n + 1), repeat=5):
+                survivors = n - ramp - unknown
+                if survivors <= 0 or late + censor > survivors or observed > unknown:
+                    continue
+                a, b = [], []
+                choices = [(0, 1)] * observed + [(0, 1, 2)] * (unknown - observed)
+                for completion in product(*choices):
+                    for resolved in range(censor + 1):
+                        ramp_new = completion.count(0)
+                        late_count = late + completion.count(1) + resolved
+                        a.append(Fraction(ramp + ramp_new + late_count, n))
+                        b.append(Fraction(late_count, survivors + unknown - ramp_new))
+                report = BOUNDS(n, ramp, unknown, late, censor, observed)
+                self.assertEqual(endpoints(report["attempted_cohort_bounds"]), (min(a), max(a)))
+                self.assertEqual(endpoints(report["conditional_on_actual_ramp_survival_bounds"]),
+                                 (min(b), max(b)))
