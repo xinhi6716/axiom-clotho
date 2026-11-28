@@ -118,6 +118,9 @@ impl KnnRegressor {
                 })
                 .collect();
         }
+        if self.k == 2 && self.training.len() >= 8 {
+            return self.predict_two(x);
+        }
         // Every query needs fresh distances, but their capacity depends only
         // on training size. Allocate lazily after the first scaling check.
         let mut distance_workspace = None;
@@ -132,6 +135,28 @@ impl KnnRegressor {
                 self.visit_distances(row, |i, d| distances.push((d.to_bits(), i)))?;
                 let neighbors = nearest_subset(distances, self.k);
                 exact_mean::checked_mean(neighbors.iter().map(|(_, i)| self.targets[*i]), self.k)
+            })
+            .collect()
+    }
+
+    #[inline(never)]
+    fn predict_two(&self, x: &[Vec<f64>]) -> Result<Vec<f64>, KnnError> {
+        x.iter()
+            .map(|row| {
+                self.validate_query_scaling(row)?;
+                let mut first = (f64::INFINITY, 0);
+                let mut second = first;
+                // All visits still run, including distances unable to win.
+                // Strict comparisons keep older rows ahead on exact ties.
+                self.visit_distances(row, |index, distance| {
+                    if distance < first.0 {
+                        second = first;
+                        first = (distance, index);
+                    } else if distance < second.0 {
+                        second = (distance, index);
+                    }
+                })?;
+                exact_mean::checked_mean([self.targets[first.1], self.targets[second.1]].into_iter(), 2)
             })
             .collect()
     }
@@ -216,4 +241,22 @@ fn validate(x: &[Vec<f64>], width: usize) -> Result<(), KnnError> {
         return Err(KnnError::NonFinite);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod stable_two_tests {
+    use super::*;
+
+    #[test]
+    fn streaming_pair_keeps_training_order_on_ties_and_checks_late_distances() {
+        let training = [[-1.0], [1.0], [1.0], [-1.0], [-1.0], [1.0], [1.0], [-1.0]].map(Vec::from);
+        let model = KnnRegressor::fit(&training, &[2.0, 4.0, 100.0, 8.0, 9.0, 10.0, 11.0, 12.0], 2).unwrap();
+        assert_eq!(model.predict(&[vec![0.0]]).unwrap(), [3.0]);
+
+        let query = 1e-23_f64;
+        let late = f64::from_bits(query.to_bits() + 1);
+        let training = [[query], [query], [1e300], [query], [query], [query], [query], [late]].map(Vec::from);
+        let model = KnnRegressor::fit(&training, &[1.0; 8], 2).unwrap();
+        assert_eq!(model.predict(&[vec![query]]), Err(KnnError::NumericOverflow));
+    }
 }
