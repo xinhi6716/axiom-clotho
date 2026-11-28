@@ -184,8 +184,21 @@ pub fn regression_mse_skill(
     if y_true.len() != baseline.len() || y_true.len() != y_pred.len() {
         return Err(EvaluationError::Shape);
     }
-    let model_rmse = regression_rmse(y_true, y_pred)?;
-    let baseline_rmse = regression_rmse(y_true, baseline)?;
+    if y_true.len() < 4 {
+        // The scalar path avoids the paired setup for very short cohorts.
+        let model_rmse = regression_rmse(y_true, y_pred)?;
+        let baseline_rmse = regression_rmse(y_true, baseline)?;
+        return mse_skill_from_checked_rmse(model_rmse, baseline_rmse);
+    }
+    if y_true.iter().chain(y_pred).any(|value| !value.is_finite()) {
+        return Err(EvaluationError::NonFinite);
+    }
+    if baseline.iter().any(|value| !value.is_finite()) {
+        // Preserve the earlier model-arm arithmetic error, if any.
+        validated_rmse(y_true, y_pred)?;
+        return Err(EvaluationError::NonFinite);
+    }
+    let (model_rmse, baseline_rmse) = paired_validated_rmse(y_true, y_pred, baseline)?;
     mse_skill_from_checked_rmse(model_rmse, baseline_rmse)
 }
 
@@ -573,6 +586,22 @@ fn add_group_run<'a>(
 #[cfg(test)]
 mod borrowed_fold_tests {
     use super::*;
+
+    #[test]
+    fn public_skill_preserves_independent_rmse_bits_and_failure_order() {
+        let y = [-0.0, 3.0, -5.0, 4.0, 3.5];
+        let model = [0.0, 1.0, -6.0, 4.8, 3.5];
+        let reference = [1.0, 3.0, -2.0, 5.0, -4.0];
+        for (m, b) in [(&model, &reference), (&model, &y), (&y, &reference), (&y, &y)] {
+            let expected = mse_skill_from_checked_rmse(regression_rmse(&y, m).unwrap(), regression_rmse(&y, b).unwrap()).unwrap();
+            assert_eq!(regression_mse_skill(&y, m, b).unwrap().map(f64::to_bits), expected.map(f64::to_bits));
+        }
+        let actual = [f64::MAX; 4];
+        let overflowing = [-f64::MAX; 4];
+        let invalid = [f64::NAN; 4];
+        assert_eq!(regression_mse_skill(&actual, &overflowing, &invalid), Err(EvaluationError::NumericOverflow));
+        assert_eq!(regression_mse_skill(&actual, &actual, &invalid), Err(EvaluationError::NonFinite));
+    }
 
     #[test]
     fn full_regression_moments_preserve_perfect_and_extreme_cases() {
