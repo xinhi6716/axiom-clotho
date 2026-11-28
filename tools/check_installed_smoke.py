@@ -14,10 +14,12 @@ import json
 import os
 from pathlib import Path
 import platform
+import re
 import shutil
 import subprocess
 import sys
 import sysconfig
+from urllib.parse import urlsplit
 
 
 def require(condition, message):
@@ -30,11 +32,62 @@ def snapshot(root):
             for p in root.rglob('*') if p.is_file()}
 
 
+
+def checked_build_identity(source, wheel, expected_checkout, distribution):
+    """Link a tested install to bytes + checkout, without attesting their derivation."""
+    if wheel is None and expected_checkout is None:
+        return None
+    require(wheel is not None and isinstance(expected_checkout, str)
+            and re.fullmatch(r'[0-9a-f]{40}', expected_checkout) is not None,
+            'Supply both --wheel and the full lowercase --expected-source-commit')
+
+    def git(*args):
+        return subprocess.check_output(['git', '-C', str(source), *args],
+                                       stderr=subprocess.PIPE, text=True,
+                                       encoding='utf-8', timeout=30).strip()
+
+    try:
+        root = Path(git('rev-parse', '--show-toplevel')).resolve()
+        checkout = git('rev-parse', 'HEAD')
+        changes = git('status', '--porcelain', '--untracked-files=normal')
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise RuntimeError('Cannot verify the source checkout identity') from exc
+    require(root == source and checkout == expected_checkout and not changes,
+            'Source must be the expected clean Git checkout root')
+
+    require(wheel.suffix == '.whl' and wheel.is_file() and wheel.stat().st_size <= 64 * 1024**2,
+            'Expected a bounded local wheel file')
+    digest = hashlib.sha256()
+    with wheel.open('rb') as stream:
+        count = 0
+        while block := stream.read(1024 * 1024):
+            count += len(block)
+            require(count <= 64 * 1024**2, 'Wheel exceeds the byte limit')
+            digest.update(block)
+    sha256 = digest.hexdigest()
+    try:
+        raw = distribution.read_text('direct_url.json')
+        direct = json.loads(raw) if raw is not None and len(raw) <= 8192 else {}
+        url = urlsplit(direct['url'])
+        hashes = direct['archive_info']['hashes']
+    except (OSError, ValueError, AttributeError, KeyError, TypeError) as exc:
+        raise RuntimeError('No usable installed local wheel provenance') from exc
+    require(url.scheme == 'file' and type(hashes) is dict and hashes.get('sha256') == sha256,
+            'Installed local archive digest differs from the selected wheel')
+    return {
+        'source_checkout_sha': checkout,
+        'installed_local_wheel_sha256': sha256,
+        'scope': 'clean checkout and installed local wheel matched separately; no build attestation',
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source', type=Path, required=True)
     parser.add_argument('--work-dir', type=Path, required=True)
     parser.add_argument('--expected-version', required=True)
+    parser.add_argument('--wheel', type=Path, help='Local wheel installed by pip')
+    parser.add_argument('--expected-source-commit', help='Full Git checkout SHA for the current-source smoke')
     args = parser.parse_args()
     source, work = args.source.resolve(), args.work_dir.resolve()
     require(not work.is_relative_to(source) and not source.is_relative_to(work),
@@ -51,6 +104,8 @@ def main():
         require(spec is not None and spec.origin is not None
                 and Path(spec.origin).resolve().is_relative_to(purelib),
                 name + ' must come from this environment, not editable/source imports')
+    build_identity = checked_build_identity(
+        source, args.wheel, args.expected_source_commit, metadata.distribution('ml-super-calculator'))
     work.mkdir(parents=True, exist_ok=False)
     env = dict(os.environ, PYTHONNOUSERSITE='1', PYTHONDONTWRITEBYTECODE='1',
                PYTHONUTF8='1', OMP_NUM_THREADS='1', OPENBLAS_NUM_THREADS='1',
@@ -180,6 +235,8 @@ raise SystemExit(main())
         'not_claimed': ['full test suite', 'all supported dependency versions',
                         'real-data accuracy', 'macOS', 'Windows POSIX verifier support'],
     }
+    if build_identity is not None:
+        receipt['build_identity'] = build_identity
     print(json.dumps(receipt, indent=2, sort_keys=True))
 
 
