@@ -1,4 +1,4 @@
-"""No-fit, one-step evaluation on an explicit frozen observed-history roster."""
+"""No-fit evaluation on frozen observed-history rosters and declared cutoffs."""
 
 from __future__ import annotations
 
@@ -103,11 +103,27 @@ def _elapsed_continuation(times, previous, previous2, schedule,
     return np.asarray(out, dtype=np.float64)
 
 
+def _cutoff_continuation(current, older, leads):
+    result = []
+    for x, y, n in zip(current, older, leads):
+        a, b = Fraction.from_float(float(x)), Fraction.from_float(float(y))
+        exact = a + n * (a - b)
+        try:
+            out = float(exact)
+        except OverflowError as exc:
+            raise ValueError("Index continuation exceeds float64 range.") from exc
+        if out == 0.0 and exact:
+            raise ValueError("Nonzero index continuation underflows float64.")
+        result.append(out)
+    return np.asarray(result, dtype=np.float64)
+
+
 def evaluate_observed_history(observations: pd.DataFrame, *, origins: pd.DataFrame,
                               saved_predictions: pd.DataFrame,
                               timestamp_mode: str = 'float64',
-                              scheduled_origins: pd.DataFrame | None = None) -> ObservedHistoryResult:
-    """Score one saved model and observed-history baselines on the same origins.
+                              scheduled_origins: pd.DataFrame | None = None,
+                              history_cutoffs: pd.DataFrame | None = None) -> ObservedHistoryResult:
+    """Score one saved model and observed-history baselines on the same targets.
 
     observations: columns trace_id, timestamp, value. Input order within each
     trace defines zero-based positions and must have strictly increasing finite
@@ -129,6 +145,14 @@ def evaluate_observed_history(observations: pd.DataFrame, *, origins: pd.DataFra
     the *supplied* scheduled target clock. A schedule mismatch fails the entire
     evaluation, never subset-selects. The caller must freeze the schedule before
     forecasting; matching clock values cannot verify that provenance.
+    Optional history_cutoffs must contain trace_id, target_index, history_index
+    with the same frozen roster and order. A history_index of at least 1 and
+    strictly before its target identifies the latest admissible read. The
+    baselines then use that read and its predecessor, without refreshing on
+    intervening observations; linear continuation uses the declared lead.
+    Assign the same cutoff to multiple targets for an open-loop forecast and
+    independently bind saved model predictions to that information set.
+    The caller must establish that the cutoffs and predictions were frozen.
     Strict timestamps do not prove upstream causal processing,
     saved-model training provenance or prospective availability of measurements.
     """
@@ -138,6 +162,19 @@ def evaluate_observed_history(observations: pd.DataFrame, *, origins: pd.DataFra
     keys = _keys(origins, 'origins')
     if _keys(saved_predictions, 'saved_predictions') != keys:
         raise ValueError('Saved predictions must match the exact ordered frozen origin roster.')
+    if history_cutoffs is None:
+        cutoffs = [target - 1 for _, target in keys]
+    else:
+        _table(history_cutoffs, ['trace_id', 'target_index', 'history_index'], 'history_cutoffs')
+        if _keys(history_cutoffs, 'history_cutoffs') != keys:
+            raise ValueError('History cutoffs must match the exact ordered frozen origin roster.')
+        cutoffs = []
+        for (_, target), value in zip(keys, history_cutoffs['history_index']):
+            if (isinstance(value, (bool, np.bool_, np.timedelta64))
+                    or not isinstance(value, Integral) or not 1 <= value < target):
+                raise ValueError('History indices must be integers from 1 to target_index-1.')
+            cutoffs.append(int(value))
+    leads = [target - h for (_, target), h in zip(keys, cutoffs)]
     traces = list(observations['trace_id'])
     if any(not isinstance(t, str) or not t or '\x00' in t for t in traces):
         raise ValueError('Observation trace_id must be nonempty strings without NUL.')
@@ -154,7 +191,7 @@ def evaluate_observed_history(observations: pd.DataFrame, *, origins: pd.DataFra
             raise ValueError('Timestamps must be strictly increasing within each trace in input order.')
         indices.append(i)
     selected, previous, previous2, last = [], [], [], {}
-    for trace, target in keys:
+    for (trace, target), cutoff in zip(keys, cutoffs):
         if trace not in positions or target >= len(positions[trace]):
             raise ValueError('Origin references an unknown trace or out-of-range target.')
         if target <= last.get(trace, -1):
@@ -162,8 +199,8 @@ def evaluate_observed_history(observations: pd.DataFrame, *, origins: pd.DataFra
         last[trace] = target
         indices = positions[trace]
         selected.append(indices[target])
-        previous.append(indices[target - 1])
-        previous2.append(indices[target - 2])
+        previous.append(indices[cutoff])
+        previous2.append(indices[cutoff - 1])
     elapsed = None
     if scheduled_origins is not None:
         _table(scheduled_origins, ['trace_id', 'target_index', 'timestamp'], 'scheduled_origins')
@@ -178,24 +215,29 @@ def evaluate_observed_history(observations: pd.DataFrame, *, origins: pd.DataFra
     observed = values[selected]
     persistence = values[previous]
     older = values[previous2]
-    large = np.abs(persistence) > np.finfo(np.float64).max / 2.0
-    with _checked_arithmetic():
-        if np.any(large):
-            continuation = np.empty_like(persistence)
-            ordinary = ~large
-            continuation[ordinary] = 2.0 * persistence[ordinary] - older[ordinary]
-            # Halve the older value before subtracting when doubling persistence
-            # alone would overflow. A sufficiently large same-sign older value
-            # halves exactly; genuinely out-of-range results still fail.
-            continuation[large] = 2.0 * (persistence[large] - 0.5 * older[large])
-        else:
-            continuation = 2.0 * persistence - older
+    if history_cutoffs is not None:
+        continuation = _cutoff_continuation(persistence, older, leads)
+    else:
+        large = np.abs(persistence) > np.finfo(np.float64).max / 2.0
+        with _checked_arithmetic():
+            if np.any(large):
+                continuation = np.empty_like(persistence)
+                ordinary = ~large
+                continuation[ordinary] = 2.0 * persistence[ordinary] - older[ordinary]
+                # Halve the older value before subtracting when doubling persistence
+                # alone would overflow. A sufficiently large same-sign older value
+                # halves exactly; genuinely out-of-range results still fail.
+                continuation[large] = 2.0 * (persistence[large] - 0.5 * older[large])
+            else:
+                continuation = 2.0 * persistence - older
     if not np.isfinite(continuation).all():
         raise ValueError('Index continuation must be finite.')
     output = origins.reset_index(drop=True).copy()
     output['timestamp'] = times[selected]
-    output['previous_index'] = [t - 1 for _, t in keys]
-    output['previous2_index'] = [t - 2 for _, t in keys]
+    output['previous_index'] = cutoffs
+    output['previous2_index'] = [h - 1 for h in cutoffs]
+    if history_cutoffs is not None:
+        output['lead'] = leads
     output['observed'] = observed
     scores = {}
     forecasts = [('saved_model', model), ('persistence', persistence),
@@ -207,7 +249,8 @@ def evaluate_observed_history(observations: pd.DataFrame, *, origins: pd.DataFra
         scores[name] = {'overall': overall, 'per_trace': per_trace}
         output[name] = prediction
     return ObservedHistoryResult(summary={
-        'protocol': 'observed_history_one_step_v1',
+        'protocol': ('observed_history_one_step_v1' if history_cutoffs is None
+                     else 'observed_history_declared_cutoff_v1'),
         **({'timestamp_mode': timestamp_mode} if timestamp_mode == 'integer_ticks' else {}),
         'evaluation_support': {
             'claim_scope': 'descriptive_observed_history',
@@ -225,7 +268,10 @@ def evaluate_observed_history(observations: pd.DataFrame, *, origins: pd.DataFra
         'n_origins': len(keys), 'coverage': 'exact_frozen_roster_no_drops',
         'weighting': 'overall row metrics and separately reported equal-trace group metrics',
         'models': scores, 'fit_calls': 0, 'selection_performed': False,
-        'history': 'past observed values, including earlier scored targets once observed',
+        'history': ('past observed values, including earlier scored targets once observed'
+                    if history_cutoffs is None else 'caller-declared cutoff; no intervening observations used by baselines'),
+        **({'cutoff_provenance': 'caller supplied; saved-model information set not independently verified'}
+           if history_cutoffs is not None else {}),
         'time_basis': ('index and scheduled elapsed-time continuation; irregular timestamps allowed'
                        if elapsed is not None else 'index continuation; irregular timestamps allowed'),
         **({'schedule_provenance': 'caller supplied; prospective availability not independently verified'}
