@@ -123,6 +123,7 @@ def _support(support, feature_schema, n_train, n_pred):
     components = {key: [] for key in _FLAGS}
     per_feature_flagged = []
     numeric_unsupported = 0
+    seen_training_unseen_capacity = 0
     for spec, item in zip(feature_schema, features):
         item = _object(item)
         if item.get("name") != spec["name"] or item.get("kind") not in ("numeric", "categorical"):
@@ -169,6 +170,8 @@ def _support(support, feature_schema, n_train, n_pred):
             if unseen + missing > n_pred or (all_missing and unseen != n_pred - missing):
                 _fail("categorical unseen/missing counts are inconsistent.")
             components["unseen_category"].append(unseen)
+            if not all_missing:
+                seen_training_unseen_capacity += unseen
             # Unsupported all-missing-source values already count as unseen.
             per_feature_flagged.append(missing + unseen)
     for key in _FLAGS:
@@ -177,6 +180,11 @@ def _support(support, feature_schema, n_train, n_pred):
     # numeric rows can raise the combined count above the unseen union.
     if counts["non_missing_value_in_all_missing_training_feature"] > counts["unseen_category"] + numeric_unsupported:
         _fail("aggregate unsupported count exceeds unseen categorical and unsupported numeric capacity.")
+    # In the opposite direction, only features with some observed
+    # training categories can add unseen rows not already unsupported.
+    if counts["unseen_category"] > (counts["non_missing_value_in_all_missing_training_feature"]
+                                    + seen_training_unseen_capacity):
+        _fail("aggregate unseen count exceeds unsupported and observed-category capacity.")
     if any_flag < max(per_feature_flagged, default=0):
         _fail("aggregate union is below a feature's necessarily distinct flagged rows.")
 

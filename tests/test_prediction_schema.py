@@ -395,6 +395,37 @@ class PredictionSchemaTests(unittest.TestCase):
         value["feature_schema"][0]["dtype"] = "float64"
         self.check(value)
 
+    def test_unseen_flags_cannot_exceed_categories_implied_by_training_support(self):
+        import pandas as pd
+        from groupbench import fit_predict
+        training = pd.DataFrame({"g": ["a", "b", "c", "d"], "y": [1, 2, 3, 4],
+                                 "a": pd.Series([None] * 4, dtype=object),
+                                 "b": pd.Series([None] * 4, dtype=object)})
+        query = pd.DataFrame({"a": ["new", None], "b": [None, "new"]})
+        result = fit_predict(training, query, target="y", group="g", baselines=("dummy",), inner_splits=2)
+        result.write(self.root, overwrite=True)
+        self.assertEqual(validate_prediction_bundle_schema(self.root).n_predictions, 2)
+        value = json.loads((self.root / "manifest.json").read_text())
+        flags = value["input_support"]["row_flag_counts"]
+        self.assertEqual(flags["unseen_category"], 2)
+        self.assertEqual(flags["non_missing_value_in_all_missing_training_feature"], 2)
+        csv = (self.root / "predictions.csv").read_bytes()
+        flags["non_missing_value_in_all_missing_training_feature"] = 1
+        write_bundle(self.root, value, csv=csv)
+        self.assertEqual(verify_bundle(self.root).bundle_type, "prediction")
+        with self.assertRaisesRegex(ValueError, "aggregate unseen count exceeds"):
+            validate_prediction_bundle_schema(self.root)
+
+        # A genuine unseen category on a feature with observed training
+        # values can supply the difference without unsupported rows.
+        training["b"] = ["known"] * 4
+        fit_predict(training, query, target="y", group="g", baselines=("dummy",),
+                    inner_splits=2).write(self.root, overwrite=True)
+        accepted = json.loads((self.root / "manifest.json").read_text())["input_support"]["row_flag_counts"]
+        self.assertEqual(accepted["unseen_category"], 2)
+        self.assertEqual(accepted["non_missing_value_in_all_missing_training_feature"], 1)
+        self.assertEqual(validate_prediction_bundle_schema(self.root).n_predictions, 2)
+
     def test_support_missingness_constraints(self):
         for update in ({"training_missing_count": 4}, {"prediction_missing_count": 2},
                        {"prediction_non_missing_without_training_values_count": 1},
