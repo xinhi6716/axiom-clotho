@@ -400,6 +400,8 @@ The groupbench command is an alias for the same CLI.""",
     schema.add_argument("run_dir", type=Path)
     evaluation_schema = sub.add_parser("validate-evaluation-bundle", allow_abbrev=False, help="Check saved regression evaluation rows, folds and metrics without fitting")
     evaluation_schema.add_argument("run_dir", type=Path)
+    evaluation_schema.add_argument("--require-run-key", action="store_true",
+                                   help="Require a consistent declared data/config run key in every schema")
     fixture = sub.add_parser("fixture", help="Write a wholly synthetic materials-process CSV")
     fixture.add_argument("--out", type=Path, required=True)
     fixture.add_argument("--groups", type=int, default=24)
@@ -421,7 +423,8 @@ The groupbench command is an alias for the same CLI.""",
             print("Additional manifest fields and unlisted files are not validated.")
             return 0
         if args.command == "validate-evaluation-bundle":
-            result = validate_evaluation_bundle(args.run_dir)
+            result = (validate_evaluation_bundle(args.run_dir, require_run_key=True)
+                      if args.require_run_key else validate_evaluation_bundle(args.run_dir))
             print(f"Evaluation contract {result.contract_version} checked: schema {result.schema_version}, {result.n_rows} rows, {result.n_groups} groups, {result.n_models} models.")
             print("Saved regression metric consistency only; not scientific validity, source authenticity, model execution or an atomic snapshot.")
             if result.schema_version == "1.4":

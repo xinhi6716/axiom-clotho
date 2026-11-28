@@ -89,6 +89,33 @@ class EvaluationSchemaTests(unittest.TestCase):
         self.mutate_json("manifest.json", lambda m: m.pop("package_source"))
         self.assertEqual(validate_evaluation_bundle(self.root).n_rows, 12)
 
+    def test_standard_run_key_opt_in_preserves_legacy_default(self):
+        from groupbench.evaluation import _evaluation_run_key
+
+        self.assertEqual(validate_evaluation_bundle(self.root, require_run_key=True).n_rows, 12)
+        self.mutate_json("manifest.json", lambda m: m.update(
+            run_key=("0" if m["run_key"][0] != "0" else "1") + m["run_key"][1:]))
+        self.assertEqual(verify_bundle(self.root).bundle_type, "evaluation")
+        before = {p.name: p.read_bytes() for p in self.root.iterdir()}
+        self.assertEqual(validate_evaluation_bundle(self.root).n_rows, 12)
+        with self.assertRaisesRegex(ValueError, "evaluation run-key declaration"):
+            validate_evaluation_bundle(self.root, require_run_key=True)
+        with patch.object(sys, "stderr", io.StringIO()):
+            self.assertEqual(main(["validate-evaluation-bundle", str(self.root), "--require-run-key"]), 2)
+        self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
+
+        def consistent_but_unverified(manifest):
+            manifest["data_sha256"] = "0" * 64
+            manifest["run_key"] = _evaluation_run_key(manifest["data_sha256"], manifest["config"])
+
+        self.mutate_json("manifest.json", consistent_but_unverified)
+        self.assertEqual(validate_evaluation_bundle(self.root, require_run_key=True).n_rows, 12)
+        self.mutate_json("manifest.json", lambda m: m.pop("data_sha256"))
+        self.mutate_json("manifest.json", lambda m: m.pop("run_key"))
+        self.assertEqual(validate_evaluation_bundle(self.root).n_rows, 12)
+        with self.assertRaisesRegex(ValueError, "evaluation run-key declaration"):
+            validate_evaluation_bundle(self.root, require_run_key=True)
+
     def test_rehashed_false_metrics_fail_but_byte_contract_unchanged(self):
         self.mutate_json('summary.json', lambda d: d['models']['selected']['overall'].update(mae=123456.))
         self.assertEqual(verify_bundle(self.root).bundle_type, 'evaluation')

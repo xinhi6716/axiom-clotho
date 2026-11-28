@@ -323,7 +323,7 @@ def _check_seeded_inner_assignment(manifest, config, groups, membership, audits)
         _fail(message)
 
 
-def _check(manifest, summary, raw):
+def _check(manifest, summary, raw, *, require_run_key=False):
     version = manifest.get("schema_version")
     protocols = {"1.0": "nested-group-kfold-v1", "1.1": "nested-group-kfold-distinct-v2",
                  "1.2": "nested-group-kfold-extended-families-v1", "1.3": "nested-group-outer-domain-inner-v1",
@@ -456,6 +456,12 @@ def _check(manifest, summary, raw):
         inner_counts = config.get("inner_splits_per_outer")
         if not isinstance(inner_counts, list) or len(inner_counts) != nf:
             _fail("domain inner fold schedule coverage differs.")
+    if require_run_key and version != "1.3":
+        # Reconcile declarations without rereading original features or labels.
+        data_digest = manifest.get("data_sha256")
+        if (type(data_digest) is not str or re.fullmatch(r"[0-9a-f]{64}", data_digest) is None
+                or manifest.get("run_key") != _evaluation_run_key(data_digest, config)):
+            _fail("evaluation run-key declaration differs from the saved configuration and data fingerprint.")
     _check_declared_feature_order(manifest, config)
     for fold, audit in enumerate(audits):
         test_groups = sorted(fold_groups[fold])
@@ -528,8 +534,15 @@ def _check(manifest, summary, raw):
     return version, n, ng, len(names)
 
 
-def validate_evaluation_bundle(run_dir) -> EvaluationSchemaResult:
-    """Check saved regression folds and metrics; no model fits, source reads or writes."""
+def validate_evaluation_bundle(run_dir, *, require_run_key=False) -> EvaluationSchemaResult:
+    """Check saved regression folds and metrics without fitting, reading source or writing.
+
+    Opt in to require a consistent declared run key for all schemas. The
+    default checks it only for domain schema 1.3, as historically required.
+    A matching declaration does not authenticate the original data.
+    """
+    if type(require_run_key) is not bool:
+        raise ValueError("require_run_key must be a boolean.")
     with _open_run_directory(run_dir) as fd:
         _, _, raw, signature = _read_file(fd, "checksums.json", MAX_CHECKSUM_BYTES, collect=True)
         records = _checksum_records(raw)
@@ -543,7 +556,8 @@ def validate_evaluation_bundle(run_dir) -> EvaluationSchemaResult:
                 _fail("payload SHA-256 mismatch.")
             signatures[name], payloads[name] = signature, raw
             total += size
-        version, n, ng, models = _check(_manifest(payloads["manifest.json"]), _manifest(payloads["summary.json"]), payloads["predictions.csv"])
+        version, n, ng, models = _check(_manifest(payloads["manifest.json"]), _manifest(payloads["summary.json"]), payloads["predictions.csv"],
+                                        require_run_key=require_run_key)
         for name, signature in signatures.items():
             if _signature(os.stat(name, dir_fd=fd, follow_symlinks=False)) != signature:
                 _fail("bundle changed during validation; retry an idle directory.")
