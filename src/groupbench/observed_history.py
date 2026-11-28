@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from fractions import Fraction
-from numbers import Integral, Real
+from numbers import Integral, Rational, Real
 
 import numpy as np
 import pandas as pd
@@ -30,7 +30,7 @@ def _table(frame, columns, name):
         raise ValueError(f"{name} must contain 1 to {MAX_ROWS} rows.")
 
 
-def _numbers(values, name):
+def _numbers(values, name, *, exact_clock=False):
     # NumPy timedelta64 can register as Real/Integral but must not be
     # reinterpreted as a clock, target or model score in implicit units.
     values = list(values)
@@ -53,6 +53,11 @@ def _numbers(values, name):
         raise ValueError(f"{name} contains a nonzero value that underflows float64.")
     if any(isinstance(v, Integral) and int(f) != int(v) for v, f in zip(values, result)):
         raise ValueError(f"{name} contains an integer not exactly representable in float64.")
+    if exact_clock:
+        for v, f in zip(values, result):
+            if isinstance(v, Rational) and not isinstance(v, Integral):
+                if Fraction(v.numerator, v.denominator) != Fraction.from_float(float(f)):
+                    raise ValueError(f"{name} clock rational must be exactly representable in float64.")
     return result
 
 
@@ -108,7 +113,9 @@ def evaluate_observed_history(observations: pd.DataFrame, *, origins: pd.DataFra
     trace defines zero-based positions and must have strictly increasing finite
     numeric timestamps. Use timestamp_mode='integer_ticks' for exact signed
     64-bit integer timestamps. Timedeltas must be converted explicitly by
-    the caller before admission. No sorting, interpolation or conversion occurs.
+    the caller before admission. Nonintegral rational clocks must already be
+    exactly representable in float64. No sorting, interpolation or conversion
+    of physical time units occurs.
     origins: columns trace_id, target_index, in a caller-frozen evaluation order.
     saved_predictions: same keys in the same order, plus prediction. A missing,
     extra, duplicate or reordered origin fails rather than changing coverage.
@@ -137,7 +144,7 @@ def evaluate_observed_history(observations: pd.DataFrame, *, origins: pd.DataFra
     if not isinstance(timestamp_mode, str) or timestamp_mode not in ('float64', 'integer_ticks'):
         raise ValueError("timestamp_mode must be 'float64' or 'integer_ticks'.")
     times = (_integer_ticks(observations['timestamp']) if timestamp_mode == 'integer_ticks'
-             else _numbers(observations['timestamp'], 'timestamps'))
+             else _numbers(observations['timestamp'], 'timestamps', exact_clock=True))
     values = _numbers(observations['value'], 'observations')
     model = _numbers(saved_predictions['prediction'], 'saved predictions')
     positions = {}
@@ -163,7 +170,7 @@ def evaluate_observed_history(observations: pd.DataFrame, *, origins: pd.DataFra
         if _keys(scheduled_origins, 'scheduled_origins') != keys:
             raise ValueError('Scheduled origins must match the exact ordered frozen origin roster.')
         schedule = (_integer_ticks(scheduled_origins['timestamp']) if timestamp_mode == 'integer_ticks'
-                    else _numbers(scheduled_origins['timestamp'], 'scheduled timestamps'))
+                    else _numbers(scheduled_origins['timestamp'], 'scheduled timestamps', exact_clock=True))
         if not np.array_equal(schedule, times[selected]):
             raise ValueError('Scheduled timestamps must exactly match the realized target clocks.')
         elapsed = _elapsed_continuation(times, previous, previous2, schedule, values,
