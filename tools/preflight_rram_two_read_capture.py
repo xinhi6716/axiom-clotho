@@ -37,7 +37,25 @@ def observable_fingerprint(groups):
     return digest.digest()
 
 
-def audit(path, seen_files, seen_payloads, seen_observables, expected_address_range=None):
+def planned_addresses(specs):
+    plan = {}
+    for capture, chip, expression in specs or ():
+        if not CAPTURE_ID.fullmatch(capture) or not CAPTURE_ID.fullmatch(chip):
+            raise ValueError("invalid planned capture or chip identity")
+        key = capture, chip
+        if key in plan:
+            raise ValueError("duplicate sparse address plan for capture/chip")
+        tokens = expression.split(",")
+        if not all(INTEGER.fullmatch(token) for token in tokens):
+            raise ValueError("sparse address plan requires comma-separated unsigned addresses")
+        addresses = {int(token) for token in tokens}
+        if len(addresses) != len(tokens):
+            raise ValueError("duplicate address in sparse plan")
+        plan[key] = addresses
+    return plan
+
+
+def audit(path, seen_files, seen_payloads, seen_observables, expected_address_range=None, expected_addresses=None):
     with os.fdopen(os.open(path, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0)
                            | getattr(os, "O_BINARY", 0)), "rb") as file:
         info = os.fstat(file.fileno())
@@ -84,6 +102,8 @@ def audit(path, seen_files, seen_payloads, seen_observables, expected_address_ra
         # without materializing the whole expected range.
         if len(groups) != high - low + 1 or min(groups) != low or max(groups) != high:
             raise ValueError("capture does not exactly match the frozen address range")
+    if expected_addresses is not None and groups.keys() != expected_addresses:
+        raise ValueError("capture does not match its frozen sparse address plan")
     semantics = observable_fingerprint(groups)
     if semantics in seen_observables:
         raise ValueError("identical required capture observables cannot support separate capture/chip identities")
@@ -100,8 +120,12 @@ def audit(path, seen_files, seen_payloads, seen_observables, expected_address_ra
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--capture", action="append", nargs=3, required=True, metavar=("CAPTURE_ID", "CHIP_ID", "CSV"))
-    parser.add_argument("--expected-address-range", nargs=2, metavar=("FIRST", "LAST"),
+    expected_group = parser.add_mutually_exclusive_group()
+    expected_group.add_argument("--expected-address-range", nargs=2, metavar=("FIRST", "LAST"),
                         help="require exactly this predeclared inclusive contiguous range in every capture")
+    expected_group.add_argument("--expected-addresses", action="append", nargs=3,
+                                metavar=("CAPTURE_ID", "CHIP_ID", "ADDR,ADDR,..."),
+                                help="exact independently declared sparse addresses, one option per capture")
     args = parser.parse_args()
     expected = None
     if args.expected_address_range is not None:
@@ -110,6 +134,9 @@ def main():
             parser.error("expected address range requires two ordered unsigned native addresses")
         expected = int(first), int(last)
     try:
+        plans = planned_addresses(args.expected_addresses)
+        if plans and plans.keys() != {(capture, chip) for capture, chip, _ in args.capture}:
+            raise ValueError("sparse address plans must cover exactly the requested capture/chip identities")
         seen = set()
         files = set()
         payloads = set()
@@ -123,7 +150,7 @@ def main():
                 raise ValueError("duplicate capture/chip identity")
             seen.add(key)
             reports.append({"capture_id": capture_id, "chip_id": chip_id,
-                            **audit(Path(filename), files, payloads, observables, expected)})
+                            **audit(Path(filename), files, payloads, observables, expected, plans.get(key))})
     except (OSError, UnicodeError, csv.Error):
         parser.exit(2, "error: capture could not be read as UTF-8 CSV\n")
     except ValueError as exc:

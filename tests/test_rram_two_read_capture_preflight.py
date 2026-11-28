@@ -178,3 +178,26 @@ class TwoReadCapturePreflight(unittest.TestCase):
                        for a, lane, t, time, start, final, extra in rows]
             rewrite(swapped)
             self.assertEqual(cli(*args).returncode, 0)
+
+    def test_sparse_capture_plans_detect_equal_count_substitutions_per_chip(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            a, b = (Path(tmp) / name for name in ("a.csv", "b.csv"))
+            capture(a, group(7) + group(11))
+            capture(b, group(7) + group(12))
+            args = ("--capture", "a", "chipA", str(a), "--capture", "b", "chipB", str(b))
+            before = cli(*args)
+            a_plan = ("--expected-addresses", "a", "chipA", "11,007")
+            b_plan = ("--expected-addresses", "b", "chipB", "7,12")
+            checked = cli(*args, *a_plan, *b_plan)
+            self.assertEqual((before.returncode, checked.returncode), (0, 0))
+            self.assertEqual(json.loads(checked.stdout), json.loads(before.stdout))
+            for extra, error in (
+                ((*a_plan, "--expected-addresses", "b", "chipB", "7,11"), "frozen sparse address plan"),
+                (a_plan, "must cover exactly"),
+                ((*a_plan, *b_plan, "--expected-address-range", "7", "12"), "not allowed with"),
+                ((*a_plan, "--expected-addresses", "b", "chipB", "07,7"), "duplicate address"),
+            ):
+                bad = cli(*args, *extra)
+                self.assertEqual(bad.returncode, 2)
+                self.assertFalse(bad.stdout)
+                self.assertIn(error, bad.stderr)
