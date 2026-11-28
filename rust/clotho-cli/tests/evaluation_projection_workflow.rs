@@ -432,3 +432,63 @@ fn binary_group_confusion_must_rebuild_each_deterministic_fold() {
     assert!(out.stdout.is_empty());
     assert!(String::from_utf8_lossy(&out.stderr).contains("Group confusion does not rebuild its declared fold"));
 }
+
+fn regression_group_bundle(work: &Work, source: &str) -> PathBuf {
+    let csv = work.0.join("source.csv");
+    fs::write(&csv, source).unwrap();
+    let bundle = work.0.join("bundle");
+    let out = Command::new(env!("CARGO_BIN_EXE_clotho"))
+        .args(["evaluate", "--csv"]).arg(csv)
+        .args(["--features", "x", "--target", "y", "--group", "g",
+            "--model", "mean", "--folds", "2", "--out"])
+        .arg(&bundle).output().unwrap();
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    bundle
+}
+
+#[test]
+fn regression_group_errors_must_rebuild_each_deterministic_fold() {
+    let work = Work::new();
+    // Round-robin lexical tie-breaking produces A+C and B+D.
+    let bundle = regression_group_bundle(&work, concat!(
+        "x,y,g\n1,0,A\n2,0,A\n3,12,B\n4,12,B\n",
+        "5,0,C\n6,4,C\n7,12,D\n8,16,D\n"
+    ));
+    inspect_success(&bundle);
+    let original = fs::read(bundle.join("metrics.json")).unwrap();
+    // Swap each metric between equal-size groups from different folds. The
+    // original overall weighted and equal-group summaries remain unchanged.
+    for (metric, reason) in [
+        ("mae", "Group MAE does not rebuild its declared fold"),
+        ("rmse", "Group RMSE does not rebuild its declared fold"),
+    ] {
+        fs::write(bundle.join("metrics.json"), &original).unwrap();
+        alter(&bundle, |v| {
+            let groups = v["groups"].as_array_mut().unwrap();
+            assert_ne!(groups[0][metric], groups[1][metric]);
+            let a = groups[0][metric].clone();
+            groups[0][metric] = groups[1][metric].clone();
+            groups[1][metric] = a;
+        });
+        let out = inspect(&bundle);
+        assert!(!out.status.success(), "inconsistent group-to-fold {metric} was projected");
+        assert!(out.stdout.is_empty());
+        assert!(String::from_utf8_lossy(&out.stderr).contains(reason));
+    }
+}
+
+#[test]
+fn a_single_regression_group_in_a_fold_must_match_the_entire_fold() {
+    let work = Work::new();
+    let bundle = regression_group_bundle(&work, "x,y,g\n1,0,A\n2,1,B\n3,0,A\n4,2,B\n");
+    let projection = inspect_success(&bundle);
+    assert!(projection["folds"][0]["metrics"]["r2"].is_null());
+    assert!(projection["folds"][1]["metrics"]["r2"].is_number());
+    // The MAE and RMSE are genuine. R² must still be unavailable for
+    // the constant-target group whose rows are exactly the first fold.
+    alter(&bundle, |v| v["groups"][0]["r2"] = json!(0.0));
+    let out = inspect(&bundle);
+    assert!(!out.status.success(), "an impossible single-group R² was projected");
+    assert!(out.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&out.stderr).contains("Single regression group must match its declared fold"));
+}

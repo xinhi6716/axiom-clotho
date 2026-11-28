@@ -398,9 +398,11 @@ fn compare<T: PartialEq>(a: T, b: T) -> Result<()> {
     require(a == b, "Evaluation metrics disagree with bundle data")
 }
 
-fn check_group_mae_pool(groups: &[RegGroup], n_rows: usize, pooled: f64) -> Result<()> {
-    let scale = groups.iter().map(|g| g.mae).fold(0.0_f64, f64::max);
-    let mismatch = "Group MAE does not pool to the retained row-weighted MAE";
+fn check_group_mae_pool<'a>(
+    groups: impl Iterator<Item = &'a RegGroup> + Clone, n_rows: usize, pooled: f64,
+    mismatch: &'static str,
+) -> Result<()> {
+    let scale = groups.clone().map(|g| g.mae).fold(0.0_f64, f64::max);
     if scale == 0.0 || pooled == 0.0 {
         return require(scale == 0.0 && pooled == 0.0, mismatch);
     }
@@ -408,22 +410,24 @@ fn check_group_mae_pool(groups: &[RegGroup], n_rows: usize, pooled: f64) -> Resu
     // Compare scaled sums; this avoids overflow at large physical units,
     // and a subnormal allowance accounts for final output rounding only.
     let scale = scale.max(pooled);
-    let implied = groups.iter().map(|g| (g.mae / scale) * (g.n_rows as f64 / n_rows as f64)).sum::<f64>();
+    let implied = groups.map(|g| (g.mae / scale) * (g.n_rows as f64 / n_rows as f64)).sum::<f64>();
     let expected = pooled / scale;
     let tolerance = 1e-10 * implied.max(expected) + 2.0 * (f64::from_bits(1) / scale);
     require((implied - expected).abs() <= tolerance, mismatch)
 }
 
-fn check_group_rmse_pool(groups: &[RegGroup], n_rows: usize, pooled: f64) -> Result<()> {
-    let maximum_group_rmse = groups.iter().map(|g| g.rmse).fold(0.0_f64, f64::max);
-    let mismatch = "Group RMSE does not pool to the retained row-weighted RMSE";
+fn check_group_rmse_pool<'a>(
+    groups: impl Iterator<Item = &'a RegGroup> + Clone, n_rows: usize, pooled: f64,
+    mismatch: &'static str,
+) -> Result<()> {
+    let maximum_group_rmse = groups.clone().map(|g| g.rmse).fold(0.0_f64, f64::max);
     if maximum_group_rmse == 0.0 || pooled == 0.0 {
         return require(maximum_group_rmse == 0.0 && pooled == 0.0, mismatch);
     }
     // Pool mean squares by row count, not RMSEs by group. Scale before
     // squaring to keep the intermediate values in a bounded range.
     let scale = maximum_group_rmse.max(pooled);
-    let implied = groups.iter().map(|g| {
+    let implied = groups.map(|g| {
         let normalized = g.rmse / scale;
         (normalized * normalized) * (g.n_rows as f64 / n_rows as f64)
     }).sum::<f64>().sqrt();
@@ -437,7 +441,7 @@ fn project_reg(m: Manifest<Reg, RegGroup, RegFold, RegMacro>, csv: &[u8]) -> Res
     check_manifest(&m, REG)?;
     let rows = parse_rows(csv, m.n_rows, m.n_folds, None)?;
     compare(m.pooled_row_weighted, reg(regression_metrics(&rows.observed, &rows.predicted)?))?;
-    check_group_rows(&rows, m.groups.iter().map(|g| (g.group.as_str(), g.n_rows)))?;
+    let group_folds = check_group_rows(&rows, m.groups.iter().map(|g| (g.group.as_str(), g.n_rows)))?;
     let mut maes = Vec::with_capacity(m.n_groups);
     let mut rmses = Vec::with_capacity(m.n_groups);
     for g in &m.groups {
@@ -449,13 +453,30 @@ fn project_reg(m: Manifest<Reg, RegGroup, RegFold, RegMacro>, csv: &[u8]) -> Res
     let equal_group_weighted = RegMacro { mean_group_mae: mean(&maes)?, mean_group_rmse: mean(&rmses)?,
         worst_group_mae: maes.into_iter().fold(0.0, f64::max) };
     require(equal_group_weighted == m.equal_group_weighted, "Inconsistent regression group summary")?;
-    check_group_mae_pool(&m.groups, m.n_rows, m.pooled_row_weighted.mae)?;
-    check_group_rmse_pool(&m.groups, m.n_rows, m.pooled_row_weighted.rmse)?;
+    check_group_mae_pool(m.groups.iter(), m.n_rows, m.pooled_row_weighted.mae,
+        "Group MAE does not pool to the retained row-weighted MAE")?;
+    check_group_rmse_pool(m.groups.iter(), m.n_rows, m.pooled_row_weighted.rmse,
+        "Group RMSE does not pool to the retained row-weighted RMSE")?;
+    let mut per_fold = vec![Vec::new(); m.n_folds];
+    for (group, index) in m.groups.iter().zip(group_folds) {
+        per_fold[index].push(group);
+    }
     let mut folds = Vec::with_capacity(m.n_folds);
     for (i, (f, (y, p))) in m.folds.iter().zip(&rows.folds).enumerate() {
         check_encoded_width(&m, f.encoded_feature_count)?;
         let measured = reg(regression_metrics(y, p)?);
         compare(Reg { mae: f.mae, rmse: f.rmse, r2: f.r2 }, measured)?;
+        if let [group] = per_fold[i].as_slice() {
+            // This group and fold have identical ordered observations. Only
+            // here can R² also be checked without retaining group row keys.
+            require((Reg { mae: group.mae, rmse: group.rmse, r2: group.r2 }) == measured,
+                "Single regression group must match its declared fold")?;
+        } else {
+            check_group_mae_pool(per_fold[i].iter().copied(), y.len(), measured.mae,
+                "Group MAE does not rebuild its declared fold")?;
+            check_group_rmse_pool(per_fold[i].iter().copied(), y.len(), measured.rmse,
+                "Group RMSE does not rebuild its declared fold")?;
+        }
         folds.push(fold(i, f.fold, f.n_train, f.n_test, f.encoded_feature_count, m.n_rows, y.len(), measured)?);
     }
     Ok(projection(&m, Aggregate::Regression { pooled_row_weighted: m.pooled_row_weighted, equal_group_weighted, folds }))
