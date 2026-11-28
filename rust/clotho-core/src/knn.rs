@@ -3,6 +3,8 @@
 //! validation or a replacement for grouped evaluation/model selection.
 use std::fmt;
 
+const MAX_FEATURES: usize = 100;
+
 #[path = "knn_exact_mean.rs"]
 mod exact_mean;
 
@@ -67,13 +69,7 @@ impl KnnRegressor {
                 *s = 1.0;
             }
         }
-        // Keep validating original-to-scaled underflow, but the model
-        // stores original coordinates, not a second normalized table.
-        if x.iter().any(|row| {
-            row.iter()
-                .zip(&scales)
-                .any(|(&value, &scale)| value != 0.0 && value / scale == 0.0)
-        }) {
+        if training_scale_underflows(x, &scales) {
             return Err(KnnError::NumericOverflow);
         }
         Ok(Self {
@@ -227,6 +223,34 @@ fn nearest_subset(distances: &mut [(u64, usize)], k: usize) -> &[(u64, usize)] {
     &distances[..k]
 }
 
+fn training_scale_underflows(x: &[Vec<f64>], scales: &[f64]) -> bool {
+    // The straight check is cheaper on very small tables.
+    if x.len() < 32 && scales.len() < 8 {
+        return x.iter().any(|row| row.iter().zip(scales).any(|(&v, &s)| v != 0.0 && v / s == 0.0));
+    }
+    if scales.iter().all(|&scale| scale <= 1.0) {
+        // Dividing a finite nonzero value by a fit scale <= 1 cannot round to zero.
+        return false;
+    }
+
+    let unit = f64::from_bits(1);
+    let mut bounds = [0.0; MAX_FEATURES];
+    for (bound, &scale) in bounds.iter_mut().zip(scales) {
+        if scale > 1.0 {
+            // Let t be the exact scale * unit. A normal t is exact; a
+            // subnormal t rounds with error <= unit/2. Since t > unit,
+            // either result is strictly greater than t/2, the zero-rounding
+            // boundary. A magnitude >= bound therefore cannot underflow.
+            *bound = scale * unit;
+        }
+    }
+    x.iter().any(|row| {
+        row.iter().zip(scales.iter().zip(&bounds)).any(|(&value, (&scale, &bound))| {
+            value != 0.0 && value.abs() < bound && value / scale == 0.0
+        })
+    })
+}
+
 fn validate(x: &[Vec<f64>], width: usize) -> Result<(), KnnError> {
     if x.is_empty() {
         return Err(KnnError::Empty);
@@ -234,7 +258,7 @@ fn validate(x: &[Vec<f64>], width: usize) -> Result<(), KnnError> {
     if width == 0 || x.iter().any(|r| r.len() != width) {
         return Err(KnnError::Shape);
     }
-    if x.len() > 20_000 || width > 100 {
+    if x.len() > 20_000 || width > MAX_FEATURES {
         return Err(KnnError::Capacity);
     }
     if x.iter().flatten().any(|v| !v.is_finite()) {
@@ -246,6 +270,27 @@ fn validate(x: &[Vec<f64>], width: usize) -> Result<(), KnnError> {
 #[cfg(test)]
 mod stable_two_tests {
     use super::*;
+
+    #[test]
+    fn fit_underflow_guard_matches_direct_rounding_at_subnormal_ties() {
+        let unit = f64::from_bits(1);
+        let mut scales = vec![1.0, f64::from_bits(2.0_f64.to_bits() - 1), 2.0, f64::MAX];
+        scales.extend((1024..2047).step_by(5).map(|e| f64::from_bits((e as u64) << 52)));
+        for scale in scales {
+            let bound = scale * unit;
+            for bits in [1, 2, (bound.to_bits() / 2).max(1), bound.to_bits().max(1), bound.to_bits() + 1] {
+                let value = f64::from_bits(bits);
+                let mut rows = vec![vec![scale]; 33];
+                rows[32][0] = -value;
+                assert_eq!(training_scale_underflows(&rows, &[scale]), value / scale == 0.0);
+            }
+        }
+        let mut rows = vec![vec![2.0]; 33];
+        rows[32][0] = unit;
+        assert!(matches!(KnnRegressor::fit(&rows, &[0.0; 33], 2), Err(KnnError::NumericOverflow)));
+        rows[32][0] = f64::from_bits(2);
+        assert!(KnnRegressor::fit(&rows, &[0.0; 33], 2).is_ok());
+    }
 
     #[test]
     fn streaming_pair_keeps_training_order_on_ties_and_checks_late_distances() {
