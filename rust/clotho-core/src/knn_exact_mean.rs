@@ -146,13 +146,14 @@ pub(crate) fn checked_mean(
     count: usize,
 ) -> Result<f64, KnnError> {
     debug_assert!((1..=20_000).contains(&count));
+    let mut suffix = values.clone();
+    let first = suffix.next().unwrap();
+    // Once the finite neighbor roster is constant, its exact mean is
+    // already representable and its scale check cannot underflow.
+    if count == 1 || suffix.all(|value| value == first) {
+        return Ok(if first == 0.0 { 0.0 } else { first });
+    }
     let scale = values.clone().map(f64::abs).fold(0.0_f64, f64::max);
-    if scale == 0.0 {
-        return Ok(0.0);
-    }
-    if count == 1 {
-        return Ok(values.clone().next().unwrap());
-    }
 
     let mut positive = Magnitude::default();
     let mut negative = Magnitude::default();
@@ -181,6 +182,23 @@ pub(crate) fn checked_mean(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn constant_neighborhoods_preserve_extremes_and_canonicalize_zero() {
+        for count in [1, 2, 5, 128, 20_000] {
+            for value in [-f64::MAX, -f64::from_bits(1), -0.0, 0.0, f64::from_bits(1), f64::MAX] {
+                let values = std::iter::repeat(value).take(count);
+                let mean = checked_mean(values, count).unwrap();
+                let expected = if value == 0.0 { 0.0 } else { value };
+                assert_eq!(mean.to_bits(), expected.to_bits());
+            }
+        }
+        assert_eq!(checked_mean([-0.0, 0.0].into_iter(), 2).unwrap().to_bits(), 0);
+        assert_eq!(
+            checked_mean([f64::MAX, f64::from_bits(1)].into_iter(), 2),
+            Err(KnnError::NumericOverflow)
+        );
+    }
 
     #[test]
     fn optimized_limb_division_matches_exact_integer_quotient_and_remainder() {
