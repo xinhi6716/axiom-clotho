@@ -9,13 +9,13 @@ import unittest
 TOOL = Path(__file__).resolve().parents[1] / "tools" / "preflight_rram_bipolar_sweeps.py"
 
 
-def check(rows, header=("trace_id", "time_s", "voltage_V"), *, local=False):
+def check(rows, header=("trace_id", "time_s", "voltage_V"), *, local=False, extra=()):
     with tempfile.TemporaryDirectory() as tmp:
         path = Path(tmp) / "geometry.csv"
         with path.open("w", encoding="utf-8", newline="") as file:
             csv.writer(file).writerows((header, *rows))
         return subprocess.run([sys.executable, str(TOOL), str(path),
-                               *(["--confirmed-four-local-segment-clocks"] if local else [])],
+                               *(["--confirmed-four-local-segment-clocks"] if local else []), *extra],
                               text=True, capture_output=True, check=False)
 
 
@@ -145,3 +145,33 @@ class BipolarSweepPreflight(unittest.TestCase):
             mismatch = run(declarations)
             self.assertEqual(mismatch.returncode, 2)
             self.assertIn("geometry input SHA-256 mismatch", mismatch.stderr)
+
+    def test_declared_cadence_does_not_count_clock_resets_as_gaps(self):
+        valid = [(0, 0), (1, 1), ("2.000000000000000000000000000001", 2),
+                 ("2.250000000000000000000000000001", 3), (0, 3), (1, 0),
+                 (0, 0), (1, -1), (0, -1), (1, 0)]
+        rows = [("privateExample", t, v) for t, v in valid] + [("invalid", 0, 0)]
+        args = ("--local-cadence", "1", "0.5", "1", "--local-cadence", "2", "1", "1")
+        plain = check(rows, local=True)
+        r = check(rows, local=True, extra=args)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        report = json.loads(r.stdout)
+        self.assertEqual(report.pop("declared_local_cadence_support"), {
+            "traces_with_usable_local_geometry": 1,
+            "traces_without_usable_local_geometry": 1,
+            "within_segment_gap_counts_by_leg": {"1": {"above": 1, "below": 1, "within": 1},
+                                                 "2": {"within": 1}},
+            "intersegment_cadence_verified": False,
+        })
+        self.assertEqual(report, json.loads(plain.stdout))
+        self.assertNotIn("privateExample", r.stdout)
+        for opts, local, text in (
+            (args, False, "requires confirmed local"),
+            (args + args[:4], True, "duplicate cadence"),
+            (("--local-cadence", "2", "0", "1"), True, "positive and ordered"),
+            (("--local-cadence", "5", "1", "1"), True, "leg 1"),
+        ):
+            bad = check(rows, local=local, extra=opts)
+            self.assertEqual(bad.returncode, 2)
+            self.assertFalse(bad.stdout)
+            self.assertIn(text, bad.stderr)

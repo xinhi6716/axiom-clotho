@@ -3,6 +3,7 @@ import argparse
 from collections import Counter, defaultdict
 import csv
 from decimal import Decimal
+from fractions import Fraction
 import hashlib
 import io
 import json
@@ -120,7 +121,54 @@ def declared_leg_agreement(path, input_ordinals, inferred):
     return dict(sorted(counts.items()))
 
 
-def audit(path, *, local_clocks=False, segment_roster=None, expected_geometry_sha256=None):
+def declared_cadences(spec):
+    result = {}
+    for leg, lower, upper in spec or ():
+        if leg not in {"1", "2", "3", "4"} or not TOKEN.fullmatch(lower) or not TOKEN.fullmatch(upper):
+            raise ValueError("local cadence requires leg 1–4 and exact fixed-point bounds")
+        lo, hi = Fraction(lower), Fraction(upper)
+        if not 0 < lo <= hi:
+            raise ValueError("local cadence bounds must be positive and ordered")
+        leg = int(leg)
+        if leg in result:
+            raise ValueError("duplicate cadence declaration for one local leg")
+        result[leg] = lo, hi
+    return result
+
+
+def local_cadence_support(traces, outcomes, cadences):
+    counts = {leg: Counter() for leg in cadences}
+    successful = 0
+    for points, (status, _) in zip(traces.values(), outcomes):
+        if status != "four_local_clock_segments_with_matched_voltage_edges":
+            continue
+        successful += 1
+        leg = 1
+        for (before, _), (after, _) in zip(points, points[1:]):
+            if after < before:
+                leg += 1
+                continue
+            if leg not in cadences:
+                continue
+            lo, hi = cadences[leg]
+            # Decimal subtraction would round under the ambient decimal context.
+            dt = Fraction(after) - Fraction(before)
+            result = "below" if dt < lo else "above" if dt > hi else "within"
+            counts[leg][result] += 1
+    return {
+        "traces_with_usable_local_geometry": successful,
+        "traces_without_usable_local_geometry": len(traces) - successful,
+        "within_segment_gap_counts_by_leg": {
+            str(leg): dict(sorted(bucket.items())) for leg, bucket in sorted(counts.items())
+        },
+        "intersegment_cadence_verified": False,
+    }
+
+
+def audit(path, *, local_clocks=False, segment_roster=None, expected_geometry_sha256=None, cadence_spec=None):
+    cadences = declared_cadences(cadence_spec)
+    if cadences and not local_clocks:
+        raise ValueError("local cadence requires confirmed local clocks")
     if segment_roster is not None and (not local_clocks or expected_geometry_sha256 is None):
         raise ValueError("segment roster requires confirmed local clocks and a trusted geometry SHA-256")
     if expected_geometry_sha256 is not None and not re.fullmatch(r"[a-f0-9]{64}", expected_geometry_sha256):
@@ -174,6 +222,8 @@ def audit(path, *, local_clocks=False, segment_roster=None, expected_geometry_sh
         report["declared_segment_roster_support_by_record"] = declared_leg_agreement(
             segment_roster, input_ordinals, inferred
         )
+    if cadences:
+        report["declared_local_cadence_support"] = local_cadence_support(traces, outcomes, cadences)
     return report
 
 
@@ -189,10 +239,13 @@ def main():
                         help="compare a complete independently declared protocol leg per input data record")
     parser.add_argument("--expected-geometry-sha256",
                         help="bind segment roster positions to previously trusted exact geometry bytes")
+    parser.add_argument("--local-cadence", action="append", nargs=3, metavar=("LEG", "MIN", "MAX"),
+                        help="closed gap bounds in declared local-clock units, never across resets")
     args = parser.parse_args()
     try:
         report = audit(args.csv, local_clocks=args.confirmed_four_local_segment_clocks,
-                       segment_roster=args.segment_roster, expected_geometry_sha256=args.expected_geometry_sha256)
+                       segment_roster=args.segment_roster, expected_geometry_sha256=args.expected_geometry_sha256,
+                       cadence_spec=args.local_cadence)
     except (OSError, UnicodeError, csv.Error):
         parser.exit(2, "error: input could not be read as UTF-8 CSV\n")
     except ValueError as exc:
