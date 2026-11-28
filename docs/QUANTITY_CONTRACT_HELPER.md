@@ -143,3 +143,22 @@ audit was computed, not that its flags passed: inspect `interior_pass` and
 `shared_affine_pass`. Malformed or unavailable inputs exit 2 without a
 report. This audit does not certify calibration or rule out unsampled
 nonlinearity, and writes no files.
+
+
+### CLI: compare matched anchor changes against both controls
+
+```sh
+mlcalc audit-anchor-change-controls readings.json frozen-blocks.json
+clotho tabular audit-anchor-change-controls readings.json frozen-blocks.json
+```
+
+Use `{"schema_version":1,"rows":[["block",0,0.3,0,0.1,0,0.2]]}`
+for a reading document. Each row gives a block ID and the measured slot 0
+and slot 1 values for candidate, sham and independent reference in that
+order. A separate `{"schema_version":1,"expected_blocks":["block"]}` declares
+the exact frozen roster independently of the observed changes. Both files
+are bounded local UTF-8 JSON, each with at most 20,000 entries. Missing,
+extra or duplicate blocks reject the audit. Success reports only block count
+and three exact contrasts as rational strings; invalid input exits 2 with
+no report. The tool does not check the actual instrument/units/dependencies,
+estimate reliability, fit models or write files.

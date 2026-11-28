@@ -450,6 +450,58 @@ def _audit_affine_readouts_main(argv):
     return 0
 
 
+def _add_anchor_change_controls_parser(sub):
+    parser = sub.add_parser(
+        "audit-anchor-change-controls", allow_abbrev=False,
+        help="Compare candidate, sham and independent-reference anchor changes",
+        description="Descriptive exact paired changes on a frozen block roster; no fitting.",
+        epilog="The caller establishes the comparable paths, slots and measurement units.",
+    )
+    parser.add_argument("readings", type=Path, help="Local v1 JSON with both slots on all three measurement paths")
+    parser.add_argument("roster", type=Path, help="Separate local v1 JSON with the frozen expected blocks")
+    return parser
+
+
+def _audit_anchor_change_controls_main(argv):
+    from dataclasses import asdict
+    from decimal import InvalidOperation
+
+    from .budget_comparison import _read_input, load_document
+    from .quantity_contract import MAX_VALUES, audit_anchor_change_controls
+
+    parser = _add_anchor_change_controls_parser(argparse.ArgumentParser(prog="groupbench").add_subparsers())
+    args = parser.parse_args(argv)
+
+    def exact_values(path, key):
+        doc = load_document(_read_input(path))
+        if (type(doc) is not dict or set(doc) != {"schema_version", key}
+                or type(doc["schema_version"]) is not int or doc["schema_version"] != 1
+                or type(doc[key]) is not list or not 1 <= len(doc[key]) <= MAX_VALUES):
+            raise ValueError("invalid anchor document or population")
+        return doc[key]
+
+    try:
+        rows = exact_values(args.readings, "rows")
+        roster = exact_values(args.roster, "expected_blocks")
+        if any(type(row) is not list or len(row) != 7 for row in rows):
+            raise ValueError("anchor measurements require exactly seven fields")
+        audit = audit_anchor_change_controls([tuple(row) for row in rows], expected_blocks=roster)
+        values = asdict(audit)
+        count = values.pop("n_blocks")
+        report = {
+            "schema_id": "mlcalc.anchor_change_controls_audit", "schema_version": 1,
+            "claim_scope": "descriptive_supplied_blocks_only", "n_blocks": count,
+            **{name: {metric: str(value) for metric, value in comparison.items()}
+               for name, comparison in values.items()},
+        }
+        print(json.dumps(report, indent=2, sort_keys=True, allow_nan=False))
+    except (ValueError, OSError, TypeError, InvalidOperation):
+        print("anchor change controls audit rejected: invalid, unavailable or mismatched inputs",
+              file=sys.stderr)
+        return 2
+    return 0
+
+
 def _leaderboard_float(value):
     # Preserve nonzero scores below the fixed-decimal display resolution.
     return f"{value:.4e}" if 0 < abs(value) < 0.0001 else f"{value:.4f}"
@@ -464,6 +516,8 @@ def main(argv=None) -> int:
         return plan_group_windows(argv[1:])
     if argv and argv[0] == "validate-group-forward-bundle":
         return _validate_group_forward_main(argv[1:])
+    if argv and argv[0] == "audit-anchor-change-controls":
+        return _audit_anchor_change_controls_main(argv[1:])
     if argv and argv[0] == "audit-affine-readouts":
         return _audit_affine_readouts_main(argv[1:])
     if argv and argv[0] == "audit-polarity-mirror":
@@ -511,6 +565,7 @@ Working with your own data:
   mlcalc compare-budgets --help  Compare two methods at two saved validation budgets.
   mlcalc audit-polarity-mirror --help  Check matched +V/-V electrical readings against a frozen roster.
   mlcalc audit-affine-readouts --help  Compare two readout paths with a reserved interior standard.
+  mlcalc audit-anchor-change-controls --help  Audit anchor changes against matched sham and reference paths.
   mlcalc compare-predictions --help  Compare two saved regression bundles on identical query bytes; no fitting.
   mlcalc score-predictions --help  Join complete later outcomes to saved regression predictions; no fitting.
 
@@ -557,6 +612,7 @@ The groupbench command is an alias for the same CLI.""",
     _add_verify_parser(sub)
     _add_polarity_mirror_parser(sub)
     _add_affine_readouts_parser(sub)
+    _add_anchor_change_controls_parser(sub)
     _add_compare_intervals_parser(sub)
     _add_group_forward_validate_parser(sub)
     schema = sub.add_parser("validate-prediction-bundle", allow_abbrev=False,
