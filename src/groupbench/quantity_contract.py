@@ -295,3 +295,77 @@ def audit_anchor_change_controls(records, *, expected_blocks) -> AnchorChangeCon
                                                    squares / n - (total / n) ** 2)
                         for total, absolute, squares in sums)
     return AnchorChangeControlAudit(n, *comparisons)
+
+
+@dataclass(frozen=True)
+class PolarityMirrorAudit:
+    """Exact descriptive even residuals on a frozen mirror-pair roster."""
+
+    n_blocks: int
+    n_pairs: int
+    n_both_zero_pairs: int
+    equal_block_odd_mirror_mae: Fraction
+    worst_absolute_even_component: Fraction
+    worst_relative_even_component: Fraction | None
+
+
+def audit_polarity_mirror(records, *, expected_pairs) -> PolarityMirrorAudit:
+    """Check an odd current response at positive and negative matched voltages.
+
+    Rows are (block, V_plus, I_plus, V_minus, I_minus); expected pairs are
+    (block, strictly positive voltage). Require a complete independent roster,
+    exact voltage opposition and caller-established comparable units, state,
+    read path, history and conditions. No interpolation or pairing is inferred.
+    Odd-mirror error is abs(I_plus + I_minus); average within each block before
+    equally weighting blocks. The worst absolute even component is half that
+    error. Divide the error by abs(I_plus) + abs(I_minus) for the relative
+    component; joint zeros have no relative denominator. These are descriptive
+    mismatches, not proof of contact mechanism, independence or transfer.
+    """
+    _values(records)
+    _values(expected_pairs)
+
+    def pair(block, amplitude):
+        if (type(block) is not str or not 1 <= len(block) <= 256 or block.strip() != block
+                or any(unicodedata.category(c) in ("Cc", "Cs") for c in block)):
+            raise ValueError("Polarity blocks require plain, nonblank string identifiers.")
+        v = _number(amplitude, "Positive voltage")
+        if v <= 0:
+            raise ValueError("A polarity pair requires a strictly positive amplitude.")
+        return block, v
+
+    expected = set()
+    for spec in expected_pairs:
+        if type(spec) is not tuple or len(spec) != 2:
+            raise ValueError("Expected polarity roster requires block/amplitude pairs.")
+        key = pair(*spec)
+        if key in expected:
+            raise ValueError("Duplicate expected polarity pair.")
+        expected.add(key)
+    seen, blocks = set(), {}
+    worst, relative_worst, zeroes = Fraction(), None, 0
+    for row in records:
+        if type(row) is not tuple or len(row) != 5:
+            raise ValueError("A polarity record requires a block and both voltage/current measurements.")
+        block, pos_v, pos_i, neg_v, neg_i = row
+        key = pair(block, pos_v)
+        if key not in expected or key in seen:
+            raise ValueError("Polarity records must match the frozen pair roster exactly.")
+        if _number(neg_v, "Negative voltage") != -key[1]:
+            raise ValueError("Polarity voltages do not have exactly opposite signs and equal magnitudes.")
+        plus, minus = _number(pos_i, "Positive-branch current"), _number(neg_i, "Negative-branch current")
+        error = abs(plus + minus)
+        denominator = abs(plus) + abs(minus)
+        seen.add(key)
+        subtotal, count = blocks.get(block, (Fraction(), 0))
+        blocks[block] = subtotal + error, count + 1
+        worst = max(worst, error)
+        if denominator:
+            relative = error / denominator
+            relative_worst = relative if relative_worst is None else max(relative_worst, relative)
+        else:
+            zeroes += 1
+    if seen != expected:
+        raise ValueError("Polarity records must match the frozen pair roster exactly.")
+    mae = sum((s / n for s, n in blocks.values()), Fraction()) / len(blocks)
+    return PolarityMirrorAudit(len(blocks), len(seen), zeroes, mae, worst / 2, relative_worst)
