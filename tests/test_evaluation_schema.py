@@ -520,6 +520,40 @@ class EvaluationSchemaTests(unittest.TestCase):
         self.assertFalse(reply.stdout)
         self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
 
+    def test_same_environment_rejects_coherently_reordered_v2_inner_receipts(self):
+        frame = pd.DataFrame({"g": ["c", "a", "d", "f", "e", "b"] * 2,
+                              "x": range(12), "y": [i * i for i in range(12)]})
+        result = benchmark(frame, target="y", group="g",
+                           baselines=("group_balanced_ridge", "group_median"),
+                           outer_splits=3, inner_splits=2, random_state=4)
+        result.write(self.root, overwrite=True)
+        self.assertEqual(validate_evaluation_bundle(self.root).schema_version, "1.4")
+
+        def swap_inner_receipts(manifest):
+            audit = manifest["outer_folds"][0]
+            audit["inner_folds"].reverse()
+            for index, fold in enumerate(audit["inner_folds"]):
+                fold["fold"] = index
+            for record in audit["inner_selection"]:
+                record["inner_fold_scores"].reverse()
+                record["inner_fit_details"].reverse()
+                for index, detail in enumerate(record["inner_fit_details"]):
+                    detail["inner_fold"] = index
+
+        self.mutate_json("manifest.json", swap_inner_receipts)
+        self.assertEqual(verify_bundle(self.root).bundle_type, "evaluation")
+        before = {p.name: p.read_bytes() for p in self.root.iterdir()}
+        with patch("groupbench.model.GroupBenchRegressor._fit_prepared",
+                   side_effect=AssertionError("fit forbidden")):
+            with self.assertRaisesRegex(ValueError, "seeded inner fold assignment"):
+                validate_evaluation_bundle(self.root)
+        self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
+
+        # Old NumPy's seeded sampler is not assumed to reproduce the current
+        # ordering. Structural and metric checks still run in this branch.
+        self.mutate_json("manifest.json", lambda m: m["environment"].update(numpy="historical"))
+        self.assertEqual(validate_evaluation_bundle(self.root).schema_version, "1.4")
+
     def test_same_environment_rejects_renumbered_legacy_inner_folds(self):
         self.assertEqual(validate_evaluation_bundle(self.root).n_rows, 12)
 

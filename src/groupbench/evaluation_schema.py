@@ -582,7 +582,9 @@ def _check(manifest, summary, raw, *, require_run_key=False):
                 _fail("selected predictions differ from their declared family refit.")
     if "dummy" in baselines:
         _check_dummy_fold_predictions(manifest, observed, folds, fold_rows, predictions["dummy"])
-    if version in ("1.0", "1.1", "1.2"):
+    # Extended v2 also writes seeded GroupKFold receipts. Domain folds
+    # use a different protocol and must not be replayed with this splitter.
+    if version in ("1.0", "1.1", "1.2", "1.4"):
         _check_seeded_inner_assignment(manifest, config, groups, membership, audits)
 
     for name in names:
