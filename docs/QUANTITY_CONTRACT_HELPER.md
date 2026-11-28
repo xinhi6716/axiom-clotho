@@ -100,3 +100,22 @@ declaration and one float tuple per batch, in the original order. The 20,000
 value limit applies across both batches together. This is an explicit optional
 boundary, not an automatic ML ingestion step or evidence of physical
 comparability.
+
+
+### CLI: exact mirror-pair audit
+
+```sh
+mlcalc audit-polarity-mirror readings.json frozen-pairs.json
+clotho tabular audit-polarity-mirror readings.json frozen-pairs.json
+```
+
+Readings use `{"schema_version":1,"rows":[["block",0.1,0.4,-0.1,-0.2]]}`
+where each row is block, positive voltage/current, negative voltage/current.
+The separate roster uses
+`{"schema_version":1,"expected_pairs":[["block",0.1]]}`. Freeze the roster
+independently of observed outcomes. The tool does not infer matches or convert
+units. Both inputs must be bounded local UTF-8 JSON; exact JSON decimals are
+used, with at most 20,000 rows per file. Success emits aggregate JSON with
+rational strings for exact metrics (`null` for an undefined relative metric).
+Rejection exits 2 without a report. It does not fit or write files, and the
+diagnostic describes the supplied pairs rather than proving physical mechanisms.

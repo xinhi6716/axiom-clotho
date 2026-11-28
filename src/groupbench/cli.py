@@ -358,6 +358,57 @@ def _compare_intervals_main(argv):
     return 0
 
 
+def _add_polarity_mirror_parser(sub):
+    parser = sub.add_parser(
+        "audit-polarity-mirror", allow_abbrev=False,
+        help="Audit exact odd-current symmetry on a frozen voltage-pair roster",
+        description="Descriptive matched-voltage polarity audit; exact aggregate JSON, no fitting.",
+        epilog="Requires comparable current and voltage units within an independently frozen roster.",
+    )
+    parser.add_argument("readings", type=Path, help="Local v1 JSON containing matched voltage/current readings")
+    parser.add_argument("roster", type=Path, help="Separate local v1 JSON with the frozen block-amplitude pairs")
+    return parser
+
+
+def _audit_polarity_mirror_main(argv):
+    from dataclasses import asdict
+    from fractions import Fraction
+
+    from .budget_comparison import _read_input, load_document
+    from .quantity_contract import MAX_VALUES, audit_polarity_mirror
+
+    parser = _add_polarity_mirror_parser(argparse.ArgumentParser(prog="groupbench").add_subparsers())
+    args = parser.parse_args(argv)
+
+    def exact_rows(path, key, width):
+        doc = load_document(_read_input(path))
+        if (type(doc) is not dict or set(doc) != {"schema_version", key}
+                or type(doc["schema_version"]) is not int or doc["schema_version"] != 1):
+            raise ValueError("invalid polarity document shape")
+        rows = doc[key]
+        if (type(rows) is not list or not 1 <= len(rows) <= MAX_VALUES
+                or any(type(row) is not list or len(row) != width for row in rows)):
+            raise ValueError("invalid polarity row population")
+        return [tuple(row) for row in rows]
+
+    try:
+        readings = exact_rows(args.readings, "rows", 5)
+        roster = exact_rows(args.roster, "expected_pairs", 2)
+        audit = audit_polarity_mirror(readings, expected_pairs=roster)
+        report = {
+            "schema_id": "mlcalc.polarity_mirror_audit", "schema_version": 1,
+            "claim_scope": "descriptive_supplied_pairs_only",
+            **{key: str(value) if isinstance(value, Fraction) else value
+               for key, value in asdict(audit).items()},
+        }
+        print(json.dumps(report, indent=2, sort_keys=True, allow_nan=False))
+    except (ValueError, OSError, TypeError):
+        print("polarity mirror audit rejected: invalid, unavailable or mismatched inputs",
+              file=sys.stderr)
+        return 2
+    return 0
+
+
 def _leaderboard_float(value):
     # Preserve nonzero scores below the fixed-decimal display resolution.
     return f"{value:.4e}" if 0 < abs(value) < 0.0001 else f"{value:.4f}"
@@ -372,6 +423,8 @@ def main(argv=None) -> int:
         return plan_group_windows(argv[1:])
     if argv and argv[0] == "validate-group-forward-bundle":
         return _validate_group_forward_main(argv[1:])
+    if argv and argv[0] == "audit-polarity-mirror":
+        return _audit_polarity_mirror_main(argv[1:])
     if argv and argv[0] == "compare-budgets":
         from .budget_comparison import main as compare_budgets
         return compare_budgets(argv[1:], prog="mlcalc compare-budgets")
@@ -413,6 +466,7 @@ Working with your own data:
   mlcalc evaluate-intervals --help  Score saved bounds or report an opt-in coverage diagnostic.
   mlcalc compare-intervals --help  Compute matched candidate-minus-reference interval scores.
   mlcalc compare-budgets --help  Compare two methods at two saved validation budgets.
+  mlcalc audit-polarity-mirror --help  Check matched +V/-V electrical readings against a frozen roster.
   mlcalc compare-predictions --help  Compare two saved regression bundles on identical query bytes; no fitting.
   mlcalc score-predictions --help  Join complete later outcomes to saved regression predictions; no fitting.
 
@@ -457,6 +511,7 @@ The groupbench command is an alias for the same CLI.""",
         _add_columns(preview)
         _add_protocol(preview, outer=mode == "run", output=False, domain_selection=True)
     _add_verify_parser(sub)
+    _add_polarity_mirror_parser(sub)
     _add_compare_intervals_parser(sub)
     _add_group_forward_validate_parser(sub)
     schema = sub.add_parser("validate-prediction-bundle", allow_abbrev=False,
