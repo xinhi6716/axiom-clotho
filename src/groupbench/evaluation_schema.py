@@ -20,7 +20,8 @@ from .splitting import GroupKFold
 from .prediction_schema import (_manifest, _DECIMAL, _optional_selection_metadata, _extension_families,
     _DOMAIN_FIELDS, _domain_config, _domain_selection, _reject_domain_audits, _domain_candidates,
     _same_declaration, _extension_families_v2, _extended_selection_v2, _reject_ridge_v2_markers,
-    _EXTENDED_FAMILIES_V2, _GROUP_FIT_AUDIT_V2, _check_package_source_digest)
+    _EXTENDED_FAMILIES_V2, _GROUP_FIT_AUDIT_V2, _check_package_source_digest,
+    _check_extended_v1_selected_candidate)
 from .verification import (EVALUATION_FILES, MAX_CHECKSUM_BYTES, MAX_PAYLOAD_BYTES,
                            _checksum_records, _open_run_directory, _read_file, _signature)
 
@@ -517,6 +518,8 @@ def _check(manifest, summary, raw, *, require_run_key=False):
                                        config, group_sizes={g: len(group_rows[g]) for g in train_groups})
             elif optional:
                 _optional_selection_metadata(audit, n-test_rows, len(train_groups), inner, expected_seed, optional)
+                if version == "1.2":
+                    _check_extended_v1_selected_candidate(audit, config)
             if version == "1.3":
                 if not isinstance(audit.get("family_candidates"), dict):
                     _fail("domain family winner declaration is missing.")

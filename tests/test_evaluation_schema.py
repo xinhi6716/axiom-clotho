@@ -200,6 +200,31 @@ class EvaluationSchemaTests(unittest.TestCase):
             validate_evaluation_bundle(self.root)
         self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
 
+    def test_extended_v1_saved_winner_must_match_complete_selection_ledger(self):
+        frame = pd.DataFrame({"g": list("abcdef") * 2, "x": range(12),
+                              "y": [i * i for i in range(12)]})
+        benchmark(frame, target="y", group="g", baselines=("dummy", "group_median"),
+                  outer_splits=3, inner_splits=2).write(self.root, overwrite=True)
+        self.assertEqual(validate_evaluation_bundle(self.root).schema_version, "1.2")
+
+        def make_declared_winner_lose(manifest):
+            audit = manifest["outer_folds"][0]
+            scores = audit["inner_selection"]
+            declared = next(record for record in scores if record["candidate"] == audit["selected_candidate"])
+            large = max(item["selection_score"] for item in scores) + 100
+            declared.update(selection_score=large, inner_fold_scores=[large] * len(audit["inner_folds"]))
+
+        self.mutate_json("manifest.json", make_declared_winner_lose)
+        self.assertEqual(verify_bundle(self.root).bundle_type, "evaluation")
+        before = {p.name: p.read_bytes() for p in self.root.iterdir()}
+        with self.assertRaisesRegex(ValueError, "selected extended candidate differs from saved scores"):
+            validate_evaluation_bundle(self.root)
+        self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
+        # A historical narrow audit omitting the selected candidate should
+        # not be interpreted as an attempt to identify a particular recipe.
+        self.mutate_json("manifest.json", lambda m: m["outer_folds"][0].pop("selected_candidate"))
+        self.assertEqual(validate_evaluation_bundle(self.root).schema_version, "1.2")
+
     def test_rehashed_false_metrics_fail_but_byte_contract_unchanged(self):
         self.mutate_json('summary.json', lambda d: d['models']['selected']['overall'].update(mae=123456.))
         self.assertEqual(verify_bundle(self.root).bundle_type, 'evaluation')

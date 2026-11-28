@@ -400,7 +400,7 @@ def _domain_candidates(config):
             for family in config["baselines"] for name, params in _DOMAIN_GRID_V1[family]]
 
 
-def _check_prediction_v13_selected_candidate(manifest, config):
+def _check_extended_v1_selected_candidate(manifest, config):
     if "selected_candidate" not in manifest:
         return  # Historical narrow receipts can retain extension-only evidence.
     # Both frozen v1 protocols use the same candidate grid/order; their
@@ -902,7 +902,7 @@ def _metadata(manifest):
             _optional_selection_metadata(manifest, n_train, manifest["n_training_groups"], inner, config.get("random_state"), optional)
         if version == "1.3":
             _check_prediction_inner_group_identities(manifest["inner_folds"])
-            _check_prediction_v13_selected_candidate(manifest, config)
+            _check_extended_v1_selected_candidate(manifest, config)
         if version == "1.4":
             mapping = _domain_config(config, manifest["n_training_groups"])
             _domain_selection(manifest, n_train, list(mapping), mapping, inner, config)
