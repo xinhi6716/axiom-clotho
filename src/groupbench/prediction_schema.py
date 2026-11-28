@@ -873,6 +873,23 @@ def _check_package_source_digest(source):
         _fail("recorded package source-map aggregate digest is inconsistent.")
 
 
+def _check_prediction_digest_declarations(manifest):
+    """Check token types only; original input bytes are not retained here."""
+    for field in ("training_data_sha256", "new_features_sha256"):
+        if field in manifest:
+            digest = manifest[field]
+            if type(digest) is not str or re.fullmatch(r"[0-9a-f]{64}", digest) is None:
+                _fail(f"declared {field} must be exactly 64 lowercase hexadecimal SHA-256 characters.")
+    for field in ("source_file_sha256", "prediction_source_file_sha256"):
+        if field in manifest:
+            digest = manifest[field]
+            # The writer permits null and caller-provided mixed-case hex
+            # for raw file provenance, unlike its own normalized digests.
+            if digest is not None and (
+                    type(digest) is not str or re.fullmatch(r"[0-9a-fA-F]{64}", digest) is None):
+                _fail(f"declared {field} must be null or exactly 64 hexadecimal SHA-256 characters.")
+
+
 def _metadata(manifest):
     version = manifest.get("schema_version")
     if (manifest.get("mode") != "fit_predict" or "schema_id" in manifest
@@ -880,6 +897,7 @@ def _metadata(manifest):
         _fail("only supported regression fit_predict schemas 1.0/1.1/1.2/1.3/1.4/1.5 are accepted.")
     config = _object(manifest.get("config"))
     _check_package_source_digest(manifest.get("package_source"))
+    _check_prediction_digest_declarations(manifest)
     if version != "1.5":
         _reject_ridge_v2_markers(manifest)
     if version != "1.4":

@@ -110,6 +110,42 @@ class PredictionSchemaTests(unittest.TestCase):
         write_bundle(self.root, value)
         self.assertEqual(validate_prediction_bundle_schema(self.root).n_predictions, 2)
 
+    def test_actual_writer_validates_declared_input_digest_roles(self):
+        import pandas as pd
+        from groupbench import fit_predict
+
+        frame = pd.DataFrame({"g": list("aabbcc"), "x": range(6), "y": range(6)})
+        run = fit_predict(frame, frame[["x"]].head(2), target="y", group="g",
+                          baselines=("dummy",), inner_splits=2,
+                          source_sha256="AA" * 32, prediction_source_sha256="bB" * 32)
+        run.write(self.root, overwrite=True)
+        self.assertEqual(validate_prediction_bundle_schema(self.root).n_predictions, 2)
+        raw = (self.root / "predictions.csv").read_bytes()
+        original = json.loads((self.root / "manifest.json").read_text())
+
+        cases = {
+            "training_data_sha256": (None, "A" * 64, "0" * 63),
+            "new_features_sha256": (None, "Z" * 64, "0" * 63),
+            "source_file_sha256": (17, "x" * 64, "A" * 64 + " "),
+            "prediction_source_file_sha256": (True, "x" * 64, "A" * 64 + " "),
+        }
+        for field, variants in cases.items():
+            for malformed in variants:
+                with self.subTest(field=field, malformed=malformed):
+                    write_bundle(self.root, original | {field: malformed}, csv=raw)
+                    self.assertEqual(verify_bundle(self.root).bundle_type, "prediction")
+                    before = {p.name: p.read_bytes() for p in self.root.iterdir()}
+                    with self.assertRaisesRegex(ValueError, field):
+                        validate_prediction_bundle_schema(self.root)
+                    self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
+        # These are declarations, not proofs. Source hashes are optional
+        # caller input and an absent historical field is not a fake digest.
+        write_bundle(self.root, original | {"source_file_sha256": None,
+                                           "prediction_source_file_sha256": None}, csv=raw)
+        self.assertEqual(validate_prediction_bundle_schema(self.root).n_predictions, 2)
+        write_bundle(self.root, {k: v for k, v in original.items() if k not in cases}, csv=raw)
+        self.assertEqual(validate_prediction_bundle_schema(self.root).n_predictions, 2)
+
     def test_unknown_metadata_is_explicitly_not_validated_or_followed(self):
         value = manifest()
         value.update(private_source_path="/never/open/this", future_metadata={"opaque": [1, "label"]})
