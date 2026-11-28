@@ -103,3 +103,7 @@ rewrites that bundle or silently substitutes corrected values. Ordinary small
 last-bit R² changes remain subject to the same documented tolerance. No schema
 version is changed: the metric definition is still R², not a new estimand. Keep
 the producer source version and original outputs when auditing historical runs.
+
+If the exact saved run matters, record the SHA-256 of its original `checksums.json` separately when releasing the run. Later, run
+`mlcalc validate-evaluation-bundle RUN_DIR --expected-checksums-sha256 HEX`
+with that independently stored digest. This rejects a different yet internally consistent run before checking its payloads. Hashing a received bundle and immediately supplying its own digest does not establish provenance. The option can be combined with `--require-run-key`; neither check authenticates original training data or executed code.
