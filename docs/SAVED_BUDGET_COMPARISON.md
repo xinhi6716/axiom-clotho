@@ -11,6 +11,15 @@ nested inside declared independent units and a selector-by-budget interaction.
 It is not an automatic adapter for arbitrary benchmark reports: explicitly
 prepare and check the input contract before use.
 
+With the current installed source, use either command (standard library only):
+
+```sh
+mlcalc compare-budgets examples/saved-budget-comparison/invented.json
+clotho tabular compare-budgets saved-metrics.json --expected-roster frozen-roster.json
+```
+
+The module entry point remains available:
+
 ```sh
 PYTHONPATH=src python -m groupbench.budget_comparison \
   examples/saved-budget-comparison/invented.json

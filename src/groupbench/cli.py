@@ -372,6 +372,9 @@ def main(argv=None) -> int:
         return plan_group_windows(argv[1:])
     if argv and argv[0] == "validate-group-forward-bundle":
         return _validate_group_forward_main(argv[1:])
+    if argv and argv[0] == "compare-budgets":
+        from .budget_comparison import main as compare_budgets
+        return compare_budgets(argv[1:], prog="mlcalc compare-budgets")
     if argv and argv[0] == "compare-intervals":
         return _compare_intervals_main(argv[1:])
     if argv and argv[0] == "compare-predictions":
@@ -409,6 +412,7 @@ Working with your own data:
   mlcalc evaluate-binary --help  Score a complete saved binary probability cohort; no fitting.
   mlcalc evaluate-intervals --help  Score saved bounds or report an opt-in coverage diagnostic.
   mlcalc compare-intervals --help  Compute matched candidate-minus-reference interval scores.
+  mlcalc compare-budgets --help  Compare two methods at two saved validation budgets.
   mlcalc compare-predictions --help  Compare two saved regression bundles on identical query bytes; no fitting.
   mlcalc score-predictions --help  Join complete later outcomes to saved regression predictions; no fitting.
 
@@ -419,6 +423,8 @@ The groupbench command is an alias for the same CLI.""",
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("plan-group-forward-windows", add_help=False,
                    help="Plan declared whole-group forward windows; strict metadata JSON, stdout JSON, zero fits")
+    sub.add_parser("compare-budgets", add_help=False,
+                   help="Compare two methods at two saved budgets; stdout JSON, no fitting")
     sub.add_parser("compare-predictions", add_help=False,
                    help="Compare saved regression predictions on a complete common query cohort; stdout JSON, no fitting")
     sub.add_parser("evaluate-binary", add_help=False,

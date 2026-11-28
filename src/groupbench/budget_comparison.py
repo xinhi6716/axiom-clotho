@@ -215,8 +215,8 @@ def _read_input(path):
         os.close(fd)
 
 
-def main(argv=None):
-    parser = argparse.ArgumentParser(description=__doc__)
+def main(argv=None, *, prog=None):
+    parser = argparse.ArgumentParser(prog=prog, description=__doc__)
     parser.add_argument("input", type=Path, help="Local saved-comparison JSON; report is written to stdout")
     parser.add_argument("--expected-roster", type=Path,
                         help="Optional separately frozen unit/repeat roster JSON")
