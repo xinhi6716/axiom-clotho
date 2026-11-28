@@ -361,3 +361,22 @@ lower is better. Intervals are sharp under the declared independent
 feasible time ranges and do not imply confidence, extrapolated reliability,
 or causal attribution. Do not optimize the horizon or exclude failed
 attempts based on the scored outcomes.
+
+### Cumulative onset prediction under interval observation
+
+The Python helper `bound_paired_onset_brier_paths` compares saved cumulative
+first-onset forecasts on one common, frozen list of increasing elapsed
+horizons. Supply a separate `(episode_id, group)` roster and rows
+`(episode_id, last_event_free, first_failed, a_probabilities, b_probabilities)`.
+Each pair must use the same origin and information; both forecast vectors
+must cover every horizon and be nondecreasing in [0, 1].
+
+For a genuine first-event process, possible outcome paths are consecutive
+zeros followed by ones. Keep one onset time for the entire paired path,
+not a separately chosen outcome per horizon. The helper returns exact
+B-minus-A mean Brier sensitivity ranges, equally weighting horizons within
+episodes, and then weighting by rows or by groups. Negative favors B.
+It does not fit a time-to-event model, infer censoring mechanisms, or
+produce confidence intervals. If events can reverse and only isolated
+snapshots were observed, do not treat a passing snapshot as authenticated
+event-free history or use this monotone-path restriction.

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+from bisect import bisect_left, bisect_right
 from decimal import Decimal, InvalidOperation
 from fractions import Fraction
 import json
@@ -591,6 +592,79 @@ def bound_paired_failure_risk_at_horizon(rows, *, expected_roster, horizon):
         "b_indeterminate_pairs": sum(s[4] - s[3] for s in all_stats),
         "row_weighted": summarize(row_values),
         "equal_group": summarize(group_values),
+    }
+
+
+def bound_paired_onset_brier_paths(rows, *, expected_roster, horizons):
+    """Sharp B-minus-A Brier difference over compatible first-event paths.
+
+    Give a complete frozen (episode_id, group) roster and rows (episode_id,
+    last_event_free, first_failed, a_probabilities, b_probabilities). A and
+    B predict the common cumulative onset target at increasing horizons.
+    Times are nonnegative and use last_event_free < T <= first_failed;
+    None means that bound was not observed. The event must be first onset,
+    not a reversible snapshot. Forecasts must be fixed at a common origin.
+    Every episode receives all horizons; sharpness assumes admissible event
+    intervals are independently selectable across episodes.
+    """
+    if type(horizons) not in (list, tuple) or not 1 <= len(horizons) <= 256:
+        raise ValueError("Expected a bounded nonempty list of horizons.")
+    grid = tuple(_number(h) for h in horizons)
+    m = len(grid)
+    if grid[0] < 0 or any(a >= b for a, b in zip(grid, grid[1:])):
+        raise ValueError("Horizons must be nonnegative and strictly increasing.")
+    if (type(rows) not in (list, tuple) or not 1 <= len(rows) <= MAX_ROWS
+            or len(rows) * m > 200_000):
+        raise ValueError("Episode/horizon population is empty or above the exact scoring limit.")
+
+    wrapped = []
+    for row in rows:
+        if type(row) is not tuple or len(row) != 5:
+            raise ValueError("Each episode must include two event-time bounds and two forecast paths.")
+        wrapped.append((row[0], 0, 0, 0, 0, 0, 0))
+
+    def probability_path(values):
+        if type(values) not in (list, tuple) or len(values) != m:
+            raise ValueError("Both forecast paths must cover every registered horizon.")
+        v = tuple(_number(p) for p in values)
+        if v[0] < 0 or v[-1] > 1 or any(a > b for a, b in zip(v, v[1:])):
+            raise ValueError("Cumulative onset probabilities must be nondecreasing in [0, 1].")
+        return v
+
+    groups, n_ambiguous = {}, 0
+    for (group, *_), (_, last0, first0, a0, b0) in zip(
+            _paired_bounded_interval_rows(wrapped, expected_roster), rows, strict=True):
+        last = None if last0 is None else _number(last0)
+        first = None if first0 is None else _number(first0)
+        if ((last is not None and last < 0) or (first is not None and first < 0)
+                or (last is not None and first is not None and first <= last)):
+            raise ValueError("Event times must be nonnegative and strictly ordered.")
+        k_min = 0 if last is None else bisect_right(grid, last)
+        k_max = m if first is None else bisect_left(grid, first)
+        a, b = probability_path(a0), probability_path(b0)
+
+        # Path k begins with k no-event labels and ends with m-k event labels.
+        # Changing one label from 1 to 0 increases (Brier B − Brier A) by
+        # exactly 2*(p_B - p_A). Sweep once, never allow a later 1-to-0 path.
+        diff = sum((y - x) * (y + x - 2) for x, y in zip(a, b))
+        diff += sum(2 * (b[i] - a[i]) for i in range(k_min))
+        lo = hi = diff
+        for i in range(k_min, k_max):
+            diff += 2 * (b[i] - a[i])
+            lo, hi = min(lo, diff), max(hi, diff)
+        n_ambiguous += int(k_min < k_max)
+        count, lows, highs = groups.get(group, (0, Fraction(), Fraction()))
+        groups[group] = count + 1, lows + lo, highs + hi
+
+    totals = list(groups.values())
+    n, g = len(rows), len(totals)
+    return {
+        "n_episodes": n, "n_declared_groups": g, "n_horizons": m,
+        "n_episodes_with_ambiguous_path": n_ambiguous,
+        "row_weighted_b_minus_a_brier_bounds": tuple(
+            sum(s[i] for s in totals) / (n * m) for i in (1, 2)),
+        "equal_group_b_minus_a_brier_bounds": tuple(
+            sum(s[i] / s[0] for s in totals) / (g * m) for i in (1, 2)),
     }
 
 
