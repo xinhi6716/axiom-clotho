@@ -3,7 +3,7 @@
 import argparse
 from collections import Counter, defaultdict
 from decimal import InvalidOperation
-from itertools import combinations
+from itertools import combinations, pairwise
 import json
 from pathlib import Path
 import sys
@@ -190,5 +190,58 @@ def control_availability_main(argv=None):
     except (ValueError, OSError, TypeError, InvalidOperation):
         print("control availability comparison rejected: invalid, unavailable or mismatched inputs",
               file=sys.stderr)
+        return 2
+    return 0
+
+
+def audit_schedule_gaps(schedule, contract):
+    """Count adjacent elapsed gaps above a frozen bound, without interpolation."""
+    associations = _document(contract, {"associations", "time_unit", "max_gap"}, "associations")
+    expected = _associations({"schema_version": 1, "associations": associations})
+    expected_unit = _label(contract["time_unit"])
+    maximum = _number(contract["max_gap"], "Maximum gap")
+    if maximum < 0:
+        raise ValueError("Maximum gap must be nonnegative")
+
+    schedule_unit, grouped = _schedule(schedule, expected)
+    if schedule_unit != expected_unit:
+        raise ValueError("Time-unit declarations must match exactly")
+
+    above = tied = zero = singleton = affected = 0
+    for timestamps in grouped.values():
+        singleton += len(timestamps) == 1
+        exceeds = False
+        for left, right in pairwise(sorted(timestamps)):
+            gap = right - left
+            zero += gap == 0
+            tied += gap == maximum
+            if gap > maximum:
+                above += 1
+                exceeds = True
+        affected += exceeds
+
+    return {
+        "schema_id": "mlcalc.schedule_gap_audit", "schema_version": 1,
+        "claim_scope": "descriptive_declared_schedule_only",
+        "n_rows": len(expected), "n_groups": len(grouped),
+        "n_singleton_groups": singleton,
+        "n_adjacent_gaps": len(expected) - len(grouped),
+        "n_zero_gaps": zero, "n_gaps_equal_maximum": tied,
+        "n_gaps_above_maximum": above, "n_groups_with_above_maximum_gaps": affected,
+    }
+
+
+def schedule_gap_main(argv=None):
+    parser = argparse.ArgumentParser(prog="mlcalc audit-schedule-gaps", allow_abbrev=False,
+        description="Audit adjacent within-group schedule gaps; aggregate counts, no outcomes.")
+    parser.add_argument("schedule", type=Path, help="Local v1 timestamp schedule JSON")
+    parser.add_argument("contract", type=Path, help="Separate frozen v1 associations, time unit, and maximum gap")
+    args = parser.parse_args(argv)
+    try:
+        report = audit_schedule_gaps(load_document(_read_input(args.schedule)),
+                                     load_document(_read_input(args.contract)))
+        print(json.dumps(report, indent=2, sort_keys=True, allow_nan=False))
+    except (ValueError, TypeError, OSError, InvalidOperation):
+        print("schedule gap audit rejected: invalid, unavailable or mismatched inputs", file=sys.stderr)
         return 2
     return 0

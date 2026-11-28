@@ -209,3 +209,27 @@ It returns counts only, not row IDs, timestamps or measurements. Unknown or
 inconsistent declarations exit 2 without a report. Scope is at most 20,000
 associations per document. It does not score outcomes, verify actual control
 availability or show that an updated policy improves forecasts.
+
+
+### CLI: audit adjacent gaps against a frozen maximum
+
+```sh
+mlcalc audit-schedule-gaps schedule.json frozen-contract.json
+clotho tabular audit-schedule-gaps schedule.json frozen-contract.json
+```
+
+Use the same timestamp schedule format as `compare-elapsed-lag-support`.
+Separately freeze the complete row-to-group roster, time unit, and
+inclusive maximum permitted gap, for example:
+
+```json
+{"schema_version":1,"time_unit":"s","max_gap":0.5,"associations":[["a","g"],["b","g"]]}
+```
+
+Sort within each group by exact timestamp; gaps are between consecutive
+observations. Distinct rows with identical timestamps contribute zero gaps;
+zero gaps also count as equal to the maximum if it is zero. Groups with only
+one timestamp are counted separately and supply no gap. A gap exactly at the
+maximum is not counted as above it. Output contains only aggregate counts.
+It does not infer missing observations, interpolate, or inspect outcomes.
+Each file has at most 20,000 rows and must contain bounded local UTF-8 JSON.

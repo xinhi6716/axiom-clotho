@@ -516,6 +516,9 @@ def main(argv=None) -> int:
         return plan_group_windows(argv[1:])
     if argv and argv[0] == "validate-group-forward-bundle":
         return _validate_group_forward_main(argv[1:])
+    if argv and argv[0] == "audit-schedule-gaps":
+        from .elapsed_lag_support import schedule_gap_main
+        return schedule_gap_main(argv[1:])
     if argv and argv[0] == "compare-control-availability":
         from .elapsed_lag_support import control_availability_main
         return control_availability_main(argv[1:])
@@ -571,6 +574,7 @@ Working with your own data:
   mlcalc compare-budgets --help  Compare two methods at two saved validation budgets.
   mlcalc compare-elapsed-lag-support --help  Compare exact within-group elapsed lag distributions.
   mlcalc compare-control-availability --help  Compare fixed versus updated control availability.
+  mlcalc audit-schedule-gaps --help  Count adjacent gaps beyond a frozen maximum.
   mlcalc audit-polarity-mirror --help  Check matched +V/-V electrical readings against a frozen roster.
   mlcalc audit-affine-readouts --help  Compare two readout paths with a reserved interior standard.
   mlcalc audit-anchor-change-controls --help  Audit anchor changes against matched sham and reference paths.
@@ -584,6 +588,8 @@ The groupbench command is an alias for the same CLI.""",
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("plan-group-forward-windows", add_help=False,
                    help="Plan declared whole-group forward windows; strict metadata JSON, stdout JSON, zero fits")
+    sub.add_parser("audit-schedule-gaps", add_help=False,
+                   help="Audit adjacent schedule gaps against a frozen roster and maximum")
     sub.add_parser("compare-control-availability", add_help=False,
                    help="Compare two declared information cutoffs on the same frozen control roster")
     sub.add_parser("compare-elapsed-lag-support", add_help=False,
