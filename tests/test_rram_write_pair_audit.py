@@ -72,6 +72,21 @@ class WritePairAudit(unittest.TestCase):
             self.assertNotIn("privateCell", result.stderr)
             self.assertFalse(result.stdout)
 
+    def test_unexpected_chip_does_not_supply_expected_roster_shared_action(self):
+        a, b = triplet(), triplet("chipB")
+        expected = [a[0][:4], triplet("chipC")[0][:4]]
+        result = self.run_rows(a + b, roster=expected, extra=("--require-shared-action",))
+        self.assertEqual(result.returncode, 1)
+        report = json.loads(result.stdout)
+        self.assertEqual(report["declared_exact_action_coverage"]["multi_chip_strata"], 1)
+        support = report["expected_roster_eligible_coverage"]
+        self.assertEqual(support["eligible_expected_transitions"], 1)
+        self.assertEqual(support["eligible_expected_chips"], 1)
+        self.assertEqual(support["exact_action_coverage"]["multi_chip_strata"], 0)
+        self.assertEqual(support["read_condition_coverage"]["multi_chip_strata"], 0)
+        unrestricted = self.run_rows(a + b)
+        self.assertNotIn("expected_roster_eligible_coverage", json.loads(unrestricted.stdout))
+
     def test_eligible_chips_with_disjoint_protocols_have_no_shared_strata(self):
         a, b = triplet(), triplet("chipB")
         for row in b:

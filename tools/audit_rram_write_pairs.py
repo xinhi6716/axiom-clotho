@@ -131,6 +131,7 @@ def audit(path, *, expected_path=None):
     reasons = Counter()
     eligible = []
     read_coverage, action_coverage = [], []
+    expected_read_coverage, expected_action_coverage = [], []
     for key, events in transitions.items():
         if key in invalid:
             reasons["noncontiguous_episode_events"] += 1
@@ -148,6 +149,9 @@ def audit(path, *, expected_path=None):
             action_signature = read_signature + (events[1][1], events[1][4])
             read_coverage.append((read_signature, key[0]))
             action_coverage.append((action_signature, key[0]))
+            if expected is not None and key in expected:
+                expected_read_coverage.append((read_signature, key[0]))
+                expected_action_coverage.append((action_signature, key[0]))
     report = {
         "schema": "clotho.rram_write_pair_audit.v1",
         "events": count,
@@ -166,6 +170,12 @@ def audit(path, *, expected_path=None):
             "missing_expected_transitions": len(expected - captured),
             "unexpected_captured_transitions": len(captured - expected),
             "present_expected_ineligible_transitions": len((expected & captured) - set(eligible)),
+        }
+        report["expected_roster_eligible_coverage"] = {
+            "eligible_expected_transitions": len(expected_action_coverage),
+            "eligible_expected_chips": len({chip for _, chip in expected_action_coverage}),
+            "read_condition_coverage": coverage(expected_read_coverage),
+            "exact_action_coverage": coverage(expected_action_coverage),
         }
     return report
 
