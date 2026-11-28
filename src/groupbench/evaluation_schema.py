@@ -11,7 +11,7 @@ import numpy as np
 from sklearn import __version__ as _SKLEARN_VERSION
 
 from .baselines import _lower_group_median
-from .data import MAX_FEATURES, validate_groups, validate_seed
+from .data import MAX_FEATURES, validate_groups, validate_seed, validate_source_sha256
 from .domain_selection import domain_metadata
 from .evaluation import _evaluation_run_key
 from .metrics import regression_metrics, _checked_arithmetic
@@ -342,6 +342,13 @@ def _check(manifest, summary, raw, *, require_run_key=False):
     # Reconcile this optional writer declaration using only retained bytes.
     # Matching self-reported hashes is not proof of executed source.
     _check_package_source_digest(manifest.get("package_source"))
+    if "source_file_sha256" in manifest:
+        # This is an optional declaration. Replay neither reads the original
+        # source path nor establishes what bytes an earlier writer consumed.
+        try:
+            validate_source_sha256(manifest["source_file_sha256"], "source_file_sha256")
+        except ValueError:
+            _fail("declared source_file_sha256 must be null or exactly 64 hexadecimal SHA-256 characters.")
     config = manifest.get("config")
     if not isinstance(config, dict):
         _fail("missing configuration.")

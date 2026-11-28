@@ -139,6 +139,29 @@ class EvaluationSchemaTests(unittest.TestCase):
         self.mutate_json("manifest.json", lambda m: m.pop("data_diagnostics"))
         self.assertEqual(validate_evaluation_bundle(self.root).n_rows, 6)
 
+    def test_retained_declared_raw_source_digest_matches_writer_type_contract(self):
+        frame = pd.DataFrame({"g": list("abcd") * 2, "x": range(8), "y": range(8)})
+        source = "aF" * 32
+        benchmark(frame, target="y", group="g", baselines=("dummy",), source_sha256=source,
+                  outer_splits=2, inner_splits=2).write(self.root, overwrite=True)
+        self.assertEqual(json.loads((self.root / "manifest.json").read_text())["source_file_sha256"], source)
+        self.assertEqual(validate_evaluation_bundle(self.root).n_rows, 8)
+        for wrong in (True, 12, "g" * 64, "0" * 63, " " + source, {"path": "raw.csv"}):
+            with self.subTest(wrong=wrong):
+                self.mutate_json("manifest.json", lambda m: m.update(source_file_sha256=wrong))
+                self.assertEqual(verify_bundle(self.root).bundle_type, "evaluation")
+                before = {p.name: p.read_bytes() for p in self.root.iterdir()}
+                with self.assertRaisesRegex(ValueError, "declared source_file_sha256"):
+                    validate_evaluation_bundle(self.root)
+                self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
+        # Replay corroborates the declaration's type, not its source value.
+        self.mutate_json("manifest.json", lambda m: m.update(source_file_sha256="C" * 64))
+        self.assertEqual(validate_evaluation_bundle(self.root).n_rows, 8)
+        self.mutate_json("manifest.json", lambda m: m.update(source_file_sha256=None))
+        self.assertEqual(validate_evaluation_bundle(self.root).n_rows, 8)
+        self.mutate_json("manifest.json", lambda m: m.pop("source_file_sha256"))
+        self.assertEqual(validate_evaluation_bundle(self.root).n_rows, 8)
+
     def test_rehashed_false_metrics_fail_but_byte_contract_unchanged(self):
         self.mutate_json('summary.json', lambda d: d['models']['selected']['overall'].update(mae=123456.))
         self.assertEqual(verify_bundle(self.root).bundle_type, 'evaluation')
