@@ -148,13 +148,45 @@ pub(crate) fn checked_mean(
     debug_assert!((1..=20_000).contains(&count));
     let mut suffix = values.clone();
     let first = suffix.next().unwrap();
+    if count == 2 {
+        let second = suffix.next().unwrap();
+        if first == second {
+            return Ok(if first == 0.0 { 0.0 } else { first });
+        }
+        return mean_pair(first, second, first.abs().max(second.abs()));
+    }
     // Once the finite neighbor roster is constant, its exact mean is
     // already representable and its scale check cannot underflow.
     if count == 1 || suffix.all(|value| value == first) {
         return Ok(if first == 0.0 { 0.0 } else { first });
     }
     let scale = values.clone().map(f64::abs).fold(0.0_f64, f64::max);
+    accumulated_mean(values, count, scale)
+}
 
+fn mean_pair(a: f64, b: f64, scale: f64) -> Result<f64, KnnError> {
+    // Retain the full exact reducer's destructive-normalization guard.
+    if (a != 0.0 && a / scale == 0.0) || (b != 0.0 && b / scale == 0.0) {
+        return Err(KnnError::NumericOverflow);
+    }
+    let sum = a + b;
+    if sum.is_finite() {
+        // Halving transfers rounding unchanged for a normal result. Where
+        // it may produce a subnormal, the sum itself fits in the exact
+        // binary64 integer lattice (below twice the minimum normal).
+        Ok(sum * 0.5)
+    } else {
+        // Only same-sign finite operands large enough to halve exactly can
+        // overflow their sum. Halve first and round the one addition.
+        Ok(a * 0.5 + b * 0.5)
+    }
+}
+
+fn accumulated_mean(
+    values: impl Iterator<Item = f64>,
+    count: usize,
+    scale: f64,
+) -> Result<f64, KnnError> {
     let mut positive = Magnitude::default();
     let mut negative = Magnitude::default();
     for value in values {
@@ -182,6 +214,44 @@ pub(crate) fn checked_mean(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn two_target_midpoint_matches_exact_accumulator_at_both_lattice_edges() {
+        let tiny = f64::from_bits(1);
+        let candidates = [
+            0.0, -0.0, tiny, -tiny, f64::from_bits(3), -f64::from_bits(3),
+            f64::MIN_POSITIVE, f64::from_bits(f64::MIN_POSITIVE.to_bits() - 1),
+            f64::from_bits(f64::MIN_POSITIVE.to_bits() + 1),
+            f64::MAX, -f64::MAX, f64::MAX * 0.75, -f64::MAX * 0.75,
+            1.0, 2.0_f64.powi(970), 2.0_f64.powi(969), -1.0,
+        ];
+        let compare = |a: f64, b: f64| {
+            let scale = a.abs().max(b.abs());
+            let expected = if scale == 0.0 { Ok(0.0) } else {
+                accumulated_mean([a, b].into_iter(), 2, scale)
+            };
+            assert_eq!(
+                checked_mean([a, b].into_iter(), 2).map(f64::to_bits),
+                expected.map(f64::to_bits), "a={a:e}, b={b:e}"
+            );
+        };
+        for &a in &candidates {
+            for &b in &candidates {
+                compare(a, b);
+            }
+        }
+        let mut x = 0x7843_2de9_f001_3aa9_u64;
+        let mut next = || loop {
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            let v = f64::from_bits(x);
+            if v.is_finite() { break v; }
+        };
+        for _ in 0..16_000 {
+            compare(next(), next());
+        }
+    }
 
     #[test]
     fn constant_neighborhoods_preserve_extremes_and_canonicalize_zero() {
