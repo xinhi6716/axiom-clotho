@@ -111,12 +111,7 @@ impl LogisticClassifier {
         if positives == 0 || positives == y.len() {
             return Err(ClassificationError::SingleClass);
         }
-        let mut columns = Vec::with_capacity(width);
-        for column in 0..width {
-            if !x.iter().all(|row| row[column] == x[0][column]) {
-                columns.push(column);
-            }
-        }
+        let columns = varying_columns(x, width);
         let initial_intercept = (positives as f64 / (y.len() - positives) as f64).ln();
         if columns.is_empty()
             && intercept_converges_without_a_design(y, initial_intercept).unwrap_or(false)
@@ -183,6 +178,30 @@ fn repeated_intercept_probability(intercept: f64, count: usize) -> Result<Vec<f6
     let mut score = CompensatedSum::default();
     score.add(intercept)?;
     Ok(vec![sigmoid(score.total()?); count])
+}
+
+fn varying_columns(x: &[Vec<f64>], width: usize) -> Vec<usize> {
+    let first = &x[0];
+    // A row-major check avoids a full strided traversal per feature on
+    // wide constant designs. Sample three rows first, so an ordinary
+    // varying design doesn't repeat a long search.
+    let mut remaining = &x[1..];
+    if width >= 16 && x.len() >= 128
+        && x[1] == *first && x[x.len() / 2] == *first && x[x.len() - 1] == *first
+    {
+        match x[2..x.len() - 1].iter().position(|row| row != first) {
+            None => return Vec::new(),
+            // Every previous row was already compared on all columns.
+            Some(index) => remaining = &x[index + 2..],
+        }
+    }
+    let mut columns = Vec::with_capacity(width);
+    for column in 0..width {
+        if !remaining.iter().all(|row| row[column] == first[column]) {
+            columns.push(column);
+        }
+    }
+    columns
 }
 
 // Test exactly the first optimizer iteration for a fixed intercept-only design.
@@ -587,6 +606,24 @@ fn dot(a: &[f64], b: &[f64]) -> Result<f64, ClassificationError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn logistic_fit_never_drops_late_varying_columns_after_a_constant_prefix() {
+        let mut rows = vec![vec![-0.0; 20]; 256];
+        rows[1][0] = 0.0;
+        rows[252][18] = -3.0;
+        rows[254][2] = 4.0;
+        assert_eq!(varying_columns(&rows, 20), [2, 18]);
+        let labels: Vec<_> = (0..256).map(|i| f64::from(i % 3 == 0)).collect();
+        let model = LogisticClassifier::fit(&rows, &labels, 1.0).unwrap();
+        assert_eq!(model.columns, [2, 18]);
+        rows[252][18] = 0.0;
+        rows[254][2] = 0.0;
+        assert!(varying_columns(&rows, 20).is_empty());
+        rows[255][0] = f64::NAN;
+        assert!(matches!(LogisticClassifier::fit(&rows, &labels, 1.0),
+            Err(ClassificationError::NonFinite)));
+    }
 
     #[test]
     fn flat_design_preserves_column_order_with_constants_interleaved() {
