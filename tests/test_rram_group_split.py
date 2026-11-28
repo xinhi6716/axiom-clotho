@@ -10,14 +10,14 @@ TOOL = Path(__file__).resolve().parents[1] / "tools" / "preflight_rram_group_spl
 HEADER = ("chip", "address", "lane", "episode", "condition")
 
 
-def cli(fit, evaluation, unit):
+def cli(fit, evaluation, unit, *extra):
     with tempfile.TemporaryDirectory() as directory:
         a, b = (Path(directory) / name for name in ("fit.csv", "eval.csv"))
         for path, rows in ((a, fit), (b, evaluation)):
             with path.open("w", newline="", encoding="utf-8") as file:
                 csv.writer(file).writerows((HEADER, *rows))
         return subprocess.run([sys.executable, str(TOOL), "--fit-roster", str(a),
-                               "--evaluation-roster", str(b), "--disjoint-at", unit],
+                               "--evaluation-roster", str(b), "--disjoint-at", unit, *extra],
                               text=True, capture_output=True, check=False)
 
 
@@ -44,3 +44,25 @@ class RramGroupSplit(unittest.TestCase):
         duplicate = cli([one], [one, ("C", "07", "01", "ep1", "new")], "cell")
         self.assertEqual(duplicate.returncode, 2)
         self.assertIn("duplicate", duplicate.stderr)
+
+    def test_disjoint_chip_does_not_establish_supported_condition(self):
+        fit = [("A", 7, 3, "ep1", "privateNarrow"), ("A", 7, 3, "ep2", "privateNarrow"),
+               ("A", 8, 1, "ep3", "wide"), ("B", 7, 3, "ep1", "wide")]
+        held = [("C", 7, 3, "ep1", "privateNarrow"), ("C", 7, 4, "ep2", "privateNarrow"),
+                ("C", 7, 5, "ep3", "wide"), ("C", 7, 6, "ep4", "unseen")]
+        flag = "--minimum-fit-units-per-condition"
+        plain = cli(fit, held, "chip")
+        result = cli(fit, held, "chip", flag, "2")
+        self.assertEqual((plain.returncode, result.returncode), (0, 1))
+        report = json.loads(result.stdout)
+        self.assertEqual(report.pop("declared_fit_condition_support"), {
+            "minimum_distinct_fit_units_per_evaluation_condition": 2,
+            "evaluation_declared_conditions": 3,
+            "evaluation_conditions_by_distinct_fit_unit_count": {"0": 1, "1": 1, "2": 1},
+            "evaluation_conditions_below_minimum": 2,
+            "evaluation_rows_in_conditions_below_minimum": 3,
+        })
+        self.assertEqual(report, json.loads(plain.stdout))
+        self.assertNotIn("privateNarrow", result.stdout)
+        self.assertEqual(cli(fit, held[2:3], "chip", flag, "2").returncode, 0)
+        self.assertEqual(cli(fit, held, "chip", flag, "0").returncode, 2)

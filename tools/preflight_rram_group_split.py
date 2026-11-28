@@ -1,5 +1,6 @@
 """Audit declared RRAM train/evaluation splits at a chosen physical grouping level."""
 import argparse
+from collections import Counter, defaultdict
 import csv
 import json
 from pathlib import Path
@@ -30,6 +31,25 @@ def support(fit, evaluation, unit):
     }
 
 
+def condition_support(fit, evaluation, unit, minimum):
+    depth = UNITS[unit]
+    fit_units = defaultdict(set)
+    for key, condition in fit.items():
+        fit_units[condition].add(key[:depth])
+    eval_rows = Counter(evaluation.values())
+    histogram = Counter()
+    for condition in eval_rows:
+        histogram[len(fit_units.get(condition, ()))] += 1
+    below = {condition for condition in eval_rows if len(fit_units.get(condition, ())) < minimum}
+    return {
+        "minimum_distinct_fit_units_per_evaluation_condition": minimum,
+        "evaluation_declared_conditions": len(eval_rows),
+        "evaluation_conditions_by_distinct_fit_unit_count": dict(sorted(histogram.items())),
+        "evaluation_conditions_below_minimum": len(below),
+        "evaluation_rows_in_conditions_below_minimum": sum(eval_rows[c] for c in below),
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, epilog=(
         "Roster format: chip,address,lane,episode,condition. A declared cell is chip/address/lane. "
@@ -39,7 +59,12 @@ def main():
     parser.add_argument("--fit-roster", type=Path, required=True)
     parser.add_argument("--evaluation-roster", type=Path, required=True)
     parser.add_argument("--disjoint-at", choices=UNITS, required=True)
+    parser.add_argument("--minimum-fit-units-per-condition", type=int,
+                        help="require this many distinct fit units at the chosen level for each evaluation condition")
     args = parser.parse_args()
+    minimum = args.minimum_fit_units_per_condition
+    if minimum is not None and minimum < 1:
+        parser.error("minimum fit units per condition must be positive")
     try:
         _, fit = roster(args.fit_roster)
         _, evaluation = roster(args.evaluation_roster)
@@ -48,8 +73,13 @@ def main():
         parser.exit(2, "error: could not read UTF-8 roster CSV\n")
     except ValueError as exc:
         parser.exit(2, f"error: {exc}\n")
+    failed_support = False
+    if minimum is not None:
+        fit_support = condition_support(fit, evaluation, args.disjoint_at, minimum)
+        report["declared_fit_condition_support"] = fit_support
+        failed_support = bool(fit_support["evaluation_conditions_below_minimum"])
     print(json.dumps(report, indent=2, sort_keys=True))
-    return int(not report["declared_split_disjoint_at_required_unit"])
+    return int(not report["declared_split_disjoint_at_required_unit"] or failed_support)
 
 
 if __name__ == "__main__":
