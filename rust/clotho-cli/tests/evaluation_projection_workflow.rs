@@ -330,3 +330,42 @@ fn rejects_group_rmses_that_do_not_rebuild_the_saved_pooled_rmse() {
         assert!(String::from_utf8_lossy(&out.stderr).contains("Group RMSE does not pool"));
     }
 }
+
+#[test]
+fn rejects_group_binary_losses_that_do_not_rebuild_pooled_losses() {
+    let work = Work::new();
+    let csv = work.0.join("source.csv");
+    fs::write(&csv, "x,y,g\n1,0,A\n2,1,A\n3,0,A\n4,0,B\n5,0,B\n6,0,B\n7,1,C\n8,1,C\n9,0,D\n10,1,D\n").unwrap();
+    let bundle = work.0.join("bundle");
+    let evaluation = Command::new(env!("CARGO_BIN_EXE_clotho"))
+        .args(["evaluate", "--csv"]).arg(csv)
+        .args(["--features", "x", "--target", "y", "--group", "g",
+            "--model", "majority", "--folds", "2", "--out"])
+        .arg(&bundle).output().unwrap();
+    assert!(evaluation.status.success(), "{}", String::from_utf8_lossy(&evaluation.stderr));
+    let genuine = inspect_success(&bundle);
+    let original = fs::read(bundle.join("metrics.json")).unwrap();
+
+    for (field, claimed, reason) in [
+        ("brier", 0.125, "Group Brier does not pool"),
+        ("brier", 0.0, "Group Brier does not pool"),
+        ("log_loss", 1.0, "Group log loss does not pool"),
+    ] {
+        assert_ne!(genuine["pooled_row_weighted"][field].as_f64().unwrap(), claimed);
+        fs::write(bundle.join("metrics.json"), &original).unwrap();
+        alter(&bundle, |v| {
+            // Leave confusion and fold/pooled values as the real producer
+            // computed them. Retain a coherent equal-group mean for log loss.
+            for group in v["groups"].as_array_mut().unwrap() {
+                group["metrics"][field] = json!(claimed);
+            }
+            if field == "log_loss" {
+                v["equal_group_weighted"]["mean_group_log_loss"] = json!(claimed);
+            }
+        });
+        let out = inspect(&bundle);
+        assert!(!out.status.success(), "{field} {claimed} unexpectedly passed");
+        assert!(out.stdout.is_empty());
+        assert!(String::from_utf8_lossy(&out.stderr).contains(reason));
+    }
+}

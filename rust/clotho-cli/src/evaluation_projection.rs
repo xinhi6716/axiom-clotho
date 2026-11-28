@@ -488,6 +488,26 @@ fn binary_group(m: Bin, n: usize) -> Result<()> {
     )
 }
 
+fn check_binary_loss_pool(
+    groups: &[BinGroup], rows: usize, pooled: f64,
+    loss: impl Fn(Bin) -> f64, mismatch: &'static str,
+) -> Result<()> {
+    let largest = groups.iter().map(|g| loss(g.metrics)).fold(0.0_f64, f64::max);
+    if largest == 0.0 || pooled == 0.0 {
+        return require(largest == 0.0 && pooled == 0.0, mismatch);
+    }
+    // Brier and clipped log loss are means of row-wise losses. Compare the
+    // implied pooled score in scaled coordinates to preserve tiny Brier
+    // contributions; independently rounded group means can differ by ulps.
+    let scale = largest.max(pooled);
+    let implied = groups.iter().map(|g| {
+        (loss(g.metrics) / scale) * (g.n_rows as f64 / rows as f64)
+    }).sum::<f64>();
+    let expected = pooled / scale;
+    let tolerance = 1e-10 * implied.max(expected) + 2.0 * (f64::from_bits(1) / scale);
+    require((implied - expected).abs() <= tolerance, mismatch)
+}
+
 fn project_bin(m: Manifest<Bin, BinGroup, BinFold, BinMacro>, header: BinaryHeader, csv: &[u8]) -> Result<EvaluationProjection> {
     check_manifest(&m, BIN)?;
     let threshold = header.threshold;
@@ -513,6 +533,10 @@ fn project_bin(m: Manifest<Bin, BinGroup, BinFold, BinMacro>, header: BinaryHead
         mean_defined_group_balanced_accuracy: if balanced.is_empty() { None } else { Some(mean(&balanced)?) },
         balanced_accuracy_group_denominator: balanced.len() };
     require(equal_group_weighted == m.equal_group_weighted, "Inconsistent binary group summary")?;
+    check_binary_loss_pool(&m.groups, m.n_rows, pooled.brier, |g| g.brier,
+        "Group Brier does not pool to the retained row-weighted Brier score")?;
+    check_binary_loss_pool(&m.groups, m.n_rows, pooled.log_loss, |g| g.log_loss,
+        "Group log loss does not pool to the retained row-weighted log loss")?;
     let mut folds = Vec::with_capacity(m.n_folds);
     for (i, (f, (y, p))) in m.folds.iter().zip(&rows.folds).enumerate() {
         check_encoded_width(&m, f.encoded_feature_count)?;
