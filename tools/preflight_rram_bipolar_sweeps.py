@@ -3,6 +3,7 @@ import argparse
 from collections import Counter, defaultdict
 import csv
 from decimal import Decimal
+import hashlib
 import io
 import json
 import os
@@ -75,7 +76,7 @@ def classify_local_clocks(points):
     return "four_local_clock_segments_with_matched_voltage_edges", True
 
 
-def audit(path, *, local_clocks=False):
+def csv_records(path, *, expected_sha256=None):
     flags = os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_BINARY", 0)
     with os.fdopen(os.open(path, flags), "rb") as stream:
         if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
@@ -83,12 +84,54 @@ def audit(path, *, local_clocks=False):
         raw = stream.read(MAX_BYTES + 1)
     if len(raw) > MAX_BYTES:
         raise ValueError("input exceeds byte limit")
-    reader = csv.reader(io.StringIO(raw.decode("utf-8-sig"), newline=""), strict=True)
+    if expected_sha256 is not None and hashlib.sha256(raw).hexdigest() != expected_sha256:
+        raise ValueError("geometry input SHA-256 mismatch")
+    return csv.reader(io.StringIO(raw.decode("utf-8-sig"), newline=""), strict=True)
+
+
+def declared_leg_agreement(path, input_ordinals, inferred):
+    reader = csv_records(path)
+    header = next(reader, [])
+    if len(header) != 3 or set(header) != {"trace_id", "capture_record", "protocol_leg"}:
+        raise ValueError("segment roster requires trace_id,capture_record,protocol_leg")
+    indices = [header.index(name) for name in ("trace_id", "capture_record", "protocol_leg")]
+    declarations = {}
+    for count, row in enumerate(reader, 1):
+        if count > MAX_ROWS or len(row) != 3:
+            raise ValueError("segment roster row limit exceeded or wrong field count")
+        identity, ordinal, leg = (row[i] for i in indices)
+        if not re.fullmatch(r"[0-9]{1,6}", ordinal) or leg not in {"1", "2", "3", "4"}:
+            raise ValueError("segment roster requires record numbers and leg 1–4")
+        number = int(ordinal)
+        if input_ordinals.get(number) != identity:
+            raise ValueError("segment roster does not identify the exact geometry record")
+        if number in declarations:
+            raise ValueError("duplicate geometry record in segment roster")
+        declarations[number] = int(leg)
+    if len(declarations) != len(input_ordinals):
+        raise ValueError("segment roster must cover every geometry record")
+    counts = Counter()
+    for number, leg in declarations.items():
+        actual = inferred.get(number)
+        status = ("local_geometry_unresolved" if actual is None else
+                  "declared_leg_matches_local_geometry" if actual == leg else
+                  "declared_leg_conflicts_with_local_geometry")
+        counts[status] += 1
+    return dict(sorted(counts.items()))
+
+
+def audit(path, *, local_clocks=False, segment_roster=None, expected_geometry_sha256=None):
+    if segment_roster is not None and (not local_clocks or expected_geometry_sha256 is None):
+        raise ValueError("segment roster requires confirmed local clocks and a trusted geometry SHA-256")
+    if expected_geometry_sha256 is not None and not re.fullmatch(r"[a-f0-9]{64}", expected_geometry_sha256):
+        raise ValueError("expected geometry SHA-256 must be 64 lowercase hexadecimal digits")
+    reader = csv_records(path, expected_sha256=expected_geometry_sha256)
     header = next(reader, [])
     if len(header) != len(FIELDS) or set(header) != set(FIELDS):
         raise ValueError("input requires exactly trace_id,time_s,voltage_V; omit all current labels")
     columns = [header.index(field) for field in FIELDS]
     traces = defaultdict(list)
+    trace_records = defaultdict(list)
     for n, row in enumerate(reader, 1):
         if n > MAX_ROWS or len(row) != len(FIELDS):
             raise ValueError("row limit exceeded or wrong field count")
@@ -99,6 +142,8 @@ def audit(path, *, local_clocks=False):
         if elapsed < 0:
             raise ValueError("time cannot be negative")
         traces[identity].append((elapsed, bias))
+        if segment_roster is not None:
+            trace_records[identity].append(n)
     if not traces:
         raise ValueError("no voltage/time traces")
     classify_trace = classify_local_clocks if local_clocks else classify
@@ -114,6 +159,21 @@ def audit(path, *, local_clocks=False):
         report["clock_interpretation"] = "four_declared_local_clocks"
         report["intersegment_elapsed_time_verified"] = False
         report["physical_time_unit_verified"] = False
+    if segment_roster is not None:
+        input_ordinals, inferred = {}, {}
+        for (identity, points), (status, _) in zip(traces.items(), outcomes):
+            ordinals = trace_records[identity]
+            input_ordinals.update((ordinal, identity) for ordinal in ordinals)
+            if status == "four_local_clock_segments_with_matched_voltage_edges":
+                leg, previous = 1, points[0][0]
+                for ordinal, (clock, _) in zip(ordinals, points):
+                    if clock < previous:
+                        leg += 1
+                    inferred[ordinal] = leg
+                    previous = clock
+        report["declared_segment_roster_support_by_record"] = declared_leg_agreement(
+            segment_roster, input_ordinals, inferred
+        )
     return report
 
 
@@ -125,9 +185,14 @@ def main():
     parser.add_argument("csv", type=Path)
     parser.add_argument("--confirmed-four-local-segment-clocks", action="store_true",
                         help="confirm a source protocol with three documented rewinds to local zero")
+    parser.add_argument("--segment-roster", type=Path,
+                        help="compare a complete independently declared protocol leg per input data record")
+    parser.add_argument("--expected-geometry-sha256",
+                        help="bind segment roster positions to previously trusted exact geometry bytes")
     args = parser.parse_args()
     try:
-        report = audit(args.csv, local_clocks=args.confirmed_four_local_segment_clocks)
+        report = audit(args.csv, local_clocks=args.confirmed_four_local_segment_clocks,
+                       segment_roster=args.segment_roster, expected_geometry_sha256=args.expected_geometry_sha256)
     except (OSError, UnicodeError, csv.Error):
         parser.exit(2, "error: input could not be read as UTF-8 CSV\n")
     except ValueError as exc:
