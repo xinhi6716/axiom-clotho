@@ -46,7 +46,36 @@ def classify(points):
     return status, apex_repeat
 
 
-def audit(path):
+def classify_local_clocks(points):
+    if points[0][0] != 0:
+        return "first_local_clock_not_zero", None
+    segments = [[points[0][1]]]
+    for (previous, _), (clock, voltage) in zip(points, points[1:]):
+        if clock == previous:
+            return "tied_local_clock_values", None
+        if clock < previous:
+            if clock != 0:
+                return "clock_rewind_not_to_exact_zero", None
+            segments.append([])
+        segments[-1].append(voltage)
+    if len(segments) != 4:
+        return "expected_exactly_four_local_clock_segments", None
+    if any(len(leg) < 2 for leg in segments):
+        return "insufficient_rows_in_local_clock_segment", None
+    if any(left[-1] != right[0] for left, right in zip(segments, segments[1:])):
+        return "voltage_mismatch_at_local_clock_reset", None
+    up, back, down, return_leg = segments
+    if any(v != 0 for v in (up[0], back[-1], down[0], return_leg[-1])):
+        return "missing_exact_zero_at_sweep_endpoint_or_middle", None
+    for leg, sign in zip(segments, (1, -1, -1, 1)):
+        if any(((v1 > v0) - (v1 < v0)) != sign for v0, v1 in zip(leg, leg[1:])):
+            return "local_segment_voltage_direction_not_strict", None
+    # Strict leg slopes and exact zeros guarantee opposite-sign apices.
+    # Each apex is observed in two separate segments, not merged.
+    return "four_local_clock_segments_with_matched_voltage_edges", True
+
+
+def audit(path, *, local_clocks=False):
     flags = os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_BINARY", 0)
     with os.fdopen(os.open(path, flags), "rb") as stream:
         if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
@@ -72,14 +101,20 @@ def audit(path):
         traces[identity].append((elapsed, bias))
     if not traces:
         raise ValueError("no voltage/time traces")
-    outcomes = [classify(trace) for trace in traces.values()]
-    return {
+    classify_trace = classify_local_clocks if local_clocks else classify
+    outcomes = [classify_trace(trace) for trace in traces.values()]
+    report = {
         "schema": "clotho.rram_bipolar_sweep_preflight.v1",
         "declared_traces": len(traces),
         "traces_by_geometry": dict(sorted(Counter(status for status, _ in outcomes).items())),
         "recognized_bipolar_traces_with_repeated_apex": sum(apex is True for _, apex in outcomes),
         "recognized_bipolar_traces_with_unique_apices": sum(apex is False for _, apex in outcomes),
     }
+    if local_clocks:
+        report["clock_interpretation"] = "four_declared_local_clocks"
+        report["intersegment_elapsed_time_verified"] = False
+        report["physical_time_unit_verified"] = False
+    return report
 
 
 def main():
@@ -88,9 +123,11 @@ def main():
         "a zero bracket does not establish a measured zero anchor."
     ))
     parser.add_argument("csv", type=Path)
+    parser.add_argument("--confirmed-four-local-segment-clocks", action="store_true",
+                        help="confirm a source protocol with three documented rewinds to local zero")
     args = parser.parse_args()
     try:
-        report = audit(args.csv)
+        report = audit(args.csv, local_clocks=args.confirmed_four_local_segment_clocks)
     except (OSError, UnicodeError, csv.Error):
         parser.exit(2, "error: input could not be read as UTF-8 CSV\n")
     except ValueError as exc:

@@ -9,12 +9,13 @@ import unittest
 TOOL = Path(__file__).resolve().parents[1] / "tools" / "preflight_rram_bipolar_sweeps.py"
 
 
-def check(rows, header=("trace_id", "time_s", "voltage_V")):
+def check(rows, header=("trace_id", "time_s", "voltage_V"), *, local=False):
     with tempfile.TemporaryDirectory() as tmp:
         path = Path(tmp) / "geometry.csv"
         with path.open("w", encoding="utf-8", newline="") as file:
             csv.writer(file).writerows((header, *rows))
-        return subprocess.run([sys.executable, str(TOOL), str(path)],
+        return subprocess.run([sys.executable, str(TOOL), str(path),
+                               *(["--confirmed-four-local-segment-clocks"] if local else [])],
                               text=True, capture_output=True, check=False)
 
 
@@ -58,3 +59,42 @@ class BipolarSweepPreflight(unittest.TestCase):
             self.assertEqual(result.returncode, 2)
             self.assertFalse(result.stdout)
             self.assertIn(diagnostic, result.stderr)
+
+    def test_confirmed_reset_clocks_preserve_separate_boundary_rows(self):
+        readings = [(0, 0), (1, 1), (0, 1), (1, 0), (0, 0), (1, -1), (0, -1), (1, 0)]
+        rows = [(key, t, v) for t, v in readings for key in ("privateA", "privateB")]
+        ordinary = json.loads(check(rows).stdout)
+        self.assertEqual(ordinary["traces_by_geometry"], {"timestamp_order_not_strict": 2})
+        self.assertNotIn("clock_interpretation", ordinary)
+        result = check(rows, local=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads(result.stdout)
+        self.assertEqual(report["traces_by_geometry"], {"four_local_clock_segments_with_matched_voltage_edges": 2})
+        self.assertEqual(report["recognized_bipolar_traces_with_repeated_apex"], 2)
+        self.assertIs(report["physical_time_unit_verified"], False)
+        self.assertIs(report["intersegment_elapsed_time_verified"], False)
+        self.assertNotIn("privateA", result.stdout)
+
+    def test_local_clock_mode_does_not_repair_invalid_resets_or_voltage_edges(self):
+        base = [(0, 0), (1, 1), (0, 1), (1, 0), (0, 0), (1, -1), (0, -1), (1, 0)]
+        cases = [
+            ([(0.1, 0)] + base[1:], "first_local_clock_not_zero"),
+            (base[:2] + [(1, 1)] + base[3:], "tied_local_clock_values"),
+            (base[:2] + [("0.000000000000000000000000000001", 1)] + base[3:], "clock_rewind_not_to_exact_zero"),
+            (base[:6], "expected_exactly_four_local_clock_segments"),
+            (base + [(0, 0), (1, 0)], "expected_exactly_four_local_clock_segments"),
+            (base[:-1], "insufficient_rows_in_local_clock_segment"),
+            (base[:2] + [(0, "1.000000000000000000000000000001")] + base[3:],
+             "voltage_mismatch_at_local_clock_reset"),
+            (base[:3] + [(1, "0.1"), (0, "0.1")] + base[5:], "missing_exact_zero_at_sweep_endpoint_or_middle"),
+            (base[:1] + [("0.5", 0)] + base[1:], "local_segment_voltage_direction_not_strict"),
+        ]
+        for points, expected in cases:
+            with self.subTest(expected=expected):
+                r = check([("trace", t, v) for t, v in points], local=True)
+                self.assertEqual(r.returncode, 0, r.stderr)
+                self.assertEqual(json.loads(r.stdout)["traces_by_geometry"], {expected: 1})
+        b = check([("trace", 0, 0, "not opened")],
+                  ("trace_id", "time_s", "voltage_V", "current_A"), local=True)
+        self.assertEqual(b.returncode, 2)
+        self.assertIn("omit all current", b.stderr)
