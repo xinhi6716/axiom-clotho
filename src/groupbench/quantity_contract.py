@@ -603,3 +603,54 @@ def audit_read_qualification(records, *, expected_episodes, streak, band):
                                   Fraction(followups, n),
                                   Fraction(last_pass, last) if last else None,
                                   Fraction(full_pass, full) if full else None)
+
+
+@dataclass(frozen=True)
+class PairedIntervalScoreBounds:
+    """Sharp lower and upper score differences on one common target cell."""
+
+    minimum: Fraction
+    maximum: Fraction
+
+    @property
+    def strict_preference(self) -> str | None:
+        if self.maximum < 0:
+            return "first"
+        if self.minimum > 0:
+            return "second"
+        return None
+
+
+def bound_paired_interval_score_difference(first, second, *, target_cell, alpha):
+    """Bound interval score(first) minus interval score(second) exactly.
+
+    All three pairs are closed, ordered endpoints in the same units. The
+    target cell must independently certify where the ONE common true value
+    could be. A negative difference favors the first forecast. An endpoint
+    of either prediction interval can be an interior extremum of the score
+    difference, even when the two target-cell corners agree on preference.
+    No rounding, imputation, physical certification or inference is done.
+    Combining cells with joint restrictions requires a separate method.
+    """
+    def interval(pair, name):
+        if type(pair) not in (list, tuple) or len(pair) != 2:
+            raise ValueError(f"{name} requires two endpoints.")
+        lo, hi = (_number(v, name) for v in pair)
+        if lo > hi:
+            raise ValueError(f"{name} endpoints must be ordered.")
+        return lo, hi
+
+    a, b = interval(first, "First prediction"), interval(second, "Second prediction")
+    lo, hi = interval(target_cell, "Target cell")
+    level = _number(alpha, "Interval score alpha")
+    if not 0 < level < 1:
+        raise ValueError("Interval score alpha must be strictly between zero and one.")
+    scale = 2 / level
+
+    def score(at, limits):
+        left, right = limits
+        return right - left + scale * max(left - at, at - right, 0)
+
+    probes = {lo, hi, *(x for x in a + b if lo <= x <= hi)}
+    deltas = tuple(score(x, a) - score(x, b) for x in probes)
+    return PairedIntervalScoreBounds(min(deltas), max(deltas))
