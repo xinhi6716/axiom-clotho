@@ -29,18 +29,37 @@ pub fn stratify_group_interval_coverage(
     prediction: &GroupMaxIntervals<'_>,
     observations: &[IntervalObservation<'_>],
 ) -> Result<StratifiedIntervalCoverage, IntervalDiagnosticError> {
-    let mut strata = BTreeMap::new();
+    // Small equal-size group rosters are common on bounded evaluation
+    // cohorts. Count those sizes directly; retain sparse storage for large
+    // groups so one unusual group never allocates a dense histogram.
+    const DIRECT_SIZES: usize = 16;
+    let mut direct = [[0_usize; 3]; DIRECT_SIZES];
+    let mut overflow = BTreeMap::new();
     let overall = evaluate_group_intervals_by_group(roster, prediction, observations, |len, covered| {
-        let stratum = strata.entry(len).or_insert(GroupSizeCoverage {
-            rows_per_group: len, groups: 0, groups_fully_covered: 0, rows_covered: 0,
-        });
-        stratum.groups += 1;
-        stratum.groups_fully_covered += usize::from(len == covered);
-        stratum.rows_covered += covered;
+        let slot = if len <= DIRECT_SIZES {
+            &mut direct[len - 1]
+        } else {
+            overflow.entry(len).or_insert([0_usize; 3])
+        };
+        slot[0] += 1;
+        slot[1] += usize::from(len == covered);
+        slot[2] += covered;
     })?;
     let strata = match overall {
         GroupIntervalDiagnostic::InsufficientFinite { .. } => None,
-        GroupIntervalDiagnostic::Scored { .. } => Some(strata.into_values().collect()),
+        GroupIntervalDiagnostic::Scored { .. } => {
+            let direct_count = direct.iter().filter(|count| count[0] != 0).count();
+            let mut result = Vec::with_capacity(direct_count + overflow.len());
+            result.extend(
+                direct.into_iter().enumerate()
+                    .filter_map(|(i, count)| (count[0] != 0).then_some((i + 1, count)))
+                    .chain(overflow)
+                    .map(|(rows_per_group, [groups, groups_fully_covered, rows_covered])| GroupSizeCoverage {
+                        rows_per_group, groups, groups_fully_covered, rows_covered,
+                    }),
+            );
+            Some(result)
+        }
     };
     Ok(StratifiedIntervalCoverage { overall, strata })
 }
@@ -49,6 +68,30 @@ pub fn stratify_group_interval_coverage(
 mod tests {
     use super::*;
     use crate::group_max_intervals::QueryInterval;
+
+    #[test]
+    fn direct_and_sparse_sizes_share_exact_order_and_coverage_counts() {
+        let mut owned = Vec::new();
+        for (group, size) in [("z", 17), ("y", 1), ("x", 16), ("w", 17), ("v", 40)] {
+            owned.extend((0..size).map(|i| (group, format!("{i:03}"))));
+        }
+        let keys: Vec<_> = owned.iter().map(|(group, row)| RowKey { group, row }).collect();
+        let observations: Vec<_> = keys.iter().rev().map(|&key| IntervalObservation {
+            key,
+            value: if key.group == "w" && key.row == "016" { 2.0 } else { 0.0 },
+        }).collect();
+        let prediction = GroupMaxIntervals::Finite {
+            groups: 1, rank: 1, radius: 1.0,
+            intervals: keys.iter().copied().map(|key| QueryInterval { key, lower: 0.0, upper: 1.0 }).collect(),
+        };
+        let actual = stratify_group_interval_coverage(&keys, &prediction, &observations).unwrap();
+        assert_eq!(actual.strata.unwrap(), [
+            GroupSizeCoverage { rows_per_group: 1, groups: 1, groups_fully_covered: 1, rows_covered: 1 },
+            GroupSizeCoverage { rows_per_group: 16, groups: 1, groups_fully_covered: 1, rows_covered: 16 },
+            GroupSizeCoverage { rows_per_group: 17, groups: 2, groups_fully_covered: 1, rows_covered: 33 },
+            GroupSizeCoverage { rows_per_group: 40, groups: 1, groups_fully_covered: 1, rows_covered: 40 },
+        ]);
+    }
 
     #[test]
     fn shared_scoring_keeps_sizes_sides_and_endpoints_on_permuted_rosters() {
