@@ -550,17 +550,22 @@ def _check(manifest, summary, raw, *, require_run_key=False):
     return version, n, ng, len(names)
 
 
-def validate_evaluation_bundle(run_dir, *, require_run_key=False) -> EvaluationSchemaResult:
+def validate_evaluation_bundle(run_dir, *, require_run_key=False, expected_checksums_sha256=None) -> EvaluationSchemaResult:
     """Check saved regression folds and metrics without fitting, reading source or writing.
 
     Opt in to require a consistent declared run key for all schemas. The
     default checks it only for domain schema 1.3, as historically required.
     A matching declaration does not authenticate the original data.
+    Supply an independently recorded SHA-256 of checksums.json to bind the
+    exact retained bundle bytes; this does not attest to source or fitting.
     """
     if type(require_run_key) is not bool:
         raise ValueError("require_run_key must be a boolean.")
+    trusted = validate_source_sha256(expected_checksums_sha256, "expected_checksums_sha256")
     with _open_run_directory(run_dir) as fd:
-        _, _, raw, signature = _read_file(fd, "checksums.json", MAX_CHECKSUM_BYTES, collect=True)
+        digest, _, raw, signature = _read_file(fd, "checksums.json", MAX_CHECKSUM_BYTES, collect=True)
+        if trusted is not None and digest != trusted.lower():
+            _fail("checksums.json SHA-256 differs from the independently recorded digest.")
         records = _checksum_records(raw)
         if set(records) != EVALUATION_FILES:
             _fail("requires an evaluation bundle.")

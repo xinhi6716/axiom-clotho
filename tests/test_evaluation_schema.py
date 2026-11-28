@@ -162,6 +162,24 @@ class EvaluationSchemaTests(unittest.TestCase):
         self.mutate_json("manifest.json", lambda m: m.pop("source_file_sha256"))
         self.assertEqual(validate_evaluation_bundle(self.root).n_rows, 8)
 
+    def test_independent_checksums_digest_disambiguates_valid_evaluation_runs(self):
+        name = "checksums.json"
+        first = hashlib.sha256((self.root / name).read_bytes()).hexdigest()
+        self.assertEqual(validate_evaluation_bundle(self.root, expected_checksums_sha256=first.upper()).n_rows, 12)
+        self.results[1].write(self.root, overwrite=True)
+        second = hashlib.sha256((self.root / name).read_bytes()).hexdigest()
+        self.assertNotEqual(first, second)
+        self.assertEqual(verify_bundle(self.root).bundle_type, "evaluation")
+        before = {p.name: p.read_bytes() for p in self.root.iterdir()}
+        self.assertEqual(validate_evaluation_bundle(self.root).n_rows, 12)
+        with self.assertRaisesRegex(ValueError, "independently recorded digest"):
+            validate_evaluation_bundle(self.root, expected_checksums_sha256=first)
+        self.assertEqual(validate_evaluation_bundle(self.root, expected_checksums_sha256=second).n_rows, 12)
+        self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
+        for malformed in (True, "z" * 64, "", " " + second):
+            with self.subTest(malformed=malformed), self.assertRaisesRegex(ValueError, "expected_checksums_sha256"):
+                validate_evaluation_bundle(self.root, expected_checksums_sha256=malformed)
+
     def test_rehashed_false_metrics_fail_but_byte_contract_unchanged(self):
         self.mutate_json('summary.json', lambda d: d['models']['selected']['overall'].update(mae=123456.))
         self.assertEqual(verify_bundle(self.root).bundle_type, 'evaluation')
