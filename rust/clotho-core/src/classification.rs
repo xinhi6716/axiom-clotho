@@ -112,13 +112,10 @@ impl LogisticClassifier {
             return Err(ClassificationError::SingleClass);
         }
         let mut columns = Vec::with_capacity(width);
-        let mut scalers = Vec::with_capacity(width);
         for column in 0..width {
-            if x.iter().all(|row| row[column] == x[0][column]) {
-                continue;
+            if !x.iter().all(|row| row[column] == x[0][column]) {
+                columns.push(column);
             }
-            columns.push(column);
-            scalers.push(FeatureScaler::fit(x, column)?);
         }
         let initial_intercept = (positives as f64 / (y.len() - positives) as f64).ln();
         if columns.is_empty()
@@ -127,23 +124,25 @@ impl LogisticClassifier {
             return Ok(Self {
                 width,
                 columns,
-                scalers,
+                scalers: Vec::new(),
                 intercept: initial_intercept,
                 coefficients: Vec::new(),
             });
         }
-        let mut design = Vec::with_capacity(x.len());
-        for row in x {
-            let mut transformed = Vec::with_capacity(columns.len() + 1);
-            transformed.push(1.0);
-            for (&column, scaler) in columns.iter().zip(&scalers) {
-                transformed.push(scaler.transform(row[column])?);
-            }
-            design.push(transformed);
+        // The design also stages checked centered deviations, avoiding
+        // a per-column delta allocation and a second raw-difference pass.
+        let design_width = columns.len() + 1;
+        let mut design = vec![0.0; x.len() * design_width];
+        let mut scalers = Vec::with_capacity(columns.len());
+        for (index, &column) in columns.iter().enumerate() {
+            scalers.push(FeatureScaler::fit_into(x, column, &mut design, design_width, index + 1)?);
+        }
+        for row in design.chunks_exact_mut(design_width) {
+            row[0] = 1.0;
         }
         let mut parameters = vec![0.0; columns.len() + 1];
         parameters[0] = initial_intercept;
-        let parameters = optimize(&design, y, alpha, parameters, MAX_ITERATIONS)?;
+        let parameters = optimize(design.chunks_exact(design_width), y, alpha, parameters, MAX_ITERATIONS)?;
         Ok(Self {
             width,
             columns,
@@ -220,8 +219,8 @@ fn intercept_converges_without_a_design(
         && step[0].abs() <= STEP_TOLERANCE * (1.0 + initial.abs()))
 }
 
-fn optimize(
-    x: &[Vec<f64>],
+fn optimize<'a>(
+    x: impl ExactSizeIterator<Item = &'a [f64]> + Clone,
     y: &[f64],
     alpha: f64,
     mut parameters: Vec<f64>,
@@ -235,7 +234,7 @@ fn optimize(
             value: objective,
             gradient,
             curvature,
-        } = derivatives(x, y, alpha, &parameters)?;
+        } = derivatives(x.clone(), y, alpha, &parameters)?;
         let step = solve_positive_definite(curvature, &gradient)?;
         let small_gradient = gradient
             .iter()
@@ -260,7 +259,7 @@ fn optimize(
             );
             // Large trial steps may overflow; backtrack rather than returning
             // a model or changing the objective's regularization strength.
-            if let Ok(next_objective) = loss(x, y, alpha, &candidate) {
+            if let Ok(next_objective) = loss(x.clone(), y, alpha, &candidate) {
                 if next_objective <= objective - 1e-4 * fraction * descent {
                     accepted = true;
                     break;
@@ -276,8 +275,8 @@ fn optimize(
     Err(ClassificationError::ConvergenceFailure)
 }
 
-fn derivatives(
-    x: &[Vec<f64>],
+fn derivatives<'a>(
+    x: impl ExactSizeIterator<Item = &'a [f64]>,
     y: &[f64],
     alpha: f64,
     parameters: &[f64],
@@ -291,7 +290,7 @@ fn derivatives(
     // Cholesky reads only the lower triangle. Store each active prefix.
     let mut curvature: Vec<_> = (1..=width).map(|len| vec![0.0; len]).collect();
     let count = x.len() as f64;
-    for (row, &label) in x.iter().zip(y) {
+    for (row, &label) in x.zip(y) {
         let score = dot(row, parameters)?;
         let exponential = (-score.abs()).exp();
         let denominator = 1.0 + exponential;
@@ -326,8 +325,8 @@ fn derivatives(
     })
 }
 
-fn loss(
-    x: &[Vec<f64>],
+fn loss<'a>(
+    x: impl ExactSizeIterator<Item = &'a [f64]>,
     y: &[f64],
     alpha: f64,
     parameters: &[f64],
@@ -336,10 +335,11 @@ fn loss(
         return Err(ClassificationError::NumericFailure);
     }
     let mut objective = CompensatedSum::default();
-    for (row, &label) in x.iter().zip(y) {
+    let count = x.len() as f64;
+    for (row, &label) in x.zip(y) {
         let score = dot(row, parameters)?;
         let exponential = (-score.abs()).exp();
-        objective.add(logistic_loss_term(score, label, exponential, x.len() as f64))?;
+        objective.add(logistic_loss_term(score, label, exponential, count))?;
     }
     penalized_objective(objective, parameters, alpha)
 }
@@ -450,37 +450,45 @@ struct FeatureScaler {
 }
 
 impl FeatureScaler {
-    fn fit(x: &[Vec<f64>], column: usize) -> Result<Self, ClassificationError> {
+    fn fit_into(
+        x: &[Vec<f64>],
+        column: usize,
+        design: &mut [f64],
+        width: usize,
+        slot: usize,
+    ) -> Result<Self, ClassificationError> {
         let origin = x[0][column];
         let magnitude = x
             .iter()
             .map(|row| row[column].abs())
             .fold(0.0_f64, f64::max);
-        let deltas = x
-            .iter()
-            .map(|row| scaled_difference(row[column], origin, magnitude))
-            .collect::<Result<Vec<_>, _>>()?;
-        let mean_delta = checked_div(compensated_sum(deltas.iter().copied())?, x.len() as f64)?;
-        let norm = deltas
-            .iter()
-            .fold(0.0_f64, |norm, delta| norm.hypot(delta - mean_delta));
+        let mut sum = CompensatedSum::default();
+        for (row, staged) in x.iter().zip(design.chunks_exact_mut(width)) {
+            let delta = scaled_difference(row[column], origin, magnitude)?;
+            staged[slot] = delta;
+            sum.add(delta)?;
+        }
+        let mean_delta = checked_div(sum.total()?, x.len() as f64)?;
+        let norm = design
+            .chunks_exact(width)
+            .fold(0.0_f64, |norm, row| norm.hypot(row[slot] - mean_delta));
         let deviation = checked_div(norm, (x.len() as f64).sqrt())?;
         if deviation == 0.0 {
             return Err(ClassificationError::NumericFailure);
         }
-        Ok(Self {
-            origin,
-            magnitude,
-            mean_delta,
-            deviation,
-        })
+        let scaler = Self { origin, magnitude, mean_delta, deviation };
+        for row in design.chunks_exact_mut(width) {
+            row[slot] = scaler.transform_delta(row[slot])?;
+        }
+        Ok(scaler)
     }
 
     fn transform(&self, value: f64) -> Result<f64, ClassificationError> {
-        checked_div(
-            scaled_difference(value, self.origin, self.magnitude)? - self.mean_delta,
-            self.deviation,
-        )
+        self.transform_delta(scaled_difference(value, self.origin, self.magnitude)?)
+    }
+
+    fn transform_delta(&self, delta: f64) -> Result<f64, ClassificationError> {
+        checked_div(delta - self.mean_delta, self.deviation)
     }
 }
 
@@ -568,14 +576,6 @@ impl CompensatedSum {
     }
 }
 
-fn compensated_sum(values: impl Iterator<Item = f64>) -> Result<f64, ClassificationError> {
-    let mut terms = CompensatedSum::default();
-    for value in values {
-        terms.add(value)?;
-    }
-    terms.total()
-}
-
 fn dot(a: &[f64], b: &[f64]) -> Result<f64, ClassificationError> {
     let mut products = CompensatedSum::default();
     for (&left, &right) in a.iter().zip(b) {
@@ -587,6 +587,25 @@ fn dot(a: &[f64], b: &[f64]) -> Result<f64, ClassificationError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn flat_design_preserves_column_order_with_constants_interleaved() {
+        let x = [
+            [1.0, -0.0, 3.0, 4.0], [2.0, -0.0, 3.0, 1.0],
+            [3.0, -0.0, 3.0, -2.0], [-4.0, 0.0, 3.0, -1.0],
+            [-2.0, 0.0, 3.0, 7.0], [5.0, 0.0, 3.0, 8.0],
+        ].map(Vec::from);
+        let reduced: Vec<_> = x.iter().map(|row| vec![row[0], row[3]]).collect();
+        let labels = [0.0, 0.0, 1.0, 1.0, 0.0, 1.0];
+        let with_constants = LogisticClassifier::fit(&x, &labels, 0.3).unwrap();
+        let compact = LogisticClassifier::fit(&reduced, &labels, 0.3).unwrap();
+        assert_eq!(with_constants.columns, [0, 3]);
+        assert!(with_constants.predict_proba(&x).unwrap().into_iter().map(f64::to_bits)
+            .eq(compact.predict_proba(&reduced).unwrap().into_iter().map(f64::to_bits)));
+        let invalid = vec![vec![f64::MAX, 1.0], vec![f64::from_bits(1), 2.0]];
+        assert!(matches!(LogisticClassifier::fit(&invalid, &[0.0, 1.0], 0.3),
+            Err(ClassificationError::NumericFailure)));
+    }
 
     #[test]
     fn only_intercept_predictions_match_single_row_bits_after_full_validation() {
@@ -613,17 +632,17 @@ mod tests {
         let x = vec![vec![1.0]; 4];
         let y = [0.0, 1.0, 0.0, 1.0];
         let initial = vec![4.0];
-        let d = derivatives(&x, &y, 0.0, &initial).unwrap();
+        let d = derivatives(x.iter().map(Vec::as_slice), &y, 0.0, &initial).unwrap();
         let step = solve_positive_definite(d.curvature, &d.gradient).unwrap();
-        assert!(loss(&x, &y, 0.0, &[initial[0] - step[0]]).unwrap() > d.value);
-        let solution = optimize(&x, &y, 0.0, initial, MAX_ITERATIONS).unwrap();
+        assert!(loss(x.iter().map(Vec::as_slice), &y, 0.0, &[initial[0] - step[0]]).unwrap() > d.value);
+        let solution = optimize(x.iter().map(Vec::as_slice), &y, 0.0, initial, MAX_ITERATIONS).unwrap();
         assert!(solution[0].abs() < 1e-9);
     }
 
     #[test]
     fn packed_lower_curvature_matches_zero_logit_outer_products() {
         let x = vec![vec![1.0, 2.0, -3.0], vec![1.0, -4.0, 5.0]];
-        let d = derivatives(&x, &[0.0, 1.0], 0.125, &[0.0; 3]).unwrap();
+        let d = derivatives(x.iter().map(Vec::as_slice), &[0.0, 1.0], 0.125, &[0.0; 3]).unwrap();
         assert_eq!(d.gradient, vec![0.0, 1.5, -2.0]);
         assert_eq!(
             d.curvature,
@@ -668,11 +687,11 @@ mod tests {
     fn exhausted_iteration_budget_never_returns_a_model() {
         let x = [vec![1.0, -1.0], vec![1.0, 1.0]];
         assert_eq!(
-            optimize(&x, &[0.0, 1.0], 0.1, vec![0.0; 2], 0),
+            optimize(x.iter().map(Vec::as_slice), &[0.0, 1.0], 0.1, vec![0.0; 2], 0),
             Err(ClassificationError::ConvergenceFailure)
         );
         assert_eq!(
-            optimize(&x, &[0.0, 1.0], 0.1, vec![0.0; 2], 1),
+            optimize(x.iter().map(Vec::as_slice), &[0.0, 1.0], 0.1, vec![0.0; 2], 1),
             Err(ClassificationError::ConvergenceFailure)
         );
     }
@@ -689,8 +708,8 @@ mod tests {
         let y = [1.0, 0.0, 1.0, 0.0, 0.0];
         for parameters in [[-0.0, 0.0, 0.0], [-0.1, 1.5, -0.4], [0.125, 1000.0, 0.1]] {
             for alpha in [0.0, 0.03125, 11.0] {
-                let objective = loss(&design, &y, alpha, &parameters).unwrap();
-                let combined = derivatives(&design, &y, alpha, &parameters).unwrap();
+                let objective = loss(design.iter().map(Vec::as_slice), &y, alpha, &parameters).unwrap();
+                let combined = derivatives(design.iter().map(Vec::as_slice), &y, alpha, &parameters).unwrap();
                 assert_eq!(combined.value.to_bits(), objective.to_bits());
             }
         }
@@ -704,10 +723,10 @@ mod tests {
             let initial = f64::from(n - 1).ln();
             for trial in [initial, 0.5, -20.0] {
                 let gated = intercept_converges_without_a_design(&y, trial).unwrap();
-                let explicit = optimize(&design, &y, 0.0, vec![trial], 1);
+                let explicit = optimize(design.iter().map(Vec::as_slice), &y, 0.0, vec![trial], 1);
                 assert_eq!(gated, explicit.is_ok());
             }
-            let baseline = optimize(&design, &y, 1e100, vec![initial], MAX_ITERATIONS).unwrap();
+            let baseline = optimize(design.iter().map(Vec::as_slice), &y, 1e100, vec![initial], MAX_ITERATIONS).unwrap();
             let model =
                 LogisticClassifier::fit(&vec![vec![7.0, -0.0]; y.len()], &y, 1e100).unwrap();
             assert_eq!(model.intercept.to_bits(), baseline[0].to_bits());
@@ -717,13 +736,13 @@ mod tests {
     #[test]
     fn logistic_loss_and_residuals_remain_stable_at_large_logits() {
         let x = [vec![1.0, -1.0], vec![1.0, 1.0]];
-        let correct = loss(&x, &[0.0, 1.0], 0.0, &[0.0, 1000.0]).unwrap();
-        let wrong = loss(&x, &[1.0, 0.0], 0.0, &[0.0, 1000.0]).unwrap();
+        let correct = loss(x.iter().map(Vec::as_slice), &[0.0, 1.0], 0.0, &[0.0, 1000.0]).unwrap();
+        let wrong = loss(x.iter().map(Vec::as_slice), &[1.0, 0.0], 0.0, &[0.0, 1000.0]).unwrap();
         assert_eq!(correct, 0.0);
         assert_eq!(wrong, 1000.0);
         assert_eq!(sigmoid(-1000.0), 0.0);
         assert_eq!(sigmoid(1000.0), 1.0);
-        let result = derivatives(&x, &[0.0, 1.0], 0.0, &[0.0, 40.0]).unwrap();
+        let result = derivatives(x.iter().map(Vec::as_slice), &[0.0, 1.0], 0.0, &[0.0, 40.0]).unwrap();
         assert!(result.gradient[1] < 0.0);
         assert!(result.curvature[1][1] > 0.0);
     }
