@@ -43,6 +43,22 @@ def coverage(entries):
     }
 
 
+def joint_chip_support(entries, chips):
+    """Distinguish pairwise support from one exact action shared by every declared chip."""
+    support = defaultdict(set)
+    for signature, chip in entries:
+        support[signature].add(chip)
+    histogram = Counter(map(len, support.values()))
+    full = sum(len(covered) == len(chips) for covered in support.values())
+    return {
+        "declared_chip_denominator": len(chips),
+        "exact_action_strata_by_distinct_chip_count": {
+            str(count): strata for count, strata in sorted(histogram.items())
+        },
+        "exact_action_strata_supported_by_all_declared_chips": full,
+    }
+
+
 def _csv_reader(path):
     if not stat.S_ISREG(path.stat().st_mode):
         raise ValueError("input must be a regular file")
@@ -77,7 +93,7 @@ def _expected_transitions(path):
     return keys
 
 
-def audit(path, *, expected_path=None):
+def audit(path, *, expected_path=None, diagnose_joint_chip_support=False):
     """Return redacted counts, rejecting invalid identities and local timelines."""
     expected = _expected_transitions(expected_path) if expected_path is not None else None
     reader = _csv_reader(path)
@@ -177,6 +193,13 @@ def audit(path, *, expected_path=None):
             "read_condition_coverage": coverage(expected_read_coverage),
             "exact_action_coverage": coverage(expected_action_coverage),
         }
+    if diagnose_joint_chip_support:
+        support = {"all_captured_chips": joint_chip_support(action_coverage, {k[0] for k in transitions})}
+        if expected is not None:
+            support["expected_roster_chips"] = joint_chip_support(
+                expected_action_coverage, {k[0] for k in expected}
+            )
+        report["declared_exact_action_joint_chip_support"] = support
     return report
 
 
@@ -187,9 +210,12 @@ def main():
                         help="also require a declared exact action shared across chip labels")
     parser.add_argument("--expected-transitions", type=Path,
                         help="identity-only CSV roster; require exact captured transition coverage")
+    parser.add_argument("--diagnose-joint-chip-support", action="store_true",
+                        help="count exact actions supported across every captured or frozen chip")
     args = parser.parse_args()
     try:
-        report = audit(args.csv, expected_path=args.expected_transitions)
+        report = audit(args.csv, expected_path=args.expected_transitions,
+                       diagnose_joint_chip_support=args.diagnose_joint_chip_support)
     except (OSError, UnicodeError, csv.Error):
         parser.exit(2, "error: input could not be read as UTF-8 CSV\n")
     except ValueError as exc:

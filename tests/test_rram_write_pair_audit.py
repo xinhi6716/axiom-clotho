@@ -87,6 +87,39 @@ class WritePairAudit(unittest.TestCase):
         unrestricted = self.run_rows(a + b)
         self.assertNotIn("expected_roster_eligible_coverage", json.loads(unrestricted.stdout))
 
+    def test_pairwise_overlap_does_not_supply_a_joint_action_all_chips_can_run(self):
+        rows, roster = [], []
+        for chip, widths in (("A", ("2e-7", "3e-7")), ("B", ("2e-7", "4e-7")),
+                             ("C", ("3e-7", "4e-7"))):
+            for index, width in enumerate(widths):
+                events = triplet(chip, f"t{index}", index * 3)
+                events[1][7] = width
+                rows.extend(events)
+                roster.append(events[0][:4])
+        flag = "--diagnose-joint-chip-support"
+        checked = self.run_rows(rows, extra=(flag, "--require-shared-action"))
+        self.assertEqual(checked.returncode, 0)
+        report = json.loads(checked.stdout)
+        self.assertEqual(report["declared_exact_action_coverage"]["multi_chip_strata"], 3)
+        self.assertEqual(report["declared_exact_action_joint_chip_support"]["all_captured_chips"], {
+            "declared_chip_denominator": 3,
+            "exact_action_strata_by_distinct_chip_count": {"2": 3},
+            "exact_action_strata_supported_by_all_declared_chips": 0,
+        })
+
+        rows.extend(triplet("C", "t2", 6))  # Now all captured chips do share 2e-7.
+        roster.append(rows[-1][:4])
+        roster.append(triplet("D")[0][:4])  # D missing; not omitted from the cohort check.
+        result = self.run_rows(rows, roster=roster, extra=(flag,))
+        self.assertEqual(result.returncode, 1)
+        support = json.loads(result.stdout)["declared_exact_action_joint_chip_support"]
+        self.assertEqual(support["all_captured_chips"]["exact_action_strata_supported_by_all_declared_chips"], 1)
+        self.assertEqual(support["expected_roster_chips"], {
+            "declared_chip_denominator": 4,
+            "exact_action_strata_by_distinct_chip_count": {"2": 2, "3": 1},
+            "exact_action_strata_supported_by_all_declared_chips": 0,
+        })
+
     def test_eligible_chips_with_disjoint_protocols_have_no_shared_strata(self):
         a, b = triplet(), triplet("chipB")
         for row in b:
