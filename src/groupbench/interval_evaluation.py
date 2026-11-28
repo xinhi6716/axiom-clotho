@@ -686,9 +686,18 @@ def diagnose_saved_interval_whole_group_coverage(document):
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="mlcalc evaluate-intervals", description=__doc__)
     parser.add_argument("input", type=Path, help="Regular local saved-interval JSON; report goes to stdout only")
+    diagnostics = {
+        "reference": diagnose_saved_interval_reference,
+        "whole-group": diagnose_saved_interval_whole_group_coverage,
+    }
+    parser.add_argument("--diagnostic", choices=diagnostics,
+                        help="Emit an opt-in diagnostic instead of the default report: "
+                             "reference compares observed rates with declared alpha; "
+                             "whole-group counts groups whose every supplied row is covered.")
     args = parser.parse_args(argv)
     try:
-        report = evaluate_saved_intervals(load_document(_read_input(args.input)))
+        evaluator = evaluate_saved_intervals if args.diagnostic is None else diagnostics[args.diagnostic]
+        report = evaluator(load_document(_read_input(args.input)))
         print(json.dumps(report, indent=2, sort_keys=True, allow_nan=False))
     except (ValueError, OSError, TypeError) as exc:
         print(f"interval evaluation rejected: {exc}", file=sys.stderr)

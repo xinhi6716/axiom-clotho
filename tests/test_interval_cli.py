@@ -150,5 +150,44 @@ class SavedIntervalMainCliTests(unittest.TestCase):
         self.assertFalse((self.root / "no.json").exists())
 
 
+    def test_opt_in_diagnostics_on_actual_workflow_and_calculator_entrypoints(self):
+        env = os.environ.copy()
+        env.pop("PYTHONHOME", None)
+        env.update(PYTHONPATH=str(Path(__file__).resolve().parents[1] / "src"),
+                   PYTHONNOUSERSITE="1", PYTHONDONTWRITEBYTECODE="1")
+        before = {p.name: p.read_bytes() for p in self.root.iterdir()}
+        routes = [
+            ["groupbench.interval_evaluation"],
+            ["groupbench", "evaluate-intervals"],
+            ["mlworkflow", "tabular", "evaluate-intervals"],
+        ]
+        expected = {
+            "reference": interval_evaluation.diagnose_saved_interval_reference,
+            "whole-group": interval_evaluation.diagnose_saved_interval_whole_group_coverage,
+        }
+        for diagnostic, evaluator in expected.items():
+            for route in routes:
+                with self.subTest(diagnostic=diagnostic, route=route):
+                    out = subprocess.run(
+                        [sys.executable, "-m", *route, "--diagnostic", diagnostic, str(self.input)],
+                        cwd=self.root, env=env, capture_output=True, timeout=20)
+                    self.assertEqual((out.returncode, out.stderr), (0, b""))
+                    parsed = interval_evaluation.load_document(self.input.read_text(encoding="utf-8"))
+                    self.assertEqual(json.loads(out.stdout), evaluator(parsed))
+        self.assertEqual({p.name: p.read_bytes() for p in self.root.iterdir()}, before)
+
+    def test_opt_in_diagnostics_reuse_the_full_input_contract(self):
+        document = fixture()
+        document["rows"].pop()
+        self.input.write_text(json.dumps(document), encoding="utf-8")
+        for choice in ("reference", "whole-group"):
+            code, stdout, stderr = self.both([str(self.input), "--diagnostic", choice])
+            self.assertEqual((code, stdout), (2, ""))
+            self.assertIn("interval evaluation rejected:", stderr)
+        code, stdout, stderr = self.both([str(self.input), "--diagnostic", "invented"])
+        self.assertEqual((code, stdout), (2, ""))
+        self.assertIn("invalid choice", stderr)
+
+
 if __name__ == "__main__":
     unittest.main()

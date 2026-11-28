@@ -350,7 +350,7 @@ Working with your own data:
   mlcalc predict --help      Fit on training data and predict new rows.
   mlcalc binary --help       Use the separate numeric 0/1 workflow.
   mlcalc evaluate-binary --help  Score a complete saved binary probability cohort; no fitting.
-  mlcalc evaluate-intervals --help  Score already saved interval bounds, without fitting.
+  mlcalc evaluate-intervals --help  Score saved bounds or report an opt-in coverage diagnostic.
   mlcalc compare-predictions --help  Compare two saved regression bundles on identical query bytes; no fitting.
   mlcalc score-predictions --help  Join complete later outcomes to saved regression predictions; no fitting.
 
