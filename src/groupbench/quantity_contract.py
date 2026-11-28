@@ -369,3 +369,90 @@ def audit_polarity_mirror(records, *, expected_pairs) -> PolarityMirrorAudit:
         raise ValueError("Polarity records must match the frozen pair roster exactly.")
     mae = sum((s / n for s, n in blocks.values()), Fraction()) / len(blocks)
     return PolarityMirrorAudit(len(blocks), len(seen), zeroes, mae, worst / 2, relative_worst)
+
+
+_PAIRING_MAX_BINS = 128
+_PAIRING_MAX_TOTAL = 1_000_000
+_PAIRING_MAX_VALUE = (1 << 63) - 1
+
+
+@dataclass(frozen=True)
+class PairingCertificate:
+    """Integer primal table and dual potentials in the fixed histogram order."""
+
+    flow: tuple
+    origin_potential: tuple
+    endpoint_potential: tuple
+
+
+@dataclass(frozen=True)
+class PairingEnvelope:
+    """Exact signed total cost extrema within one declared pairing stratum."""
+
+    pair_count: int
+    minimum: int
+    maximum: int
+
+
+def _pairing_vector(values, n, low, high):
+    if (type(values) is not tuple or len(values) != n
+            or any(type(x) is not int or not low <= x <= high for x in values)):
+        raise ValueError("Expected a bounded ordered vector of exact integers.")
+    return values
+
+
+def certify_pairing_envelope(origin_counts, endpoint_counts, costs,
+                             minimum, maximum) -> PairingEnvelope:
+    """Check sharp integer extrema over all within-stratum histogram couplings.
+
+    Supply tuples of positive bin counts and a signed integer cost matrix
+    (for example doubled corrected loss minus doubled persistence loss).
+    Each certificate needs one feasible integer flow and row/column duals.
+    Check every mass, dual inequality, and exact equality of the two
+    objectives. Any feasible integer flow can be realized by a pairing of
+    repeated rows, so the certified endpoints are attained. The function
+    neither computes certificates nor asserts provenance, confidence,
+    admissibility of every hypothetical coupling, or the measured pairing.
+    """
+    if any(type(x) is not tuple or not 1 <= len(x) <= _PAIRING_MAX_BINS
+           for x in (origin_counts, endpoint_counts)):
+        raise ValueError("Histograms require at most 128 non-empty ordered bins each.")
+    n, m = len(origin_counts), len(endpoint_counts)
+    a = _pairing_vector(origin_counts, n, 1, _PAIRING_MAX_TOTAL)
+    b = _pairing_vector(endpoint_counts, m, 1, _PAIRING_MAX_TOTAL)
+    total = sum(a)
+    if total != sum(b) or total > _PAIRING_MAX_TOTAL:
+        raise ValueError("Pairing histograms must have the same bounded total mass.")
+    if type(costs) is not tuple or len(costs) != n:
+        raise ValueError("Pairing cost matrix has incorrect origin dimension.")
+    for row in costs:
+        _pairing_vector(row, m, -_PAIRING_MAX_VALUE, _PAIRING_MAX_VALUE)
+
+    def bound(certificate, direction):
+        if (type(certificate) is not PairingCertificate or type(certificate.flow) is not tuple
+                or len(certificate.flow) != n):
+            raise ValueError("Pairing certificate has incorrect type or flow shape.")
+        u = _pairing_vector(certificate.origin_potential, n, -_PAIRING_MAX_VALUE, _PAIRING_MAX_VALUE)
+        v = _pairing_vector(certificate.endpoint_potential, m, -_PAIRING_MAX_VALUE, _PAIRING_MAX_VALUE)
+        endpoints, primal = [0] * m, 0
+        for i, row in enumerate(certificate.flow):
+            _pairing_vector(row, m, 0, total)
+            if sum(row) != a[i]:
+                raise ValueError("Pairing flow does not match origin masses.")
+            for j, count in enumerate(row):
+                endpoints[j] += count
+                price = costs[i][j]
+                if direction * (u[i] + v[j] - price) > 0:
+                    raise ValueError("Pairing dual violates its bound at a bin pair.")
+                primal += count * price
+        if tuple(endpoints) != b:
+            raise ValueError("Pairing flow does not match endpoint masses.")
+        dual = sum(x*y for x,y in zip(a,u)) + sum(x*y for x,y in zip(b,v))
+        if primal != dual:
+            raise ValueError("Pairing primal and dual objectives must agree exactly.")
+        return primal
+
+    lo, hi = bound(minimum, 1), bound(maximum, -1)
+    if lo > hi:
+        raise ValueError("Minimum exceeds maximum pairing cost.")
+    return PairingEnvelope(total, lo, hi)
