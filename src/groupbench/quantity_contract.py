@@ -528,3 +528,78 @@ def audit_elapsed_capture_support(reference_clock, comparison_clock, *, windows)
                 j += 1
         output.append(ElapsedCaptureSupport(key,m,n,span_a,span_b,shared,shared==m==n and m>0))
     return tuple(output)
+
+
+@dataclass(frozen=True)
+class ReadQualificationAudit:
+    """Exact shadow replay on a complete roster of attempted episodes."""
+
+    episodes: int
+    followup_passes: int
+    last_qualified: int
+    streak_qualified: int
+    last_qualified_followup_passes: int
+    streak_qualified_followup_passes: int
+    roster_rate: Fraction
+    last_selected_rate: Fraction | None
+    streak_selected_rate: Fraction | None
+
+
+def audit_read_qualification(records, *, expected_episodes, streak, band):
+    """Compare last-read and full-streak selection without changing exposure.
+
+    Each record is (episode, prequalification_readings, followup_reading).
+    The readings must contain exactly the prespecified number of consecutive
+    observations before a fresh, common follow-up slot measured on every
+    attempted episode. All values have common units; the same closed band
+    defines in-band qualification and follow-up. The independent roster,
+    acquisition chronology and identical exposures are caller obligations.
+    The selected rates are descriptive, not causal policy effects.
+    """
+    _values(records)
+    _values(expected_episodes)
+    if type(streak) is not int or not 2 <= streak <= 256:
+        raise ValueError("A qualification streak needs 2 to 256 predeclared reads.")
+    if type(band) not in (tuple, list) or len(band) != 2:
+        raise ValueError("Qualification band requires two closed endpoints.")
+    lo, hi = (_number(x, "Band endpoint") for x in band)
+    if lo > hi:
+        raise ValueError("Qualification band endpoints must be ordered.")
+
+    def plain_id(key):
+        if (type(key) is not str or not 1 <= len(key) <= 256 or key.strip() != key
+                or any(unicodedata.category(c) in ("Cc", "Cs") for c in key)):
+            raise ValueError("Qualifications require plain nonblank episode IDs.")
+        return key
+
+    expected = {plain_id(key) for key in expected_episodes}
+    if len(expected) != len(expected_episodes):
+        raise ValueError("Duplicate episode in the frozen qualification roster.")
+    seen = set()
+    followups = last = full = last_pass = full_pass = 0
+    for row in records:
+        if type(row) is not tuple or len(row) != 3:
+            raise ValueError("Qualification requires each episode's prior reads and fresh follow-up.")
+        key = plain_id(row[0])
+        if key not in expected or key in seen:
+            raise ValueError("Qualification records must match the frozen episode roster exactly.")
+        seen.add(key)
+        prior = row[1]
+        if type(prior) not in (list, tuple) or len(prior) != streak:
+            raise ValueError("Each episode needs the full prespecified prequalification streak.")
+        eligible = tuple(lo <= _number(x, "Prequalification read") <= hi for x in prior)
+        success = lo <= _number(row[2], "Fresh follow-up read") <= hi
+        followups += success
+        if eligible[-1]:
+            last += 1
+            last_pass += success
+        if all(eligible):
+            full += 1
+            full_pass += success
+    if seen != expected:
+        raise ValueError("Qualification records must match the frozen episode roster exactly.")
+    n = len(expected)
+    return ReadQualificationAudit(n, followups, last, full, last_pass, full_pass,
+                                  Fraction(followups, n),
+                                  Fraction(last_pass, last) if last else None,
+                                  Fraction(full_pass, full) if full else None)
