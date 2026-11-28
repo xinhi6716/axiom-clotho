@@ -124,6 +124,12 @@ def evaluation_fixture(baselines=(FAMILY,)):
     folds = [audit(SIZES, pair, fold) for fold, pair in enumerate((("a", "b"), ("c", "d"), ("e", "f")))]
     for fold, record in enumerate(folds):
         record.update(inner_seed=fold + 1, **selection({g: SIZES[g] for g in record["train_groups"]}, conf, fold + 1))
+        if "group_median" in baselines:
+            # Retained labels are all zero, so the verifiably constant median
+            # predictor wins with zero error in every inner holdout.
+            median = next(row for row in record["inner_selection"] if row["family"] == "group_median")
+            median.update(selection_score=0.0, inner_fold_scores=[0.0, 0.0])
+            record.update(selected_candidate=median["candidate"], selected_family="group_median")
     manifest = {"schema_version": "1.4", "protocol": "nested-group-kfold-extended-families-v2",
                 "capabilities": [f + "-v1" for f in OPTIONAL if f in baselines],
                 "n_rows": 9, "n_groups": 6, "config": conf, "outer_folds": folds}

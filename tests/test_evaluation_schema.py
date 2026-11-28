@@ -200,6 +200,53 @@ class EvaluationSchemaTests(unittest.TestCase):
             validate_evaluation_bundle(self.root)
         self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
 
+    def test_extended_v2_replays_inner_group_median_loss(self):
+        frame = pd.DataFrame({"g": ["a", "b", "b", "c", "d", "d", "e", "f", "f"],
+                              "x": range(9), "y": [1, 3, 2, 5, 4, 8, 7, 9, 6]})
+        for objective in ("mae", "group_mae"):
+            with self.subTest(objective=objective):
+                benchmark(frame, target="y", group="g",
+                          baselines=("group_median", "group_balanced_ridge"),
+                          outer_splits=3, inner_splits=2, objective=objective).write(
+                              self.root, overwrite=True)
+                self.assertEqual(validate_evaluation_bundle(self.root).schema_version, "1.4")
+
+                def rescale(manifest):
+                    outer = manifest["outer_folds"][0]
+                    record = next(r for r in outer["inner_selection"] if r["family"] == "group_median")
+                    self.assertGreater(record["selection_score"], 0)
+                    factor = 0.5 if outer["selected_family"] == "group_median" else 2
+                    record["selection_score"] *= factor
+                    record["inner_fold_scores"] = [x * factor for x in record["inner_fold_scores"]]
+
+                self.mutate_json("manifest.json", rescale)
+                self.assertEqual(verify_bundle(self.root).bundle_type, "evaluation")
+                with patch("groupbench.model.GroupBenchRegressor._fit_prepared",
+                           side_effect=AssertionError("fit forbidden")):
+                    with self.assertRaisesRegex(ValueError, "inner group-median fold score"):
+                        validate_evaluation_bundle(self.root)
+
+    def test_extended_v2_replays_small_group_median_pooled_loss(self):
+        frame = pd.DataFrame({"g": list("abcdef") * 2, "x": range(12),
+                              "y": [i * i * 1e-50 for i in range(12)]})
+        benchmark(frame, target="y", group="g",
+                  baselines=("group_median", "group_balanced_ridge"),
+                  outer_splits=3, inner_splits=2).write(self.root, overwrite=True)
+        self.assertEqual(validate_evaluation_bundle(self.root).schema_version, "1.4")
+
+        def rescale_pooled_only(manifest):
+            outer = manifest["outer_folds"][0]
+            record = next(r for r in outer["inner_selection"] if r["family"] == "group_median")
+            self.assertGreater(record["selection_score"], 0)
+            self.assertLess(record["selection_score"], 1e-12)
+            factor = 0.5 if outer["selected_family"] == "group_median" else 2
+            record["selection_score"] *= factor
+
+        self.mutate_json("manifest.json", rescale_pooled_only)
+        self.assertEqual(verify_bundle(self.root).bundle_type, "evaluation")
+        with self.assertRaisesRegex(ValueError, "inner group-median pooled score"):
+            validate_evaluation_bundle(self.root)
+
     def test_extended_v1_saved_winner_must_match_complete_selection_ledger(self):
         frame = pd.DataFrame({"g": list("abcdef") * 2, "x": range(12),
                               "y": [i * i for i in range(12)]})

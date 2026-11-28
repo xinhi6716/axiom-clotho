@@ -14,7 +14,7 @@ from .baselines import _lower_group_median
 from .data import MAX_FEATURES, validate_groups, validate_seed, validate_source_sha256
 from .domain_selection import domain_metadata
 from .evaluation import _evaluation_run_key
-from .metrics import regression_metrics, _checked_arithmetic
+from .metrics import grouped_metrics, regression_metrics, _checked_arithmetic
 from .model import _check_split_position_budget, candidates_for
 from .splitting import GroupKFold
 from .prediction_schema import (_manifest, _DECIMAL, _optional_selection_metadata, _extension_families,
@@ -104,6 +104,35 @@ def _partitioned_metrics(observed, predicted, group_rows, fold_rows, fold_groups
                  [by_group[group] for group in fold_groups[fold]])}
                 for fold, indexes in enumerate(fold_rows)]
     return dict(overall=overall, per_group=per_group, per_fold=per_fold)
+
+
+def _check_inner_group_median_scores(audit, objective, median_inputs, group_rows):
+    """Reconstruct v1.4 group-median objective scores without model or features."""
+    observed, groups = median_inputs
+    record = next(record for record in audit["inner_selection"] if record["family"] == "group_median")
+    held_predictions = {}
+    group_scores = {}
+    for split, item, saved in zip(audit["inner_folds"], record["inner_fit_details"],
+                                  record["inner_fold_scores"], strict=True):
+        training = [row for group in split["train_groups"] for row in group_rows[group]]
+        expected, _ = _lower_group_median(observed[training], groups[training])
+        if item["details"]["constant"] != expected:
+            _fail("inner group-median constant differs from retained training labels.")
+        # The writer scores inner holdouts in original row order, not group
+        # ID order; preserve it for floating-point and encounter-order parity.
+        held = sorted(row for group in split["test_groups"] for row in group_rows[group])
+        prediction = np.full(len(held), expected, dtype=float)
+        scores, per_group = grouped_metrics(observed[held], prediction, groups[held])
+        if not math.isclose(saved, scores[objective], rel_tol=REL_TOL, abs_tol=0.0):
+            _fail("inner group-median fold score differs from retained holdout labels.")
+        held_predictions.update((row, expected) for row in held)
+        group_scores.update((row["group"], row) for row in per_group)
+    held = sorted(held_predictions)
+    group_order = dict.fromkeys(groups[held])
+    scores = _aggregate_saved(observed[held], [held_predictions[row] for row in held],
+                              [group_scores[group] for group in group_order])
+    if not math.isclose(record["selection_score"], scores[objective], rel_tol=REL_TOL, abs_tol=0.0):
+        _fail("inner group-median pooled score differs from retained holdout labels.")
 
 
 def _check_seeded_outer_assignment(manifest, config, groups, fold_rows):
@@ -539,14 +568,8 @@ def _check(manifest, summary, raw, *, require_run_key=False):
             if constant != expected_constant:
                 _fail("group-median constant differs from retained training labels.")
             if version == "1.4":
-                record = next(record for record in audit["inner_selection"]
-                              if record["family"] == "group_median")
-                for split, item in zip(audit["inner_folds"], record["inner_fit_details"], strict=True):
-                    training = [row for group in split["train_groups"] for row in group_rows[group]]
-                    expected_inner, _ = _lower_group_median(
-                        median_inputs[0][training], median_inputs[1][training])
-                    if item["details"]["constant"] != expected_inner:
-                        _fail("inner group-median constant differs from retained training labels.")
+                _check_inner_group_median_scores(
+                    audit, config["selection_objective"], median_inputs, group_rows)
         # Older narrow artifacts can omit selection metadata. Whenever the
         # family is declared, the selected entry must equal that fold's
         # family refit, not a separate vector with matching scalar metrics.
