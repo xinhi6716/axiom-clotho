@@ -409,6 +409,47 @@ def _audit_polarity_mirror_main(argv):
     return 0
 
 
+def _add_affine_readouts_parser(sub):
+    parser = sub.add_parser(
+        "audit-affine-readouts", allow_abbrev=False,
+        help="Check two readout paths using endpoint standards and a reserved interior standard",
+        description="Descriptive exact affine-path audit with a reserved interior check; no model fit.",
+        epilog="Standards must be ordered and units comparable; set both tolerances before comparison.",
+    )
+    parser.add_argument("input", type=Path, help="Local v1 JSON with standards, readings and predeclared tolerances")
+    return parser
+
+
+def _audit_affine_readouts_main(argv):
+    from dataclasses import asdict
+    from decimal import InvalidOperation
+    from fractions import Fraction
+
+    from .budget_comparison import _read_input, load_document
+    from .quantity_contract import compare_affine_readouts
+
+    parser = _add_affine_readouts_parser(argparse.ArgumentParser(prog="groupbench").add_subparsers())
+    args = parser.parse_args(argv)
+    fields = {"standards", "reference", "comparison", "max_interior_error", "max_path_difference"}
+    try:
+        doc = load_document(_read_input(args.input))
+        if (type(doc) is not dict or set(doc) != fields | {"schema_version"}
+                or type(doc["schema_version"]) is not int or doc["schema_version"] != 1):
+            raise ValueError("invalid affine readout document")
+        audit = compare_affine_readouts(**{key: doc[key] for key in fields})
+        report = {
+            "schema_id": "mlcalc.affine_readout_audit", "schema_version": 1,
+            "claim_scope": "descriptive_supplied_standards_only",
+            **{key: str(value) if isinstance(value, Fraction) else value
+               for key, value in asdict(audit).items()},
+        }
+        print(json.dumps(report, indent=2, sort_keys=True, allow_nan=False))
+    except (ValueError, OSError, TypeError, InvalidOperation):
+        print("affine readout audit rejected: invalid or unavailable input", file=sys.stderr)
+        return 2
+    return 0
+
+
 def _leaderboard_float(value):
     # Preserve nonzero scores below the fixed-decimal display resolution.
     return f"{value:.4e}" if 0 < abs(value) < 0.0001 else f"{value:.4f}"
@@ -423,6 +464,8 @@ def main(argv=None) -> int:
         return plan_group_windows(argv[1:])
     if argv and argv[0] == "validate-group-forward-bundle":
         return _validate_group_forward_main(argv[1:])
+    if argv and argv[0] == "audit-affine-readouts":
+        return _audit_affine_readouts_main(argv[1:])
     if argv and argv[0] == "audit-polarity-mirror":
         return _audit_polarity_mirror_main(argv[1:])
     if argv and argv[0] == "compare-budgets":
@@ -467,6 +510,7 @@ Working with your own data:
   mlcalc compare-intervals --help  Compute matched candidate-minus-reference interval scores.
   mlcalc compare-budgets --help  Compare two methods at two saved validation budgets.
   mlcalc audit-polarity-mirror --help  Check matched +V/-V electrical readings against a frozen roster.
+  mlcalc audit-affine-readouts --help  Compare two readout paths with a reserved interior standard.
   mlcalc compare-predictions --help  Compare two saved regression bundles on identical query bytes; no fitting.
   mlcalc score-predictions --help  Join complete later outcomes to saved regression predictions; no fitting.
 
@@ -512,6 +556,7 @@ The groupbench command is an alias for the same CLI.""",
         _add_protocol(preview, outer=mode == "run", output=False, domain_selection=True)
     _add_verify_parser(sub)
     _add_polarity_mirror_parser(sub)
+    _add_affine_readouts_parser(sub)
     _add_compare_intervals_parser(sub)
     _add_group_forward_validate_parser(sub)
     schema = sub.add_parser("validate-prediction-bundle", allow_abbrev=False,

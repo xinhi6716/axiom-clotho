@@ -119,3 +119,27 @@ used, with at most 20,000 rows per file. Success emits aggregate JSON with
 rational strings for exact metrics (`null` for an undefined relative metric).
 Rejection exits 2 without a report. It does not fit or write files, and the
 diagnostic describes the supplied pairs rather than proving physical mechanisms.
+
+
+### CLI: reserved-standard affine readout audit
+
+```sh
+mlcalc audit-affine-readouts comparison.json
+clotho tabular audit-affine-readouts comparison.json
+```
+
+The input is a local UTF-8 JSON object, for example:
+
+```json
+{"schema_version":1,"standards":[0,1,3],"reference":[0,1,3],
+ "comparison":[0.01,1.01,3.01],"max_interior_error":0,"max_path_difference":0.01}
+```
+
+Each triple is in low/interior/high order. Only the endpoints define each
+line; the reserved interior standard provides a separate discrepancy check.
+Predeclare both inclusive tolerances in common response units. JSON decimals
+are exact, and output deviations are rational strings. Exit 0 means an
+audit was computed, not that its flags passed: inspect `interior_pass` and
+`shared_affine_pass`. Malformed or unavailable inputs exit 2 without a
+report. This audit does not certify calibration or rule out unsampled
+nonlinearity, and writes no files.
