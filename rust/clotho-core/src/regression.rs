@@ -407,7 +407,15 @@ fn dot(a: &[f64], b: &[f64]) -> Result<f64, RegressionError> {
 }
 
 fn norm(values: &[f64]) -> f64 {
-    values.iter().fold(0.0_f64, |n, value| n.hypot(*value))
+    // The running norm stays nonnegative. Zero coordinates leave it
+    // unchanged exactly, and are common in one-hot and penalty columns.
+    let mut norm = 0.0_f64;
+    for &value in values {
+        if value != 0.0 {
+            norm = norm.hypot(value);
+        }
+    }
+    norm
 }
 
 // Cache each trailing norm for this pivot only. max_by keeps the last
@@ -522,6 +530,20 @@ fn check_condition(columns: &[Vec<f64>]) -> Result<(), RegressionError> {
 #[cfg(test)]
 mod pivot_tests {
     use super::*;
+
+    #[test]
+    fn qr_norm_zero_skipping_preserves_hypot_recurrence_bits() {
+        let tiny = f64::from_bits(1);
+        let values = [0.0_f64, -0.0, tiny, -tiny, 1.0, -17.0, f64::MAX];
+        for &a in &values {
+            for &b in &values {
+                let column = [-0.0, a, 0.0, b, -0.0];
+                let ordinary = column.iter().fold(0.0_f64, |n, &value| n.hypot(value));
+                assert_eq!(norm(&column).to_bits(), ordinary.to_bits());
+            }
+        }
+        assert_eq!(norm(&[]).to_bits(), 0);
+    }
 
     #[test]
     fn reflector_updates_do_not_overwrite_previous_pivot_rows() {
