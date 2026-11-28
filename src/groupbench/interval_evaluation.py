@@ -443,6 +443,86 @@ def bound_paired_interval_scores(rows, *, expected_roster, alpha):
 
 
 
+def bound_paired_interval_scores_common_offset(rows, *, expected_roster, alpha, offset):
+    """Sharp B-minus-A interval-score bounds for one common additive offset.
+
+    Each row is (row_id, reported_truth, a_lower, a_upper, b_lower, b_upper).
+    The same unknown additive offset applies to every reported truth, in the
+    declared units; it is not added to forecasts. A separately supplied closed
+    offset interval is the complete feasible set, with no residual row error.
+    A different offset per row or group needs a different model. Neither the
+    offset certificate nor probabilistic/future coverage is inferred.
+    """
+    alpha = _number(alpha)
+    if not 0 < alpha < 1:
+        raise ValueError("Paired interval bounds require one fixed miscoverage in (0, 1).")
+    if type(offset) not in (list, tuple) or len(offset) != 2:
+        raise ValueError("Common offset requires two ordered closed endpoints.")
+    left, right = map(_number, offset)
+    if left > right:
+        raise ValueError("Common offset requires two ordered closed endpoints.")
+    if type(rows) not in (list, tuple) or not 1 <= len(rows) <= MAX_ROWS:
+        raise ValueError("Rows must be a bounded nonempty sequence.")
+    wrapped = []
+    for row in rows:
+        if type(row) is not tuple or len(row) != 6:
+            raise ValueError("Each row must supply one ID, one reported truth and four forecast endpoints.")
+        wrapped.append((row[0], row[1], *row[1:]))
+    parsed = list(_paired_bounded_interval_rows(wrapped, expected_roster))
+    counts = {}
+    for group, *_ in parsed:
+        counts[group] = counts.get(group, 0) + 1
+
+    # A score has two convex hinges. Each hinge raises its slope by 2/alpha
+    # at its knot; for the negative score, both changes have the opposite sign.
+    # Weight and aggregate knot changes before sweeping the shared interval.
+    scale = 2 / alpha
+    current = [Fraction(), Fraction()]
+    derivatives = [Fraction(), Fraction()]
+    events = {}
+    n, g = len(parsed), len(counts)
+    for group, reported, _, al, ah, bl, bh in parsed:
+        row_z = Fraction(1, n)
+        group_z = Fraction(1, g * counts[group])
+        for lo0, hi0, sign in ((bl, bh, 1), (al, ah, -1)):
+            lo, hi = lo0 - reported, hi0 - reported
+            score = sign * (hi - lo + scale * max(lo - left, left - hi, 0))
+            derivative = sign * scale * (int(left >= hi) - int(left < lo))
+            current[0] += row_z * score
+            current[1] += group_z * score
+            derivatives[0] += row_z * derivative
+            derivatives[1] += group_z * derivative
+            for knot in (lo, hi):
+                if left < knot < right:
+                    a, b = events.get(knot, (Fraction(), Fraction()))
+                    events[knot] = (a + row_z * sign * scale, b + group_z * sign * scale)
+
+    lower, upper = current[:], current[:]
+    at_lower, at_upper = [left, left], [left, left]
+    previous = left
+    for knot in [*sorted(events), right]:
+        for k in range(2):
+            current[k] += (knot - previous) * derivatives[k]
+            if current[k] < lower[k]:
+                lower[k], at_lower[k] = current[k], knot
+            if current[k] > upper[k]:
+                upper[k], at_upper[k] = current[k], knot
+        if knot in events:
+            derivatives[0] += events[knot][0]
+            derivatives[1] += events[knot][1]
+        previous = knot
+    return {
+        "n_rows": n,
+        "n_declared_groups": g,
+        "alpha_exact": alpha,
+        "common_offset_exact": (left, right),
+        "row_weighted_b_minus_a_bounds": (lower[0], upper[0]),
+        "equal_group_b_minus_a_bounds": (lower[1], upper[1]),
+        "row_weighted_extremizing_offsets": (at_lower[0], at_upper[0]),
+        "equal_group_extremizing_offsets": (at_lower[1], at_upper[1]),
+    }
+
+
 def bound_paired_interval_coverage(rows, *, expected_roster):
     """Bound B-minus-A empirical coverage under a shared, bounded truth per row.
 

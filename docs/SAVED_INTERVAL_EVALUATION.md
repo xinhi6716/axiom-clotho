@@ -317,3 +317,24 @@ sharing. It does not replace coverage, width or the existing interval score,
 rank methods by coverage alone, or authenticate input provenance. Compare
 methods on the same frozen rows, endpoints/protocol, alpha, target, units and
 weighting definition; keep failures rather than silently changing the cohort.
+
+### Sensitivity to one shared target readout offset
+
+The Python helper `bound_paired_interval_scores_common_offset` accepts
+`(row_id, reported_truth, a_lower, a_upper, b_lower, b_upper)` rows, a
+separately frozen `(row_id, group)` roster, the common central `alpha`,
+and a closed interval `offset=(lower, upper)`. Every true outcome is
+its reported value **plus the same offset**; the forecasts stay fixed.
+Use this model only if an independent measurement supports that exact
+structure and bounds. Sharing a device or instrument alone is insufficient.
+This helper does not include per-row residual errors or calibrate forecasts.
+
+It returns sharp B-minus-A interval-score difference ranges for both equal
+rows and equal groups, with the smallest attaining offset for each end of
+each range. Negative values favor B. It sums the changes in the piecewise
+linear score difference at adjusted forecast endpoints; evaluating only the
+two allowed offset endpoints can miss a sharper internal bound. Independent
+per-row outcome boxes may give a broader outer range and obscure a ranking
+under the shared-offset model. None of these intervals are confidence or
+prediction intervals. Do not choose a calibration bound based on scored
+outcomes; keep the calibration evidence separate and forecast history intact.
