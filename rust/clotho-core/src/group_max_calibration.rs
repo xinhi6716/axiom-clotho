@@ -5,7 +5,7 @@
 //! independently of calibration. This function checks neither assumption.
 //! It does not consume query labels, construct bounds, or read any files.
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 pub const MAX_CALIBRATION_ROWS: usize = 20_000;
 pub const MAX_IDENTIFIER_BYTES: usize = 256;
@@ -94,18 +94,11 @@ pub fn calibrate_group_max(
             (groups, rank, maxima)
         }
         RosterMatch::Arbitrary => {
-            let mut maxima = BTreeMap::<_, f64>::new();
-            for r in rows {
-                let score = residual(r)?;
-                let current = maxima.entry(r.key.group).or_insert(0.0);
-                *current = current.max(score);
-            }
-            let groups = maxima.len();
-            let rank = cutoff_rank(groups, numerator, denominator);
+            let (groups, rank, maxima) = arbitrary_group_maxima(rows, numerator, denominator)?;
             if rank > groups {
                 return Ok(GroupMaxCutoff::InsufficientFinite { groups, rank });
             }
-            (groups, rank, maxima.into_values().collect())
+            (groups, rank, maxima)
         }
     };
     Ok(GroupMaxCutoff::Finite {
@@ -113,6 +106,42 @@ pub fn calibrate_group_max(
         rank,
         radius: select_radius(maxima, rank),
     })
+}
+
+fn arbitrary_group_maxima(
+    rows: &[CalibrationRow<'_>],
+    numerator: u64,
+    denominator: u64,
+) -> Result<(usize, usize, Vec<f64>), GroupMaxError> {
+    // A tree is cheap for a handful of keys. Promote once at higher
+    // cardinality, where repeated lexical comparisons dominate.
+    const PROMOTE_AT: usize = 32;
+    let mut small = BTreeMap::<_, f64>::new();
+    let mut remaining = rows.iter();
+    while let Some(row) = remaining.next() {
+        let score = residual(row)?;
+        let current = small.entry(row.key.group).or_insert(0.0);
+        *current = current.max(score);
+        if small.len() == PROMOTE_AT && remaining.len() >= PROMOTE_AT {
+            // Finite residuals always have nonnegative bits (+0 included).
+            // Hash iteration does not affect the selected order statistic.
+            let mut large = HashMap::with_capacity(PROMOTE_AT * 2);
+            large.extend(small);
+            for rest in remaining {
+                let score = residual(rest)?;
+                let current = large.entry(rest.key.group).or_insert(0.0);
+                *current = current.max(score);
+            }
+            let groups = large.len();
+            let rank = cutoff_rank(groups, numerator, denominator);
+            let maxima = if rank <= groups { large.into_values().collect() } else { Vec::new() };
+            return Ok((groups, rank, maxima));
+        }
+    }
+    let groups = small.len();
+    let rank = cutoff_rank(groups, numerator, denominator);
+    let maxima = if rank <= groups { small.into_values().collect() } else { Vec::new() };
+    Ok((groups, rank, maxima))
 }
 
 fn select_radius(mut maxima: Vec<f64>, rank: usize) -> f64 {
@@ -235,6 +264,32 @@ mod tests {
             observed,
             prediction: 0.0,
         }
+    }
+
+    #[test]
+    fn promoted_arbitrary_group_maxima_preserve_ranks_and_validate_the_tail() {
+        let names: Vec<_> = (0..80).map(|i| format!("g{i:02}")).collect();
+        let roster: Vec<_> = names.iter().flat_map(|name| [key(name, "a"), key(name, "b")]).collect();
+        let sorted: Vec<_> = roster.iter().enumerate().map(|(i, &key)| {
+            obs(key, if i % 7 == 0 { -0.0 } else { ((i >> 1) % 13) as f64 })
+        }).collect();
+        let mut shuffled = sorted.clone();
+        shuffled.rotate_left(51);
+        for numerator in 1..=80 {
+            assert_eq!(
+                calibrate_group_max(&roster, &shuffled, numerator, 81),
+                calibrate_group_max(&roster, &sorted, numerator, 81)
+            );
+        }
+        assert_eq!(
+            calibrate_group_max(&roster, &shuffled, 99, 100),
+            Ok(GroupMaxCutoff::InsufficientFinite { groups: 80, rank: 81 })
+        );
+        shuffled[159].observed = f64::NAN;
+        assert_eq!(
+            calibrate_group_max(&roster, &shuffled, 99, 100),
+            Err(GroupMaxError::NonfiniteResidual)
+        );
     }
 
     #[test]
