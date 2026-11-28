@@ -412,6 +412,25 @@ fn check_group_mae_pool(groups: &[RegGroup], n_rows: usize, pooled: f64) -> Resu
     require((implied - expected).abs() <= tolerance, mismatch)
 }
 
+fn check_group_rmse_pool(groups: &[RegGroup], n_rows: usize, pooled: f64) -> Result<()> {
+    let maximum_group_rmse = groups.iter().map(|g| g.rmse).fold(0.0_f64, f64::max);
+    let mismatch = "Group RMSE does not pool to the retained row-weighted RMSE";
+    if maximum_group_rmse == 0.0 || pooled == 0.0 {
+        return require(maximum_group_rmse == 0.0 && pooled == 0.0, mismatch);
+    }
+    // Pool mean squares by row count, not RMSEs by group. Scale before
+    // squaring to keep the intermediate values in a bounded range.
+    let scale = maximum_group_rmse.max(pooled);
+    let implied = groups.iter().map(|g| {
+        let normalized = g.rmse / scale;
+        (normalized * normalized) * (g.n_rows as f64 / n_rows as f64)
+    }).sum::<f64>().sqrt();
+    let expected = pooled / scale;
+    // Allow independent rounding of the group and pooled reported RMSes.
+    let tolerance = 1e-10 * implied.max(expected) + 2.0 * (f64::from_bits(1) / scale);
+    require((implied - expected).abs() <= tolerance, mismatch)
+}
+
 fn project_reg(m: Manifest<Reg, RegGroup, RegFold, RegMacro>, csv: &[u8]) -> Result<EvaluationProjection> {
     check_manifest(&m, REG)?;
     let rows = parse_rows(csv, m.n_rows, m.n_folds, None)?;
@@ -429,6 +448,7 @@ fn project_reg(m: Manifest<Reg, RegGroup, RegFold, RegMacro>, csv: &[u8]) -> Res
         worst_group_mae: maes.into_iter().fold(0.0, f64::max) };
     require(equal_group_weighted == m.equal_group_weighted, "Inconsistent regression group summary")?;
     check_group_mae_pool(&m.groups, m.n_rows, m.pooled_row_weighted.mae)?;
+    check_group_rmse_pool(&m.groups, m.n_rows, m.pooled_row_weighted.rmse)?;
     let mut folds = Vec::with_capacity(m.n_folds);
     for (i, (f, (y, p))) in m.folds.iter().zip(&rows.folds).enumerate() {
         check_encoded_width(&m, f.encoded_feature_count)?;

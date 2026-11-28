@@ -296,3 +296,37 @@ fn rejects_group_macro_mae_inconsistent_with_recomputed_pooled_mae() {
         assert!(String::from_utf8_lossy(&out.stderr).contains("Group MAE does not pool"));
     }
 }
+
+#[test]
+fn rejects_group_rmses_that_do_not_rebuild_the_saved_pooled_rmse() {
+    let work = Work::new();
+    let csv = work.0.join("source.csv");
+    fs::write(&csv, "x,y,g\n1,0,A\n2,1,A\n3,0,A\n4,0,B\n5,0,B\n6,0,B\n7,1,C\n8,1,C\n9,0,D\n10,1,D\n").unwrap();
+    let bundle = work.0.join("bundle");
+    let evaluation = Command::new(env!("CARGO_BIN_EXE_clotho"))
+        .args(["evaluate", "--csv"]).arg(csv)
+        .args(["--features", "x", "--target", "y", "--group", "g",
+            "--model", "mean", "--folds", "2", "--out"])
+        .arg(&bundle).output().unwrap();
+    assert!(evaluation.status.success(), "{}", String::from_utf8_lossy(&evaluation.stderr));
+    let genuine = inspect_success(&bundle);
+    let pooled = genuine["pooled_row_weighted"]["rmse"].as_f64().unwrap();
+    assert!(pooled > 0.0 && pooled < 1.0);
+    assert_ne!(genuine["equal_group_weighted"]["mean_group_rmse"].as_f64().unwrap(), pooled);
+
+    for claimed in [1.0, 0.0] {
+        // The row-level metrics, group MAEs, and fold roster do not change.
+        // The group RMSes and their saved equal-group mean agree with each
+        // other but cannot pool to the genuine row-weighted RMS.
+        alter(&bundle, |v| {
+            for group in v["groups"].as_array_mut().unwrap() {
+                group["rmse"] = json!(claimed);
+            }
+            v["equal_group_weighted"]["mean_group_rmse"] = json!(claimed);
+        });
+        let out = inspect(&bundle);
+        assert!(!out.status.success());
+        assert!(out.stdout.is_empty());
+        assert!(String::from_utf8_lossy(&out.stderr).contains("Group RMSE does not pool"));
+    }
+}
