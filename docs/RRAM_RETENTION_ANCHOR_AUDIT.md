@@ -431,3 +431,15 @@ when no exact anchor has duplicate rows. Anchors with incomplete key
 evidence remain visible. Repeated rows at the same anchor do not by
 themselves imply a cross-anchor conflict, and this audit changes no
 timing eligibility.
+
+With a separate DUT-electrode sense record, add `--terminal-read-potentials`
+to `--read-bias`. Supply
+`lot,wafer,die,cell,episode,nominal_us,plus_uV,plus_error_uV,minus_uV,minus_error_uV`
+at unique captured early or terminal reads. Signed electrode potentials must
+refer to the same reference and the same acquisition aperture, and the
+logged scalar bias must use the same plus-minus convention. The outer
+bound on the difference uses the sum of both absolute errors (no
+statistical independence assumed). A missing minus potential is not
+ground. Disjoint intervals contradict agreement under the declared bounds;
+touching or overlapping outer intervals do not certify actual voltage,
+polarity, or electrical compliance. No timing admission changes.

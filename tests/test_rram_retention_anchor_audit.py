@@ -24,7 +24,7 @@ def episode(key=BASE, early=1_000_000, final=100_000_000_000, error=0):
 
 
 class RetentionAnchorAudit(unittest.TestCase):
-    def run_capture(self, roster, rows, capture_header=IDS + TIMES, *, extra=(), block_map=None, stress=None, readout_paths=None, read_bias=None, apertures=None, schedule=None, terminations=None, planned_paths=None, native_reads=None, planned_bias=None, planned_roles=None, logged_roles=None, aperture_widths=None, event_orders=None, timer_segments=None, envelopes=None, time_tokens=None, repeat_keys=None, pin_repeat_capture=False):
+    def run_capture(self, roster, rows, capture_header=IDS + TIMES, *, extra=(), block_map=None, stress=None, readout_paths=None, read_bias=None, apertures=None, schedule=None, terminations=None, planned_paths=None, native_reads=None, planned_bias=None, planned_roles=None, logged_roles=None, aperture_widths=None, event_orders=None, timer_segments=None, envelopes=None, time_tokens=None, repeat_keys=None, pin_repeat_capture=False, terminal_potentials=None):
         with tempfile.TemporaryDirectory() as tmp:
             folder = Path(tmp)
             for name, header, payload in (
@@ -77,6 +77,12 @@ class RetentionAnchorAudit(unittest.TestCase):
                         cols = IDS + ("nominal_us", f"{mode}_event_role")
                         csv.writer(stream).writerows((cols, *role_rows))
                     extra = (*extra, f"--{mode}-event-roles", str(path))
+            if terminal_potentials is not None:
+                path = folder / "terminal_potentials.csv"
+                with path.open("w", newline="", encoding="utf-8") as stream:
+                    cols = IDS + ("nominal_us", "plus_uV", "plus_error_uV", "minus_uV", "minus_error_uV")
+                    csv.writer(stream).writerows((cols, *terminal_potentials))
+                extra = (*extra, "--terminal-read-potentials", str(path))
             if apertures is not None:
                 aperture_file = folder / "apertures.csv"
                 with aperture_file.open("w", newline="", encoding="utf-8") as stream:
@@ -222,6 +228,44 @@ class RetentionAnchorAudit(unittest.TestCase):
         self.assertEqual(invalid.returncode, 2)
         self.assertIn("timestamp capture SHA-256 must be 64 lowercase", invalid.stderr)
         self.assertFalse(invalid.stdout)
+
+    def test_dual_sense_catches_reference_and_polarity_conflicts_without_changing_gate(self):
+        roster = [(*BASE[:4], f"E{i}") for i in range(5)]
+        early = 1_000_000
+        rows = sum((episode(key) for key in roster[:4]), [])
+        biases = [(*key, early, 100, 0) for key in roster[:3]]
+        potentials = [
+            (*roster[0], early, 300, 1, 401, 0),  # +300 to reference but negative DUT difference.
+            (*roster[1], early, 300, 1, 202, 1),  # [96,100] touches logged 100.
+            (*roster[2], early, 300, 0, "", 0),   # Cannot assume ground for missing minus.
+            (*roster[3], early, 100, 1, 0, 0),
+        ]
+        plain = self.run_capture(roster, rows, read_bias=biases)
+        checked = self.run_capture(roster, rows, read_bias=biases, terminal_potentials=potentials)
+        self.assertEqual((plain.returncode, checked.returncode), (1, 1))
+        report = json.loads(checked.stdout)
+        state = report.pop("dual_sense_bias_agreement_by_us")[str(early)]
+        expected = {"logged_and_dual_sense_bias_intervals_disjoint": 1,
+                    "logged_and_dual_sense_bias_intervals_overlap": 1,
+                    "missing_or_incomplete_dual_sense_evidence": 1,
+                    "missing_or_incomplete_logged_bias": 1}
+        self.assertEqual(state["timing_eligible_by_status"], expected)
+        self.assertEqual(state["frozen_attempted_by_status"], expected | {"missing_or_incomplete_dual_sense_evidence": 2})
+        self.assertEqual(report, json.loads(plain.stdout))
+
+    def test_terminal_potentials_require_exact_captured_read_and_nonnegative_bounds(self):
+        early = 1_000_000
+        evidence = (*BASE, early, 3, 0, -1, 0)
+        for vals, bias, message in (
+            ([evidence], None, "require the logged read bias table"),
+            ([(*BASE, 0, 3, 0, 0, 0)], [], "does not identify one"),
+            ([(*BASE, early, 3, -1, 0, 0)], [], "unsigned errors"),
+            ([evidence, evidence], [], "duplicate terminal potentials"),
+        ):
+            r = self.run_capture([BASE], episode(), read_bias=bias, terminal_potentials=vals)
+            self.assertEqual(r.returncode, 2)
+            self.assertFalse(r.stdout)
+            self.assertIn(message.replace("does not", "do not"), r.stderr)
 
     def test_global_single_anchor_request_contract_detects_reuse_without_duplicate_rows(self):
         a, b, c = [(*BASE[:4], f"E{i}") for i in range(3)]

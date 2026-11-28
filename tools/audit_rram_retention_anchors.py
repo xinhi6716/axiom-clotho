@@ -577,6 +577,37 @@ def read_bias_intervals(path, expected):
     return biases
 
 
+def terminal_read_potentials(path, roster):
+    values = defaultdict(dict)
+    fields = IDENTITY + ("nominal_us", "plus_uV", "plus_error_uV", "minus_uV", "minus_error_uV")
+    for key, (raw_nominal, plus, plus_error, minus, minus_error) in records(path, fields):
+        nominal = integer(raw_nominal)
+        if key not in roster or nominal not in ANCHORS[1:] or len(roster[key].get(nominal, ())) != 1:
+            raise ValueError("terminal potentials do not identify one captured frozen read anchor")
+        if nominal in values[key]:
+            raise ValueError("duplicate terminal potentials for one captured read anchor")
+        if any(v and not SIGNED_INTEGER.fullmatch(v) for v in (plus, minus)) or any(
+                v and not INTEGER.fullmatch(v) for v in (plus_error, minus_error)):
+            raise ValueError("terminal potentials require signed integral microvolts and unsigned errors")
+        if all((plus, plus_error, minus, minus_error)):
+            center = int(plus) - int(minus)
+            radius = int(plus_error) + int(minus_error)
+            values[key][nominal] = center - radius, center + radius
+        else:
+            values[key][nominal] = None
+    return values
+
+
+def terminal_bias_agreement(dual, logged):
+    if dual is None:
+        return "missing_or_incomplete_dual_sense_evidence"
+    if logged is None:
+        return "missing_or_incomplete_logged_bias"
+    if dual[0] > logged[1] or logged[0] > dual[1]:
+        return "logged_and_dual_sense_bias_intervals_disjoint"
+    return "logged_and_dual_sense_bias_intervals_overlap"
+
+
 def planned_read_bias(path, roster):
     plans = defaultdict(dict)
     fields = IDENTITY + ("nominal_us", "planned_bias_min_uV", "planned_bias_max_uV")
@@ -865,7 +896,9 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
           planned_aperture_width_table=None, event_order_table=None,
           diagnose_individual_read_counters=False, native_timer_segment_table=None, timing_envelope_table=None, decimal_time_token_table=None,
           diagnose_decimal_elapsed=False, diagnose_early_route_terminal=False, repeat_request_table=None,
-          diagnose_cross_anchor_requests=False):
+          diagnose_cross_anchor_requests=False, terminal_potential_table=None):
+    if terminal_potential_table is not None and read_bias_table is None:
+        raise ValueError("terminal potentials require the logged read bias table")
     if diagnose_cross_anchor_requests and repeat_request_table is None:
         raise ValueError("cross-anchor request diagnosis requires repeat request keys")
     if repeat_request_table is not None and capture_sha256 is None:
@@ -975,6 +1008,10 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
     attempted_roles, eligible_roles = Counter(), Counter()
     biases = read_bias_intervals(read_bias_table, expected) if read_bias_table is not None else None
     attempted_bias, eligible_bias = Counter(), Counter()
+    dual_sense = (terminal_read_potentials(terminal_potential_table, expected)
+                  if terminal_potential_table is not None else None)
+    attempted_dual = {nominal: Counter() for nominal in ANCHORS[1:]}
+    eligible_dual = {nominal: Counter() for nominal in ANCHORS[1:]}
     bias_plans = planned_read_bias(planned_bias_table, expected) if planned_bias_table is not None else None
     attempted_bias_plan, eligible_bias_plan = Counter(), Counter()
     apertures = captured_apertures(aperture_table, expected) if aperture_table is not None else None
@@ -1065,6 +1102,13 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
             attempted_bias[status] += 1
             if reason == "eligible":
                 eligible_bias[status] += 1
+        if dual_sense is not None:
+            for nominal in ANCHORS[1:]:
+                status = terminal_bias_agreement(dual_sense.get(key, {}).get(nominal),
+                                                 biases.get(key, {}).get(nominal))
+                attempted_dual[nominal][status] += 1
+                if reason == "eligible":
+                    eligible_dual[nominal][status] += 1
         if bias_plans is not None:
             status = planned_bias_status(biases.get(key, {}), bias_plans[key])
             attempted_bias_plan[status] += 1
@@ -1279,6 +1323,14 @@ def audit(roster_path, capture_path, *, diagnose_anchors=False, roster_sha256=No
             "frozen_attempted_by_status": dict(sorted(attempted_bias.items())),
             "timing_eligible_by_status": dict(sorted(eligible_bias.items())),
         }
+    if dual_sense is not None:
+        report["dual_sense_bias_agreement_by_us"] = {
+            str(nominal): {
+                "frozen_attempted_by_status": dict(sorted(attempted_dual[nominal].items())),
+                "timing_eligible_by_status": dict(sorted(eligible_dual[nominal].items())),
+            }
+            for nominal in ANCHORS[1:]
+        }
     if bias_plans is not None:
         report["planned_read_bias_agreement"] = {
             "frozen_attempted_by_status": dict(sorted(attempted_bias_plan.items())),
@@ -1394,6 +1446,8 @@ def main():
                         help="independent source request keys for exact capture CSV record ordinals")
     parser.add_argument("--diagnose-cross-anchor-requests", action="store_true",
                         help="assume source request keys globally identify a single frozen anchor")
+    parser.add_argument("--terminal-read-potentials", type=Path,
+                        help="independently sensed plus and minus DUT electrode potentials relative to one reference")
     args = parser.parse_args()
     try:
         report = audit(args.frozen_roster, args.capture, diagnose_anchors=args.diagnose_anchors,
@@ -1424,7 +1478,8 @@ def main():
                        diagnose_decimal_elapsed=args.diagnose_decimal_elapsed,
                        diagnose_early_route_terminal=args.diagnose_early_route_terminal,
                        repeat_request_table=args.repeat_request_keys,
-                       diagnose_cross_anchor_requests=args.diagnose_cross_anchor_requests)
+                       diagnose_cross_anchor_requests=args.diagnose_cross_anchor_requests,
+                       terminal_potential_table=args.terminal_read_potentials)
     except (OSError, UnicodeError, csv.Error):
         parser.exit(2, "error: input could not be read as UTF-8 CSV\n")
     except ValueError as exc:
