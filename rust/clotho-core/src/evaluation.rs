@@ -240,25 +240,21 @@ pub fn regression_metrics(
 
     let pairs = || y_true.iter().copied().zip(y_pred.iter().copied());
     let (error_scale, error_factor) = difference_scale(pairs)?;
-    let count = y_true.len() as f64;
-    let mut abs_sum = CompensatedSum::default();
-    let mut square_sum = CompensatedSum::default();
-    if error_scale > 0.0 {
-        for (a, b) in pairs() {
-            let value = normalize_error(scaled_error(a, b, error_factor)?, error_scale)?;
-            abs_sum.add(value.abs());
-            square_sum.add(value * value);
-        }
+    if error_scale == 0.0 {
+        let varied = y_true.iter().any(|&value| value != y_true[0]);
+        return Ok(RegressionMetrics { mae: 0.0, rmse: 0.0, r2: varied.then_some(1.0) });
     }
-    let abs_sum = abs_sum.total();
-    let square_sum = square_sum.total();
+    let count = y_true.len() as f64;
+    let (abs_sum, square_sum) = if error_factor == 1.0 {
+        residual_moments(pairs().map(|(a, b)| normalize_error(a - b, error_scale)))?
+    } else {
+        residual_moments(pairs().map(|(a, b)| normalize_error(scaled_error(a, b, error_factor)?, error_scale)))?
+    };
     let mae = restore_scale(abs_sum / count, error_scale, error_factor)?;
     let rmse = restore_scale((square_sum / count).sqrt(), error_scale, error_factor)?;
 
     let r2 = if y_true.iter().all(|value| *value == y_true[0]) {
         None
-    } else if error_scale == 0.0 {
-        Some(1.0)
     } else {
         let origin = y_true[0];
         let target_pairs = || y_true.iter().copied().map(|value| (value, origin));
@@ -266,18 +262,11 @@ pub fn regression_metrics(
         if target_scale == 0.0 {
             return Err(EvaluationError::NumericOverflow);
         }
-        let mut shifted_sum = CompensatedSum::default();
-        for (a, b) in target_pairs() {
-            shifted_sum.add(normalize_error(scaled_error(a, b, target_factor)?, target_scale)?);
-        }
-        let mean = shifted_sum.total() / count;
-        let mut target_square_sum = CompensatedSum::default();
-        for (a, b) in target_pairs() {
-            let value = normalize_error(scaled_error(a, b, target_factor)?, target_scale)?;
-            let deviation = value - mean;
-            target_square_sum.add(deviation * deviation);
-        }
-        let target_square_sum = target_square_sum.total();
+        let target_square_sum = if target_factor == 1.0 {
+            target_variation(|| y_true.iter().map(|&value| normalize_error(value - origin, target_scale)), count)?
+        } else {
+            target_variation(|| target_pairs().map(|(a, b)| normalize_error(scaled_error(a, b, target_factor)?, target_scale)), count)?
+        };
         if target_square_sum <= 0.0 {
             return Err(EvaluationError::NumericOverflow);
         }
@@ -294,6 +283,39 @@ pub fn regression_metrics(
     };
 
     Ok(RegressionMetrics { mae, rmse, r2 })
+}
+
+// When a scale pass proves all raw differences are finite, recomputing
+// them is sufficient; distinct finite values cannot subtract to zero under
+// gradual underflow. Half-scale recovery and normalization remain checked.
+fn residual_moments(
+    normalized: impl Iterator<Item = Result<f64, EvaluationError>>,
+) -> Result<(f64, f64), EvaluationError> {
+    let mut abs_sum = CompensatedSum::default();
+    let mut square_sum = CompensatedSum::default();
+    for value in normalized {
+        let value = value?;
+        abs_sum.add(value.abs());
+        square_sum.add(value * value);
+    }
+    Ok((abs_sum.total(), square_sum.total()))
+}
+
+fn target_variation<I: Iterator<Item = Result<f64, EvaluationError>>>(
+    normalized: impl Fn() -> I,
+    count: f64,
+) -> Result<f64, EvaluationError> {
+    let mut sum = CompensatedSum::default();
+    for value in normalized() {
+        sum.add(value?);
+    }
+    let mean = sum.total() / count;
+    let mut squares = CompensatedSum::default();
+    for value in normalized() {
+        let deviation = value? - mean;
+        squares.add(deviation * deviation);
+    }
+    Ok(squares.total())
 }
 
 // Halve only when necessary to handle MAX - (-MAX). On the usual direct
@@ -551,6 +573,26 @@ fn add_group_run<'a>(
 #[cfg(test)]
 mod borrowed_fold_tests {
     use super::*;
+
+    #[test]
+    fn full_regression_moments_preserve_perfect_and_extreme_cases() {
+        let perfect = regression_metrics(&[-0.0, 0.0], &[0.0, -0.0]).unwrap();
+        assert_eq!([perfect.mae, perfect.rmse].map(f64::to_bits), [0, 0]);
+        assert_eq!(perfect.r2, None);
+        let perfect_varied = regression_metrics(&[f64::MAX, -f64::MAX], &[f64::MAX, -f64::MAX]).unwrap();
+        assert_eq!(perfect_varied.r2, Some(1.0));
+        let overflow_rescued = regression_metrics(
+            &[f64::MAX, -f64::MAX, f64::MAX, -f64::MAX],
+            &[-f64::MAX, -f64::MAX, f64::MAX, -f64::MAX],
+        ).unwrap();
+        assert_eq!(overflow_rescued.mae.to_bits(), (f64::MAX * 0.5).to_bits());
+        assert_eq!(overflow_rescued.rmse.to_bits(), f64::MAX.to_bits());
+        assert_eq!(overflow_rescued.r2, Some(0.0));
+        assert_eq!(
+            regression_metrics(&[0.0, 0.0], &[f64::MAX, f64::from_bits(1)]),
+            Err(EvaluationError::NumericOverflow)
+        );
+    }
 
     #[test]
     fn indexed_labels_preserve_local_row_positions_and_group_identity() {
