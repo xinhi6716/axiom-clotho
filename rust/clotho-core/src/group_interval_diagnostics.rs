@@ -64,6 +64,21 @@ fn ordered_rows<'a, 's, T: Clone>(
     }
 }
 
+// A strictly increasing declared roster proves unique group/row pairs.
+fn strictly_aligned(roster: &[RowKey<'_>], observations: &[IntervalObservation<'_>]) -> bool {
+    if roster.last() != observations.last().map(|row| &row.key) {
+        return false;
+    }
+    let mut previous = None;
+    for (&key, observed) in roster.iter().zip(observations) {
+        if key != observed.key || previous.is_some_and(|prev| prev >= key) {
+            return false;
+        }
+        previous = Some(key);
+    }
+    true
+}
+
 impl<'a, 's> IntervalRoster<'a, 's> {
     pub(crate) fn new(
         roster: &[RowKey<'a>],
@@ -82,13 +97,18 @@ impl<'a, 's> IntervalRoster<'a, 's> {
         if roster.len() != observations.len() {
             return Err(Error::RosterMismatch);
         }
-        let expected = ordered_rows(roster, |key| *key);
-        let observed = ordered_rows(observations, |r| r.key);
-        if expected.windows(2).any(|w| w[0] == w[1])
-            || !expected.iter().copied().eq(observed.iter().map(|r| r.key))
-        {
-            return Err(Error::RosterMismatch);
-        }
+        let observed = if strictly_aligned(roster, observations) {
+            Cow::Borrowed(observations)
+        } else {
+            let expected = ordered_rows(roster, |key| *key);
+            let observed = ordered_rows(observations, |r| r.key);
+            if expected.windows(2).any(|w| w[0] == w[1])
+                || !expected.iter().copied().eq(observed.iter().map(|r| r.key))
+            {
+                return Err(Error::RosterMismatch);
+            }
+            observed
+        };
         if !observed.iter().all(|r| r.value.is_finite()) {
             return Err(Error::NonfiniteObservation);
         }
@@ -117,10 +137,21 @@ impl<'a, 's> IntervalRoster<'a, 's> {
         if intervals.len() != self.observed.len() {
             return Err(Error::RosterMismatch);
         }
-        let predicted = ordered_rows(intervals, |r| r.key);
-        if !self.observed.iter().map(|r| r.key).eq(predicted.iter().map(|r| r.key)) {
-            return Err(Error::RosterMismatch);
-        }
+        let same_keys = |rows: &[QueryInterval<'_>]| {
+            self.observed.iter().map(|r| r.key).eq(rows.iter().map(|r| r.key))
+        };
+        let predicted = if self.observed.last().map(|r| r.key) == intervals.last().map(|r| r.key)
+            && same_keys(intervals)
+        {
+            // Observed keys are already sorted and unique.
+            Cow::Borrowed(intervals.as_slice())
+        } else {
+            let sorted = ordered_rows(intervals, |r| r.key);
+            if !same_keys(&sorted) {
+                return Err(Error::RosterMismatch);
+            }
+            sorted
+        };
         if !predicted.iter().all(|r| r.lower.is_finite() && r.upper.is_finite() && r.lower <= r.upper) {
             return Err(Error::InvalidBounds);
         }
@@ -227,6 +258,25 @@ mod tests {
             groups: 2, rank: 2, radius: 1.0,
             intervals: keys.iter().copied().map(|key| QueryInterval { key, lower: -1., upper: 1. }).collect(),
         }
+    }
+
+    #[test]
+    fn aligned_pairs_prove_uniqueness_but_do_not_skip_numeric_validation() {
+        let roster = [A, B, C];
+        let observations = [obs(A, 0.0), obs(B, 0.5), obs(C, -0.5)];
+        assert!(strictly_aligned(&roster, &observations));
+        let duplicate_roster = [A, A, C];
+        let duplicates = [obs(A, 0.0), obs(A, 0.5), obs(C, -0.5)];
+        assert!(!strictly_aligned(&duplicate_roster, &duplicates));
+        assert!(matches!(IntervalRoster::new(&duplicate_roster, &duplicates), Err(IntervalDiagnosticError::RosterMismatch)));
+        let invalid = [observations[0], observations[1], obs(C, f64::NAN)];
+        assert!(matches!(IntervalRoster::new(&roster, &invalid), Err(IntervalDiagnosticError::NonfiniteObservation)));
+
+        let matched = IntervalRoster::new(&roster, &observations).unwrap();
+        let mut invalid_prediction = bounds(&roster);
+        let GroupMaxIntervals::Finite { intervals, .. } = &mut invalid_prediction else { unreachable!() };
+        intervals[2].upper = f64::INFINITY;
+        assert!(matches!(matched.bounds(&invalid_prediction), Err(IntervalDiagnosticError::InvalidBounds)));
     }
 
     #[test]
