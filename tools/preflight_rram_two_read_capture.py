@@ -37,7 +37,7 @@ def observable_fingerprint(groups):
     return digest.digest()
 
 
-def audit(path, seen_files, seen_payloads, seen_observables):
+def audit(path, seen_files, seen_payloads, seen_observables, expected_address_range=None):
     with os.fdopen(os.open(path, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0)
                            | getattr(os, "O_BINARY", 0)), "rb") as file:
         info = os.fstat(file.fileno())
@@ -78,6 +78,12 @@ def audit(path, seen_files, seen_payloads, seen_observables):
         pairs[lane] = (initial, final)
     if not groups or any(pairs.keys() != LANES for _, pairs in groups.values()):
         raise ValueError("capture requires nonempty complete 16-lane address groups")
+    if expected_address_range is not None:
+        low, high = expected_address_range
+        # Distinct dictionary keys and exact inclusive span establish support
+        # without materializing the whole expected range.
+        if len(groups) != high - low + 1 or min(groups) != low or max(groups) != high:
+            raise ValueError("capture does not exactly match the frozen address range")
     semantics = observable_fingerprint(groups)
     if semantics in seen_observables:
         raise ValueError("identical required capture observables cannot support separate capture/chip identities")
@@ -94,7 +100,15 @@ def audit(path, seen_files, seen_payloads, seen_observables):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--capture", action="append", nargs=3, required=True, metavar=("CAPTURE_ID", "CHIP_ID", "CSV"))
+    parser.add_argument("--expected-address-range", nargs=2, metavar=("FIRST", "LAST"),
+                        help="require exactly this predeclared inclusive contiguous range in every capture")
     args = parser.parse_args()
+    expected = None
+    if args.expected_address_range is not None:
+        first, last = args.expected_address_range
+        if not INTEGER.fullmatch(first) or not INTEGER.fullmatch(last) or int(first) > int(last):
+            parser.error("expected address range requires two ordered unsigned native addresses")
+        expected = int(first), int(last)
     try:
         seen = set()
         files = set()
@@ -109,12 +123,12 @@ def main():
                 raise ValueError("duplicate capture/chip identity")
             seen.add(key)
             reports.append({"capture_id": capture_id, "chip_id": chip_id,
-                            **audit(Path(filename), files, payloads, observables)})
+                            **audit(Path(filename), files, payloads, observables, expected)})
     except (OSError, UnicodeError, csv.Error):
         parser.exit(2, "error: capture could not be read as UTF-8 CSV\n")
     except ValueError as exc:
         parser.exit(2, f"error: {exc}\n")
-    print(json.dumps({
+    report = {
         "schema": "clotho.rram_two_read_capture_preflight.v1",
         "captures": reports,
         "scope": "paired ADC codes at a nominal one-second timepoint; elapsed time shared by address",
@@ -122,7 +136,10 @@ def main():
         "verified_nominal_zero_timestamp": False,
         "native_100ks_endpoint": False,
         "retention_gate_eligible": False,
-    }, indent=2, sort_keys=True))
+    }
+    if expected is not None:
+        report["matched_declared_address_range"] = list(expected)
+    print(json.dumps(report, indent=2, sort_keys=True))
     return 0
 
 

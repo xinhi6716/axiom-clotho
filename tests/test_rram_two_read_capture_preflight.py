@@ -47,6 +47,33 @@ class TwoReadCapturePreflight(unittest.TestCase):
             for key in ("verified_nominal_zero_timestamp", "native_100ks_endpoint", "retention_gate_eligible"):
                 self.assertIs(report[key], False)
 
+    def test_frozen_address_range_rejects_gaps_omissions_and_wrong_support(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "capture.csv"
+            bind = ("--capture", "c", "chip", str(path))
+            exact = ("--expected-address-range", "2", "4")
+            for addresses in ((2, 4), (2, 3), (2, 3, 5), (2, 3, 4, 5)):
+                with self.subTest(addresses=addresses):
+                    capture(path, [row for a in addresses for row in group(a)])
+                    self.assertEqual(cli(*bind).returncode, 0)
+                    rejected = cli(*bind, *exact)
+                    self.assertEqual(rejected.returncode, 2)
+                    self.assertFalse(rejected.stdout)
+                    self.assertIn("frozen address range", rejected.stderr)
+            capture(path, group(4) + group(2) + group(3))
+            accepted = cli(*bind, *exact)
+            self.assertEqual(accepted.returncode, 0, accepted.stderr)
+            report = json.loads(accepted.stdout)
+            self.assertEqual(report["matched_declared_address_range"], [2, 4])
+            self.assertIs(report["physical_capture_independence_verified"], False)
+            for bad in (("4", "2"), ("0", "1000000000"), ("+2", "4")):
+                rejected = cli(*bind, "--expected-address-range", *bad)
+                self.assertEqual(rejected.returncode, 2)
+                self.assertIn("expected address range", rejected.stderr)
+            huge = cli(*bind, "--expected-address-range", "0", "999999999")
+            self.assertEqual(huge.returncode, 2)
+            self.assertIn("frozen address range", huge.stderr)
+
     def test_missing_duplicate_conflicting_or_invalid_lane_cannot_pass(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "capture.csv"
