@@ -75,6 +75,24 @@ declarations**, not verified facts: the utility cannot detect secretly mixed
 units, different target definitions, bad joins or leakage from numeric values.
 It does no unit conversion or normalization. A report is not provenance proof.
 
+## Compare two saved interval sets
+
+```sh
+mlcalc compare-intervals reference.json candidate.json
+clotho tabular compare-intervals reference.json candidate.json
+```
+
+Pass the input documents used by `evaluate-intervals`, not its output
+reports. The documents must contain the same exact non-null alpha, target
+and unit metadata, row roster, row-to-group bindings, and observations.
+Row order can differ. The command writes one descriptive JSON object to
+stdout with row-weighted and equal-group scores, including `b_minus_a`
+(candidate minus reference). The exact interval-score difference is a
+rational string. Mismatched or invalid inputs exit 2 without a report. No
+models are loaded or fitted and no files are written; the supplied matching
+cohort and alpha do not establish future coverage.
+
+
 ## Coverage, width and interval score
 
 For row `i`, let observed value be `y_i`, bounds `l_i <= u_i`, and let `g(i)`

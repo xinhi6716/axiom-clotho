@@ -328,6 +328,36 @@ def _validate_group_forward_main(argv):
     return 0
 
 
+def _add_compare_intervals_parser(sub):
+    parser = sub.add_parser(
+        "compare-intervals", allow_abbrev=False,
+        help="Compare two saved interval-score reports' inputs on one matched cohort",
+        description="Compare saved prediction intervals as candidate minus reference; no fitting or calibration.",
+        epilog="Both input documents must share exact alpha, metadata, roster, groups and observed values.",
+    )
+    parser.add_argument("reference", type=Path, help="Saved interval reference JSON (arm A)")
+    parser.add_argument("candidate", type=Path, help="Saved interval candidate JSON (arm B)")
+    return parser
+
+
+def _compare_intervals_main(argv):
+    parser = _add_compare_intervals_parser(argparse.ArgumentParser(prog="groupbench").add_subparsers())
+    args = parser.parse_args(argv)
+    from .budget_comparison import _read_input
+    from .interval_evaluation import compare_saved_interval_scores, load_document
+    try:
+        a = load_document(_read_input(args.reference))
+        b = load_document(_read_input(args.candidate))
+        report = compare_saved_interval_scores(a, b)
+        print(json.dumps(report, indent=2, sort_keys=True, allow_nan=False))
+    except (ValueError, OSError, TypeError):
+        # Path or transport errors may contain caller-supplied locations or bytes.
+        print("paired interval comparison rejected: invalid, unavailable or mismatched inputs",
+              file=sys.stderr)
+        return 2
+    return 0
+
+
 def _leaderboard_float(value):
     # Preserve nonzero scores below the fixed-decimal display resolution.
     return f"{value:.4e}" if 0 < abs(value) < 0.0001 else f"{value:.4f}"
@@ -342,6 +372,8 @@ def main(argv=None) -> int:
         return plan_group_windows(argv[1:])
     if argv and argv[0] == "validate-group-forward-bundle":
         return _validate_group_forward_main(argv[1:])
+    if argv and argv[0] == "compare-intervals":
+        return _compare_intervals_main(argv[1:])
     if argv and argv[0] == "compare-predictions":
         from .saved_scoring import compare_main
         return compare_main(argv[1:])
@@ -376,6 +408,7 @@ Working with your own data:
   mlcalc binary --help       Use the separate numeric 0/1 workflow.
   mlcalc evaluate-binary --help  Score a complete saved binary probability cohort; no fitting.
   mlcalc evaluate-intervals --help  Score saved bounds or report an opt-in coverage diagnostic.
+  mlcalc compare-intervals --help  Compute matched candidate-minus-reference interval scores.
   mlcalc compare-predictions --help  Compare two saved regression bundles on identical query bytes; no fitting.
   mlcalc score-predictions --help  Join complete later outcomes to saved regression predictions; no fitting.
 
@@ -418,6 +451,7 @@ The groupbench command is an alias for the same CLI.""",
         _add_columns(preview)
         _add_protocol(preview, outer=mode == "run", output=False, domain_selection=True)
     _add_verify_parser(sub)
+    _add_compare_intervals_parser(sub)
     _add_group_forward_validate_parser(sub)
     schema = sub.add_parser("validate-prediction-bundle", allow_abbrev=False,
                             help="Check supported regression prediction metadata and CSV consistency",
