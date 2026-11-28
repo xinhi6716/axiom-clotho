@@ -406,3 +406,29 @@ fn validates_binary_auc_pair_credit_without_assuming_group_row_membership() {
         assert!(String::from_utf8_lossy(&out.stderr).contains(reason));
     }
 }
+
+#[test]
+fn binary_group_confusion_must_rebuild_each_deterministic_fold() {
+    let work = Work::new();
+    let bundle = evaluate(&work, true);
+    let original = inspect_success(&bundle);
+    assert_ne!(original["folds"][0]["metrics"]["n_positive"], original["folds"][1]["metrics"]["n_positive"]);
+
+    // A and B have equal sizes but sort into different folds. Swapping
+    // their reports preserves sizes, the global confusion, and every global
+    // metric identity; the fold 0/1 class counts can no longer be correct.
+    alter(&bundle, |v| {
+        let groups = v["groups"].as_array_mut().unwrap();
+        assert_eq!(groups[0]["n_rows"], groups[1]["n_rows"]);
+        assert_eq!(groups[0]["metrics"]["n_positive"], 0);
+        assert_eq!(groups[1]["metrics"]["n_positive"], 2);
+        let a = groups[0]["metrics"].clone();
+        groups[0]["metrics"] = groups[1]["metrics"].clone();
+        groups[1]["metrics"] = a;
+    });
+
+    let out = inspect(&bundle);
+    assert!(!out.status.success(), "inconsistent group-to-fold confusion was projected");
+    assert!(out.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&out.stderr).contains("Group confusion does not rebuild its declared fold"));
+}

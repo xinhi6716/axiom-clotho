@@ -340,30 +340,32 @@ fn projection<M, G, F, A>(m: &Manifest<M, G, F, A>, task: Aggregate) -> Evaluati
 
 fn check_group_rows<'a>(
     rows: &Rows, groups: impl Iterator<Item = (&'a str, usize)>,
-) -> Result<()> {
+) -> Result<Vec<usize>> {
     let n_rows = rows.observed.len();
     let mut total = 0_usize;
     let mut seen = HashSet::new();
-    let mut sizes = Vec::new();
-    for (id, n) in groups {
+    let mut roster = Vec::new();
+    for (index, (id, n)) in groups.enumerate() {
         require(seen.insert(id) && (1..=n_rows).contains(&n), "Inconsistent evaluation group roster")?;
         total = total.checked_add(n).ok_or("Invalid evaluation group count")?;
-        sizes.push(n);
+        roster.push((id, n, index));
     }
     require(total == n_rows, "Inconsistent evaluation group counts")?;
 
-    // Largest group first, then lowest-index lightest fold. Producer
-    // lexical tie-breaking among equal-sized groups cannot affect the
-    // resulting loads. This neither reconstructs nor asserts row-to-group IDs.
-    sizes.sort_unstable_by(|a, b| b.cmp(a));
+    // Match the producer's descending size and ascending lexical group order
+    // and lowest-index lightest fold. This assigns group summaries, not rows.
+    roster.sort_unstable_by(|(a, n_a, _), (b, n_b, _)| n_b.cmp(n_a).then(a.cmp(b)));
+    let mut assignments = vec![0; roster.len()];
     let mut loads: BinaryHeap<_> = (0..rows.folds.len()).map(|i| Reverse((0, i))).collect();
-    for size in sizes {
+    for (_, size, index) in roster {
         let mut lightest = loads.peek_mut().ok_or("Missing evaluation folds")?;
         let Reverse((load, i)) = *lightest;
+        assignments[index] = i;
         *lightest = Reverse((load + size, i));
     }
     require(loads.into_iter().all(|Reverse((load, i))| rows.folds[i].0.len() == load),
-        "Evaluation fold sizes disagree with the declared group size partition")
+        "Evaluation fold sizes disagree with the declared group size partition")?;
+    Ok(assignments)
 }
 
 fn fold<M>(
@@ -542,18 +544,22 @@ fn project_bin(m: Manifest<Bin, BinGroup, BinFold, BinMacro>, header: BinaryHead
     require((0.0..=1.0).contains(&threshold) && header.positive_label == 1, "Invalid binary evaluation metadata")?;
     let rows = parse_rows(csv, m.n_rows, m.n_folds, Some(threshold))?;
     compare(m.pooled_row_weighted, bin(binary_metrics(&rows.observed, &rows.predicted, threshold)?))?;
-    check_group_rows(&rows, m.groups.iter().map(|g| (g.group.as_str(), g.n_rows)))?;
+    let group_folds = check_group_rows(&rows, m.groups.iter().map(|g| (g.group.as_str(), g.n_rows)))?;
     let mut losses = Vec::new();
     let mut accuracies = Vec::new();
     let mut balanced = Vec::new();
     let mut confusion = [0; 4];
-    for g in &m.groups {
+    let mut fold_confusion = vec![[0; 4]; m.n_folds];
+    for (g, fold_index) in m.groups.iter().zip(group_folds) {
         let r = g.metrics;
         binary_group(r, g.n_rows)?;
         losses.push(r.log_loss);
         accuracies.push(r.accuracy);
         balanced.extend(r.balanced_accuracy);
-        for (sum, n) in confusion.iter_mut().zip([r.tp, r.fp, r.tn, r.fn_]) { *sum += n; }
+        for (cell, n) in [r.tp, r.fp, r.tn, r.fn_].into_iter().enumerate() {
+            confusion[cell] += n;
+            fold_confusion[fold_index][cell] += n;
+        }
     }
     let pooled = m.pooled_row_weighted;
     compare(confusion, [pooled.tp, pooled.fp, pooled.tn, pooled.fn_])?;
@@ -571,6 +577,8 @@ fn project_bin(m: Manifest<Bin, BinGroup, BinFold, BinMacro>, header: BinaryHead
         check_encoded_width(&m, f.encoded_feature_count)?;
         let measured = bin(binary_metrics(y, p, threshold)?);
         compare(f.metrics, measured)?;
+        require(fold_confusion[i] == [measured.tp, measured.fp, measured.tn, measured.fn_],
+            "Group confusion does not rebuild its declared fold")?;
         folds.push(fold(i, f.fold, f.n_train, f.n_test, f.encoded_feature_count, m.n_rows, y.len(), measured)?);
     }
     Ok(projection(&m, Aggregate::Binary { threshold, pooled_row_weighted: pooled, equal_group_weighted, folds }))
