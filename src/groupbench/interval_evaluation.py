@@ -523,6 +523,77 @@ def bound_paired_interval_scores_common_offset(rows, *, expected_roster, alpha, 
     }
 
 
+def bound_paired_failure_risk_at_horizon(rows, *, expected_roster, horizon):
+    """Sharp descriptive B-minus-A first-failure risk at a fixed horizon.
+
+    Each row is (pair_id, a_last_event_free, a_first_failed,
+    b_last_event_free, b_first_failed) for two separately observed matched
+    attempts. Use None for an unobserved bound, not for a confirmed event-free
+    read. The event must be an absorbing first failure or a separately logged
+    onset; a current pass does not rule out earlier recoverable excursions.
+    Horizon and times are nonnegative on the same elapsed scale, using
+    T > last_event_free, T <= first_failed and event indicator T <= horizon.
+    The association roster is fixed before outcomes. Bounds are sharp on the
+    product of the declared feasible time ranges, without cross-attempt time
+    restrictions, not confidence intervals or a causal effect.
+    """
+    h = _number(horizon)
+    if h < 0:
+        raise ValueError("Failure horizon must be nonnegative.")
+    if type(rows) not in (list, tuple) or not 1 <= len(rows) <= MAX_ROWS:
+        raise ValueError("Failure rows must be a bounded nonempty sequence.")
+    wrapped, by_pair = [], {}
+    for row in rows:
+        if type(row) is not tuple or len(row) != 5:
+            raise ValueError("Each pair needs an ID and two last-event-free/first-failure time pairs.")
+        key = _label(row[0])
+        if key in by_pair:
+            raise ValueError("Failure pair identifiers must be unique.")
+        by_pair[key] = row[1:]
+        wrapped.append((key, 0, 0, 0, 0, 0, 0))
+
+    def event_range(last, first):
+        last = None if last is None else _number(last)
+        first = None if first is None else _number(first)
+        if ((last is not None and last < 0) or (first is not None and first < 0)
+                or (last is not None and first is not None and first <= last)):
+            raise ValueError("Failure observation times must be nonnegative and strictly ordered.")
+        if first is not None and first <= h:
+            return (1, 1)
+        if last is not None and last >= h:
+            return (0, 0)
+        return (0, 1)
+
+    groups = {}
+    paired = list(_paired_bounded_interval_rows(wrapped, expected_roster))
+    for row, (group, *_) in zip(wrapped, paired, strict=True):
+        a0, a1, b0, b1 = by_pair[row[0]]
+        a_lo, a_hi = event_range(a0, a1)
+        b_lo, b_hi = event_range(b0, b1)
+        count, al, ah, bl, bh = groups.get(group, (0, 0, 0, 0, 0))
+        groups[group] = (count + 1, al + a_lo, ah + a_hi, bl + b_lo, bh + b_hi)
+
+    rows_n = len(rows)
+    group_n = len(groups)
+    all_stats = tuple(groups.values())
+    row_values = tuple(Fraction(sum(s[i] for s in all_stats), rows_n) for i in range(1, 5))
+    group_values = tuple(
+        sum(Fraction(s[i], s[0]) for s in all_stats) / group_n for i in range(1, 5))
+
+    def summarize(vals):
+        al, ah, bl, bh = vals
+        return {"a_risk_bounds": (al, ah), "b_risk_bounds": (bl, bh),
+                "b_minus_a_risk_bounds": (bl - ah, bh - al)}
+
+    return {
+        "n_pairs": rows_n, "n_declared_groups": group_n, "horizon_exact": h,
+        "a_indeterminate_pairs": sum(s[2] - s[1] for s in all_stats),
+        "b_indeterminate_pairs": sum(s[4] - s[3] for s in all_stats),
+        "row_weighted": summarize(row_values),
+        "equal_group": summarize(group_values),
+    }
+
+
 def bound_paired_interval_coverage(rows, *, expected_roster):
     """Bound B-minus-A empirical coverage under a shared, bounded truth per row.
 

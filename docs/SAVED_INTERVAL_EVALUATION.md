@@ -338,3 +338,26 @@ per-row outcome boxes may give a broader outer range and obscure a ranking
 under the shared-offset model. None of these intervals are confidence or
 prediction intervals. Do not choose a calibration bound based on scored
 outcomes; keep the calibration evidence separate and forecast history intact.
+
+### Fixed-horizon failure risk with intermittent observations
+
+Use the Python helper `bound_paired_failure_risk_at_horizon` for two
+separately observed matched attempts per pair. Supply a frozen complete
+`(pair_id, group)` roster and rows
+`(pair_id, a_last_event_free, a_first_failed, b_last_event_free, b_first_failed)`.
+Use elapsed times on the same scale, and `None` for an unobserved time.
+Pairing and the biological or physical meaning of the failure event are
+declared, not inferred. Use absorbing failure or certified first-onset
+records: a passing spot check alone cannot rule out a recoverable failure
+before that check.
+
+With event time `T`, last confirmed event-free time `L` and first
+confirmed failed time `U`, this helper uses `L < T <= U` wherever
+those bounds exist. The fixed horizon includes events exactly at the
+horizon. If a time gap includes the horizon, the attempt contributes to
+both logically possible states; missing follow-up stays in the denominator.
+Compare row-weighted and equal-group risk and B-minus-A risk ranges;
+lower is better. Intervals are sharp under the declared independent
+feasible time ranges and do not imply confidence, extrapolated reliability,
+or causal attribution. Do not optimize the horizon or exclude failed
+attempts based on the scored outcomes.
