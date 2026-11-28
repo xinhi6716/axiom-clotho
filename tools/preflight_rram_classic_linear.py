@@ -18,7 +18,31 @@ def planned_start_count(lower_us, upper_us, interval_us, samples):
     return max(0, high - low + 1)
 
 
-def preflight(channels, interval_us, samples):
+def joint_anchor_design(cap):
+    """Find minimum-sample uniform plans; nominal equality is stricter than window coverage."""
+    window_plans, exact_plans = [], []
+    for interval in range(INTERVAL_MIN_US, min(EARLY_END_US, INTERVAL_MAX_US) + 1, INTERVAL_STEP_US):
+        first_terminal = ceiling_divide(TERMINAL_START_US, interval) * interval
+        required = first_terminal // interval + 1
+        if first_terminal <= TERMINAL_END_US and required <= cap:
+            window_plans.append((required, first_terminal, interval))
+        target = 100_000_000_000
+        required = target // interval + 1
+        if 1_000_000 % interval == 0 and target % interval == 0 and required <= cap:
+            exact_plans.append((required, target, interval))
+
+    def witness(plans):
+        if not plans:
+            return None
+        count, terminal, interval = min(plans)
+        return {"sample_interval_us": interval, "samples_per_channel": count,
+                "witness_terminal_start_us": terminal}
+
+    return {"minimum_samples_window_witness": witness(window_plans),
+            "minimum_samples_exact_nominal_witness": witness(exact_plans)}
+
+
+def preflight(channels, interval_us, samples, *, diagnose_design=False):
     if type(channels) is not int or not 1 <= channels <= TOTAL_SAMPLE_CAP:
         raise ValueError("measurement-channel count does not admit any samples")
     if (type(interval_us) is not int or not INTERVAL_MIN_US <= interval_us <= INTERVAL_MAX_US
@@ -36,7 +60,7 @@ def preflight(channels, interval_us, samples):
                     * INTERVAL_STEP_US if cap > 1 else None)
     if min_interval is not None and min_interval > INTERVAL_MAX_US:
         min_interval = None
-    return {
+    report = {
         "schema": "clotho.rram_classic_linear_plan.v1",
         "mode": "confirmed_classic_ivt_linear_standard_grid",
         "declared_measurement_channels": channels,
@@ -56,6 +80,9 @@ def preflight(channels, interval_us, samples):
         "latest_start_at_sample_cap_with_1p02s_interval_us": (cap - 1) * EARLY_END_US,
         "minimum_grid_interval_to_reach_80ks_at_sample_cap_us": min_interval,
     }
+    if diagnose_design:
+        report["joint_anchor_design"] = joint_anchor_design(cap)
+    return report
 
 
 def main():
@@ -65,11 +92,14 @@ def main():
     parser.add_argument("--measurement-channels", type=int, required=True)
     parser.add_argument("--sample-interval-us", type=int, required=True)
     parser.add_argument("--samples-per-channel", type=int, required=True)
+    parser.add_argument("--diagnose-joint-anchor-design", action="store_true",
+                        help="minimum-sample alternative recipes for both windows and both exact nominals")
     args = parser.parse_args()
     if not args.confirm_classic_linear_standard_grid:
         parser.exit(2, "error: explicit confirmation of Classic linear standard-grid setup is required\n")
     try:
-        report = preflight(args.measurement_channels, args.sample_interval_us, args.samples_per_channel)
+        report = preflight(args.measurement_channels, args.sample_interval_us, args.samples_per_channel,
+                           diagnose_design=args.diagnose_joint_anchor_design)
     except ValueError as exc:
         parser.exit(2, f"error: {exc}\n")
     print(json.dumps(report, indent=2, sort_keys=True))

@@ -8,11 +8,13 @@ TOOL = Path(__file__).resolve().parents[1] / "tools" / "preflight_rram_classic_l
 
 
 class ClassicLinearPreflight(unittest.TestCase):
-    def run_plan(self, channels, interval, samples, *, confirmed=True):
+    def run_plan(self, channels, interval, samples, *, confirmed=True, design=False):
         command = [sys.executable, str(TOOL), "--measurement-channels", str(channels),
                    "--sample-interval-us", str(interval), "--samples-per-channel", str(samples)]
         if confirmed:
             command.append("--confirm-classic-linear-standard-grid")
+        if design:
+            command.append("--diagnose-joint-anchor-design")
         return subprocess.run(command, text=True, capture_output=True, check=False)
 
     def test_displayed_duration_is_not_final_start_and_exact_grid_has_no_spares(self):
@@ -52,6 +54,21 @@ class ClassicLinearPreflight(unittest.TestCase):
         self.assertIsNone(p["first_nonorigin_planned_start_us"])
         self.assertEqual(p["last_planned_start_elapsed_us"], 0)
         self.assertEqual(p["planned_nonorigin_starts_in_early_window"], 0)
+
+    def test_joint_anchor_design_distinguishes_windows_from_exact_nominal_slots(self):
+        p = json.loads(self.run_plan(1, 2_000_000, 1, design=True).stdout)["joint_anchor_design"]
+        self.assertEqual(p["minimum_samples_window_witness"], {
+            "sample_interval_us": 1_020_000, "samples_per_channel": 78_433,
+            "witness_terminal_start_us": 80_000_640_000,
+        })
+        self.assertEqual(p["minimum_samples_exact_nominal_witness"], {
+            "sample_interval_us": 1_000_000, "samples_per_channel": 100_001,
+            "witness_terminal_start_us": 100_000_000_000,
+        })
+        self.assertEqual(json.loads(self.run_plan(2, 1_000_000, 1, design=True).stdout)["joint_anchor_design"], {
+            "minimum_samples_window_witness": None,
+            "minimum_samples_exact_nominal_witness": None,
+        })
 
     def test_unconfirmed_out_of_grid_and_over_budget_fail_without_json(self):
         for result in (self.run_plan(1, 1_000_000, 2, confirmed=False),
