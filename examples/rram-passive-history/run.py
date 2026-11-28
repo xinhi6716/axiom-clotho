@@ -31,6 +31,21 @@ def current(state, voltage):
     return Fraction(voltage) * (1 + unit(state))
 
 
+def relaxation_increment_determinants(samples):
+    """Exact local moment identity on a caller-declared uniform grid.
+
+    Return the increment determinants, not mode labels or a noise threshold.
+    Mixed signs, measurement drift and three or more modes are not identified
+    by this statistic.
+    """
+    if type(samples) not in (list, tuple) or not 4 <= len(samples) <= 256:
+        raise ValueError("Expected four to 256 ordered samples on the same uniform grid.")
+    if any(type(v) not in (int, Fraction) for v in samples):
+        raise ValueError("Expected exact rational samples.")
+    increments = [Fraction(b) - Fraction(a) for a, b in zip(samples, samples[1:])]
+    return tuple(a*c - b*b for a, b, c in zip(increments, increments[1:], increments[2:]))
+
+
 def witness():
     outputs = []
     # Equal duration, duty count, and final drive; only pulse order differs.

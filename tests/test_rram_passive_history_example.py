@@ -49,3 +49,22 @@ class PassiveHistoryTest(unittest.TestCase):
                 example.step(*args)
         with self.assertRaises(ValueError):
             example.current(0, float("nan"))
+
+    def test_relaxation_determinants_against_factorized_oracle(self):
+        for q, r, a, b in product((F(1, 4), F(1, 2), F(3, 4)),
+                                   (F(1, 4), F(1, 2), F(3, 4)),
+                                   (F(-1), F(0), F(1, 3), F(2)),
+                                   (F(-1), F(0), F(1, 3), F(2))):
+            d = [a*q**i + b*r**i for i in range(5)]
+            expected = tuple(a*b*(q*r)**i*(q-r)**2 for i in range(3))
+            for shift, sign in ((F(7, 11), 1), (F(-9, 7), -1)):
+                y = [shift] + [shift + sign * sum(d[:i]) for i in range(1, 6)]
+                self.assertEqual(example.relaxation_increment_determinants(y), expected)
+        # Fast then slow summed with same sign gives a held increment above
+        # a one-rate extrapolation from its first two increments.
+        x = [F(0), F(3, 2), F(17, 8), F(79, 32)]
+        self.assertEqual(example.relaxation_increment_determinants(x), (F(1, 8),))
+        self.assertEqual(F(11, 32) - F(5, 8)**2/F(3, 2), F(1, 12))
+        for invalid in ([1,2,3], [0,1,2,3.0], [0]*257, [0,True,2,3]):
+            with self.assertRaises(ValueError):
+                example.relaxation_increment_determinants(invalid)
