@@ -233,7 +233,7 @@ fn intercept_converges_without_a_design(
     }
     // There are no slope coefficients, and the intercept is not penalized.
     objective.total()?;
-    let step = solve_positive_definite(vec![vec![curvature]], &[gradient])?;
+    let step = solve_positive_definite(&mut [vec![curvature]], &[gradient])?;
     Ok(gradient.abs() <= GRADIENT_TOLERANCE
         && step[0].abs() <= STEP_TOLERANCE * (1.0 + initial.abs()))
 }
@@ -248,13 +248,17 @@ fn optimize<'a>(
     // Keep a disjoint trial buffer. A rejected line-search point must not
     // update the current parameters; an accepted one swaps storage.
     let mut candidate = Vec::new();
+    // Keep the packed rows allocated after Cholesky; the next derivative
+    // pass zeroes their cells before accumulating into the same buffers.
+    let mut workspace = Vec::new();
     for _ in 0..max_iterations {
         let ObjectiveDerivatives {
             value: objective,
             gradient,
             curvature,
-        } = derivatives(x.clone(), y, alpha, &parameters)?;
-        let step = solve_positive_definite(curvature, &gradient)?;
+        } = derivatives_into(x.clone(), y, alpha, &parameters, workspace)?;
+        workspace = curvature;
+        let step = solve_positive_definite(&mut workspace, &gradient)?;
         let small_gradient = gradient
             .iter()
             .all(|value| value.abs() <= GRADIENT_TOLERANCE);
@@ -294,11 +298,22 @@ fn optimize<'a>(
     Err(ClassificationError::ConvergenceFailure)
 }
 
+#[cfg(test)]
 fn derivatives<'a>(
     x: impl ExactSizeIterator<Item = &'a [f64]>,
     y: &[f64],
     alpha: f64,
     parameters: &[f64],
+) -> Result<ObjectiveDerivatives, ClassificationError> {
+    derivatives_into(x, y, alpha, parameters, Vec::new())
+}
+
+fn derivatives_into<'a>(
+    x: impl ExactSizeIterator<Item = &'a [f64]>,
+    y: &[f64],
+    alpha: f64,
+    parameters: &[f64],
+    mut curvature: Vec<Vec<f64>>,
 ) -> Result<ObjectiveDerivatives, ClassificationError> {
     if parameters.iter().any(|value| !value.is_finite()) {
         return Err(ClassificationError::NumericFailure);
@@ -307,7 +322,14 @@ fn derivatives<'a>(
     let mut objective = CompensatedSum::default();
     let mut gradient = vec![0.0; width];
     // Cholesky reads only the lower triangle. Store each active prefix.
-    let mut curvature: Vec<_> = (1..=width).map(|len| vec![0.0; len]).collect();
+    if curvature.is_empty() {
+        curvature = (1..=width).map(|len| vec![0.0; len]).collect();
+    } else {
+        debug_assert_eq!(curvature.len(), width);
+        for row in &mut curvature {
+            row.fill(0.0);
+        }
+    }
     let count = x.len() as f64;
     for (row, &label) in x.zip(y) {
         let score = dot(row, parameters)?;
@@ -383,7 +405,7 @@ fn penalized_objective(
 
 /// Diagonally equilibrated Cholesky, without hidden diagonal jitter.
 fn solve_positive_definite(
-    mut matrix: Vec<Vec<f64>>,
+    matrix: &mut [Vec<f64>],
     right: &[f64],
 ) -> Result<Vec<f64>, ClassificationError> {
     let width = right.len();
@@ -608,6 +630,24 @@ mod tests {
     use super::*;
 
     #[test]
+    fn derivative_workspace_clears_factored_curvature_before_reuse() {
+        let rows = [[1.0, 2.0], [1.0, -1.0], [1.0, 0.0], [1.0, 3.0]];
+        let rows = || rows.iter().map(|row| row.as_slice());
+        let y = [0.0, 1.0, 0.0, 1.0];
+        let mut first = derivatives(rows(), &y, 0.75, &[0.0, 0.0]).unwrap();
+        solve_positive_definite(&mut first.curvature, &first.gradient).unwrap();
+        let allocated_row = first.curvature[1].as_ptr();
+        let parameters = [1.0, -1.5];
+        let fresh = derivatives(rows(), &y, 0.75, &parameters).unwrap();
+        let reused = derivatives_into(rows(), &y, 0.75, &parameters, first.curvature).unwrap();
+        assert_eq!(reused.curvature[1].as_ptr(), allocated_row);
+        assert_eq!(fresh.value.to_bits(), reused.value.to_bits());
+        assert!(fresh.gradient.iter().map(|v| v.to_bits()).eq(reused.gradient.iter().map(|v| v.to_bits())));
+        assert!(fresh.curvature.iter().flatten().map(|v| v.to_bits())
+            .eq(reused.curvature.iter().flatten().map(|v| v.to_bits())));
+    }
+
+    #[test]
     fn logistic_fit_never_drops_late_varying_columns_after_a_constant_prefix() {
         let mut rows = vec![vec![-0.0; 20]; 256];
         rows[1][0] = 0.0;
@@ -669,8 +709,8 @@ mod tests {
         let x = vec![vec![1.0]; 4];
         let y = [0.0, 1.0, 0.0, 1.0];
         let initial = vec![4.0];
-        let d = derivatives(x.iter().map(Vec::as_slice), &y, 0.0, &initial).unwrap();
-        let step = solve_positive_definite(d.curvature, &d.gradient).unwrap();
+        let mut d = derivatives(x.iter().map(Vec::as_slice), &y, 0.0, &initial).unwrap();
+        let step = solve_positive_definite(&mut d.curvature, &d.gradient).unwrap();
         assert!(loss(x.iter().map(Vec::as_slice), &y, 0.0, &[initial[0] - step[0]]).unwrap() > d.value);
         let solution = optimize(x.iter().map(Vec::as_slice), &y, 0.0, initial, MAX_ITERATIONS).unwrap();
         assert!(solution[0].abs() < 1e-9);
@@ -785,13 +825,13 @@ mod tests {
     }
     #[test]
     fn packed_cholesky_uses_only_factored_prefix_and_detects_singularity() {
-        let matrix = vec![vec![4.0], vec![2.0, 5.0], vec![-2.0, 0.0, 10.25]];
-        let actual = solve_positive_definite(matrix, &[-8.0, -9.0, 29.75]).unwrap();
+        let mut matrix = vec![vec![4.0], vec![2.0, 5.0], vec![-2.0, 0.0, 10.25]];
+        let actual = solve_positive_definite(&mut matrix, &[-8.0, -9.0, 29.75]).unwrap();
         for (actual, expected) in actual.into_iter().zip([0.5, -2.0, 3.0]) {
             assert!((actual - expected).abs() < 1e-14);
         }
         assert_eq!(
-            solve_positive_definite(vec![vec![1.0], vec![1.0, 1.0]], &[1.0, 1.0]),
+            solve_positive_definite(&mut [vec![1.0], vec![1.0, 1.0]], &[1.0, 1.0]),
             Err(ClassificationError::ConvergenceFailure)
         );
     }
