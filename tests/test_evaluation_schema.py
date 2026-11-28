@@ -247,6 +247,33 @@ class EvaluationSchemaTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "inner group-median pooled score"):
             validate_evaluation_bundle(self.root)
 
+    def test_declared_legacy_config_candidate_grid_must_match_frozen_recipe(self):
+        frame = pd.DataFrame({"g": list("abcdef") * 2, "x": range(12),
+                              "y": [i * i for i in range(12)]})
+        for version, families, encoding in (
+                ("1.0", ("dummy", "ridge"), "legacy-v1"),
+                ("1.1", ("dummy", "ridge"), "distinct-v2"),
+                ("1.2", ("dummy", "ridge", "group_median"), "legacy-v1")):
+            with self.subTest(version=version):
+                run = benchmark(frame, target="y", group="g", baselines=families,
+                                outer_splits=3, inner_splits=2, categorical_encoding=encoding)
+                run.write(self.root, overwrite=True)
+                self.assertEqual(validate_evaluation_bundle(self.root).schema_version, version)
+                self.mutate_json("manifest.json", lambda m: m["config"].pop("candidates"))
+                self.assertEqual(validate_evaluation_bundle(self.root).schema_version, version)
+                for mutation, edit in (
+                        ("order", lambda grid: list(reversed(grid))),
+                        ("boolean", lambda grid: grid[:1] + [dict(grid[1], params={"alpha": True})] + grid[2:])):
+                    with self.subTest(mutation=mutation):
+                        run.write(self.root, overwrite=True)
+                        self.mutate_json("manifest.json", lambda m: m["config"].update(
+                            candidates=edit(m["config"]["candidates"])))
+                        self.assertEqual(verify_bundle(self.root).bundle_type, "evaluation")
+                        before = {p.name: p.read_bytes() for p in self.root.iterdir()}
+                        with self.assertRaisesRegex(ValueError, "configured candidate grid"):
+                            validate_evaluation_bundle(self.root)
+                        self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
+
     def test_extended_v1_saved_winner_must_match_complete_selection_ledger(self):
         frame = pd.DataFrame({"g": list("abcdef") * 2, "x": range(12),
                               "y": [i * i for i in range(12)]})

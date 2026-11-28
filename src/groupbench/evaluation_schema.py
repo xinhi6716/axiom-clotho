@@ -406,6 +406,16 @@ def _check(manifest, summary, raw, *, require_run_key=False):
              ("dummy", "ridge", "extra_trees"))
     if not isinstance(baselines, list) or not baselines or any(not isinstance(x, str) or x not in known for x in baselines) or len(set(baselines)) != len(baselines):
         _fail("unsupported or duplicate model family.")
+    if version in ("1.0", "1.1", "1.2") and "candidates" in config:
+        # Narrow historical artifacts may omit this field. If present, the
+        # ordered grid must agree with the frozen recipes, not contradict the
+        # separately validated fold scores or their stable tie order.
+        expected_grid = _domain_candidates(config)  # The v1 protocols share this grid.
+        declared_grid = config["candidates"]
+        if (not isinstance(declared_grid, list) or len(declared_grid) != len(expected_grid)
+                or any(not _same_declaration(actual, expected)
+                       for actual, expected in zip(declared_grid, expected_grid))):
+            _fail("configured candidate grid differs from the frozen protocol grid.")
     names = baselines + ["selected"]
     if not isinstance(summary.get("models"), dict) or set(summary["models"]) != set(names):
         _fail("model coverage differs.")
