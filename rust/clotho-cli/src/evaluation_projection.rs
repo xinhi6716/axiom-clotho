@@ -598,6 +598,16 @@ fn project_bin(m: Manifest<Bin, BinGroup, BinFold, BinMacro>, header: BinaryHead
         check_encoded_width(&m, f.encoded_feature_count)?;
         let measured = bin(binary_metrics(y, p, threshold)?);
         compare(f.metrics, measured)?;
+        if matches!(m.model, ProducerModel::Majority) {
+            // Native majority emits positive class frequency, not the
+            // thresholded vote. This baseline needs only the training labels,
+            // which are the complement of this fold's retained test labels.
+            let training_rows = m.n_rows - y.len();
+            let training_positives = pooled.n_positive - measured.n_positive;
+            require(training_rows > 0 &&
+                p.iter().all(|&probability| probability == training_positives as f64 / training_rows as f64),
+                "Majority probabilities do not match the fold training prevalence")?;
+        }
         require(fold_confusion[i] == [measured.tp, measured.fp, measured.tn, measured.fn_],
             "Group confusion does not rebuild its declared fold")?;
         folds.push(fold(i, f.fold, f.n_train, f.n_test, f.encoded_feature_count, m.n_rows, y.len(), measured)?);

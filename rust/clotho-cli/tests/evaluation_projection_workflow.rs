@@ -492,3 +492,34 @@ fn a_single_regression_group_in_a_fold_must_match_the_entire_fold() {
     assert!(out.stdout.is_empty());
     assert!(String::from_utf8_lossy(&out.stderr).contains("Single regression group must match its declared fold"));
 }
+
+#[test]
+fn declared_majority_baseline_must_use_the_training_complement_prevalence() {
+    let work = Work::new();
+    let csv = work.0.join("source.csv");
+    fs::write(&csv, concat!(
+        "x,y,g\n-2,0,A\n-1,0,A\n1,1,A\n",
+        "-2,0,B\n-1,0,B\n-0.5,0,B\n",
+        "-1,0,C\n1,1,C\n2,1,C\n",
+        "-1,0,D\n1,1,D\n2,1,D\n",
+    )).unwrap();
+    for model in ["majority", "logistic"] {
+        let bundle = work.0.join(model);
+        let out = Command::new(env!("CARGO_BIN_EXE_clotho"))
+            .args(["evaluate", "--csv"]).arg(&csv)
+            .args(["--features", "x", "--target", "y", "--group", "g", "--model", model,
+                "--alpha", "1", "--threshold", "0.4", "--folds", "2", "--out"])
+            .arg(&bundle).output().unwrap();
+        assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+        inspect_success(&bundle);
+        if model == "logistic" {
+            // Every score/metric remains genuine, but those predictions do
+            // not come from the model named by the edited producer receipt.
+            alter(&bundle, |v| v["model"] = json!("majority"));
+            let out = inspect(&bundle);
+            assert!(!out.status.success(), "non-majority predictions were projected as majority");
+            assert!(out.stdout.is_empty());
+            assert!(String::from_utf8_lossy(&out.stderr).contains("Majority probabilities do not match the fold training prevalence"));
+        }
+    }
+}
