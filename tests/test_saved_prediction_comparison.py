@@ -68,6 +68,41 @@ class SavedPredictionComparisonTests(unittest.TestCase):
         self.assertEqual(result['model_b'], scoring.score_saved_predictions(self.b, self.outcomes))
         self.assertEqual(before, snapshot(self.root)); self.assertEqual(self.contract, contract)
 
+    def test_query_eligibility_bounds_retained_range_and_unseen_unions(self):
+        import pandas as pd
+        from groupbench import fit_predict, validate_prediction_bundle_schema
+
+        training = pd.DataFrame({"x": [1.] * 6, "z": [2.] * 6,
+                                 "g": "A A B B C C".split(), "response": range(6)})
+        for kind in ("numeric", "categorical"):
+            train = training if kind == "numeric" else training.assign(x="known-x", z="known-z")
+            values = ("10", "20") if kind == "numeric" else ("new-x", "new-z")
+            flag = ("numeric_outside_training_range" if kind == "numeric" else "unseen_category")
+            for direction in ("under", "over"):
+                with self.subTest(kind=kind, direction=direction):
+                    x, z = values
+                    body = (f"{x},,99\n,{z},99\n,,99\n" if direction == "under"
+                            else f"{x},{z},99\n{x},{z},99\n,,99\n")
+                    self.query.write_text("x,z,response\n" + body)
+                    incoming, query_digest = cli._read_csv_with_hash(self.query)
+                    fit_predict(train, incoming[["x", "z"]], target="response", group="g",
+                                baselines=("dummy",), inner_splits=2, prediction_source_sha256=query_digest
+                                ).write(self.b, overwrite=True)
+                    self.build(self.a, (0, 0, 0))
+                    self.assertEqual(self.score()["n_rows"], 3)
+                    current = json.loads((self.b / "manifest.json").read_text())
+                    self.assertEqual(current["input_support"]["row_flag_counts"][flag], 2)
+                    amended = 1 if direction == "under" else 3
+                    amend(self.b, lambda m: m["input_support"]["row_flag_counts"].update({flag: amended}))
+                    # The altered scalar remains feasible without query masks.
+                    validate_prediction_bundle_schema(self.b)
+                    before = snapshot(self.root)
+                    with self.assertRaisesRegex(scoring.SavedScoringError, "support union.*retained query"):
+                        self.score()
+                    self.assertEqual(before, snapshot(self.root))
+                    amend(self.b, lambda m: m["environment"].update(pandas="0.0"))
+                    self.assertEqual(self.score()["n_rows"], 3)  # legacy byte binding still usable
+
     def test_method_labels_have_distinct_unicode_scalar_identity(self):
         bad = dict(self.contract, method_a='\ud83d\ude00', method_b='\U0001f600')
         with self.assertRaisesRegex(scoring.SavedScoringError, 'Unicode scalar'):

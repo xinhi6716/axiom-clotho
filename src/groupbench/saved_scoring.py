@@ -253,6 +253,10 @@ def _check_query_support_missingness(manifest, query):
     import numpy as np
     rows_with_missing = np.zeros(len(query), dtype=bool)
     rows_with_unsupported = np.zeros(len(query), dtype=bool)
+    range_flag = "numeric_outside_training_range"
+    unseen_flag = "unseen_category"
+    eligible = {flag: np.zeros(len(query), dtype=bool) for flag in (range_flag, unseen_flag)}
+    required = {flag: np.zeros(len(query), dtype=bool) for flag in eligible}
     # Normalization and the all-missing-column dtype accommodation preserve
     # the null mask. Training values are not needed for these two checks.
     for feature in support["features"]:
@@ -260,13 +264,33 @@ def _check_query_support_missingness(manifest, query):
         if int(missing.sum()) != feature["prediction_missing_count"]:
             raise SavedScoringError("Feature query missingness differs from saved input support.")
         rows_with_missing |= missing
-        if feature["training_support"] == "unavailable_all_missing":
-            rows_with_unsupported |= ~missing
+        present = ~missing
+        all_missing_training = feature["training_support"] == "unavailable_all_missing"
+        if all_missing_training:
+            rows_with_unsupported |= present
+        if feature["kind"] == "categorical":
+            flag, count = unseen_flag, feature["unseen_category_count"]
+        elif not all_missing_training:
+            flag = range_flag
+            count = feature["below_training_min_count"] + feature["above_training_max_count"]
+        else:
+            continue
+        if count:
+            eligible[flag] |= present
+            if count == len(query) - feature["prediction_missing_count"]:
+                required[flag] |= present
     if int(rows_with_missing.sum()) != support["row_flag_counts"]["missing_value"]:
         raise SavedScoringError("Aggregate query missingness differs from saved input support.")
     if (int(rows_with_unsupported.sum())
             != support["row_flag_counts"]["non_missing_value_in_all_missing_training_feature"]):
         raise SavedScoringError("Saved unsupported row count differs from the retained query.")
+    # Without training values, a non-null query cell is only eligible, not
+    # automatically flagged. However, if a feature's declared count exhausts
+    # its eligible rows, each must belong to the corresponding aggregate union.
+    for flag in eligible:
+        count = support["row_flag_counts"][flag]
+        if not int(required[flag].sum()) <= count <= int(eligible[flag].sum()):
+            raise SavedScoringError(f"Saved {flag} support union is impossible for the retained query.")
 
 
 def compare_saved_predictions(run_a, run_b, query_csv, outcomes_csv, contract):
