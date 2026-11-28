@@ -277,6 +277,42 @@ class SavedComparisonCliTests(unittest.TestCase):
         comparison_fixtures.amend(f.b, lambda manifest: manifest["environment"].update(pandas="0.0"))
         self.assertEqual(replay().returncode, 0)
 
+    def test_cli_replays_union_of_unsupported_query_values(self):
+        import pandas as pd
+        from groupbench import fit_predict
+        from groupbench.prediction_schema import validate_prediction_bundle_schema
+
+        f = self.fixture
+        f.query.write_text("x,z,response\n1,4,99\n,,99\n3,6,99\n")
+        incoming, digest = cli._read_csv_with_hash(f.query)
+        training = pd.DataFrame({"x": [float("nan")] * 6, "z": [float("nan")] * 6,
+                                 "g": "A A B B C C".split(), "response": [0., 1., 2., 3., 4., 5.]})
+        fit = fit_predict(training, incoming[["x", "z"]], target="response", group="g",
+                          baselines=("dummy",), inner_splits=2, prediction_source_sha256=digest)
+        f.build(f.a, (0, 0, 0))
+        fit.write(f.b, overwrite=True)
+        flag = "non_missing_value_in_all_missing_training_feature"
+        self.assertEqual(fit.manifest["input_support"]["row_flag_counts"][flag], 2)
+        self.assertEqual(self.invoke()[0], 0)
+
+        # The per-feature counts, query digest, missingness union, and total
+        # flagged union stay correct. Without the actual query, two sets of
+        # size two in a cohort of three could indeed have a union of three.
+        comparison_fixtures.amend(f.b, lambda m: m["input_support"]["row_flag_counts"].update({flag: 3}))
+        validate_prediction_bundle_schema(f.b)
+        before = snapshot(f.root)
+        code, stdout, stderr = self.invoke()
+        self.assertEqual((code, stdout), (2, ""))
+        self.assertIn("no comparison was written", stderr)
+        self.assertEqual(before, snapshot(f.root))
+        with self.assertRaisesRegex(scoring.SavedScoringError, "unsupported.*retained query"):
+            f.score()
+
+        # Different historical CSV token policies retain the existing
+        # exact-byte-only compatibility behavior.
+        comparison_fixtures.amend(f.b, lambda m: m["environment"].update(pandas="0.0"))
+        self.assertEqual(self.invoke()[0], 0)
+
     def test_cli_replays_declared_feature_types_against_observed_query(self):
         import pandas as pd
         from groupbench import fit_predict

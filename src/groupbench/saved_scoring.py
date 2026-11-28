@@ -252,6 +252,7 @@ def _check_query_support_missingness(manifest, query):
         return
     import numpy as np
     rows_with_missing = np.zeros(len(query), dtype=bool)
+    rows_with_unsupported = np.zeros(len(query), dtype=bool)
     # Normalization and the all-missing-column dtype accommodation preserve
     # the null mask. Training values are not needed for these two checks.
     for feature in support["features"]:
@@ -259,8 +260,13 @@ def _check_query_support_missingness(manifest, query):
         if int(missing.sum()) != feature["prediction_missing_count"]:
             raise SavedScoringError("Feature query missingness differs from saved input support.")
         rows_with_missing |= missing
+        if feature["training_support"] == "unavailable_all_missing":
+            rows_with_unsupported |= ~missing
     if int(rows_with_missing.sum()) != support["row_flag_counts"]["missing_value"]:
         raise SavedScoringError("Aggregate query missingness differs from saved input support.")
+    if (int(rows_with_unsupported.sum())
+            != support["row_flag_counts"]["non_missing_value_in_all_missing_training_feature"]):
+        raise SavedScoringError("Saved unsupported row count differs from the retained query.")
 
 
 def compare_saved_predictions(run_a, run_b, query_csv, outcomes_csv, contract):
@@ -356,7 +362,7 @@ def compare_saved_predictions(run_a, run_b, query_csv, outcomes_csv, contract):
         "limitations": list(LIMITATIONS) + [
             "Common query bytes match both producer declarations, not authenticated historical mapping or model execution.",
             "Normalized feature hashes and their query type compatibility are checked only when the hash is retained and the declared pandas version matches this runtime.",
-            "Retained support missingness is checked against the query unless a different pandas version is declared; training-side support is not rebuilt.",
+            "Retained support missingness and the nonmissing union for declared all-missing training features are checked against the query unless a different pandas version is declared; the training declarations are not independently rebuilt.",
             "Target definitions, units and group/cohort/mapping meanings are caller declarations, not verified facts.",
             "Different training sources, feature subsets and protocols may be compared; this is not a controlled or causal contrast.",
             "Paired contrasts are exact on accepted binary64 inputs before display rounding; they may differ from subtraction of displayed MAEs.",
