@@ -1,9 +1,26 @@
 """Additive binary CLI namespace; regression commands retain their defaults."""
 from pathlib import Path
 import json
-from ..categorical import ENCODINGS, LEGACY
-from .report import ensure_fresh_binary_output
-from .workflow import benchmark_binary, fit_predict_binary, plan_binary_benchmark, plan_binary_prediction
+from importlib import import_module as _import_module
+
+from .. import _CATEGORICAL_ENCODINGS as ENCODINGS, _LEGACY_ENCODING as LEGACY
+
+
+_ACTIONS = dict.fromkeys(("benchmark_binary", "fit_predict_binary",
+                          "plan_binary_benchmark", "plan_binary_prediction"), ".workflow")
+_ACTIONS["ensure_fresh_binary_output"] = ".report"
+
+
+def __getattr__(name):
+    if name not in _ACTIONS:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    value = getattr(_import_module(_ACTIONS[name], __package__), name)
+    globals()[name] = value
+    return value
+
+
+def _action(name):
+    return globals()[name] if name in globals() else __getattr__(name)
 
 
 def _options(parser, *, outer, output):
@@ -46,7 +63,7 @@ def run_binary(args):
     planning = args.binary_command == "plan"
     mode = args.binary_plan_mode if planning else args.binary_command
     if not planning:
-        ensure_fresh_binary_output(args.out)
+        _action("ensure_fresh_binary_output")(args.out)
         inputs = [args.csv_path] + ([args.new_csv_path] if mode == "predict" else [])
         if args.features_file is not None:
             inputs.append(args.features_file)
@@ -58,10 +75,10 @@ def run_binary(args):
                    categorical_encoding=args.categorical_encoding)
     if mode == "predict":
         incoming, source_hash = _read_csv_with_hash(args.new_csv_path)
-        action = plan_binary_prediction if planning else fit_predict_binary
+        action = _action("plan_binary_prediction" if planning else "fit_predict_binary")
         result = action(frame, incoming, **options, prediction_source_sha256=source_hash)
     else:
-        action = plan_binary_benchmark if planning else benchmark_binary
+        action = _action("plan_binary_benchmark" if planning else "benchmark_binary")
         result = action(frame, **options, outer_splits=args.outer_splits)
     if planning:
         print(json.dumps(result, indent=2, ensure_ascii=False, allow_nan=False))

@@ -4,6 +4,14 @@ from importlib import import_module as _import_module
 
 __version__ = "0.3.0b7"
 
+# Model protocol names are also needed to describe CLI choices without
+# importing NumPy, pandas or scikit-learn. Implementations re-export them.
+_LEGACY_ENCODING = "legacy-v1"
+_DISTINCT_ENCODING = "distinct-v2"
+_CATEGORICAL_ENCODINGS = (_LEGACY_ENCODING, _DISTINCT_ENCODING)
+_GROUP_STRATEGY = "group_kfold"
+_DOMAIN_STRATEGY = "leave_one_domain_out"
+
 # Resolve original objects, not wrappers: identity, signatures and pickle lookup
 # remain those of the defining modules. Star import intentionally loads all APIs.
 __all__ = [

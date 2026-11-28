@@ -15,16 +15,13 @@ import sys
 
 from importlib import import_module as _import_module
 
-from . import __version__
+from . import __version__, _CATEGORICAL_ENCODINGS as ENCODINGS
+from . import _LEGACY_ENCODING as LEGACY, _DOMAIN_STRATEGY as DOMAIN, _GROUP_STRATEGY as GROUP
 
 # Keep legacy module attributes patchable while leaving the raw-byte opener and
 # early metadata/byte-verification dispatch independent of numerical/model dependencies.
 _DEPENDENCIES = {
     "pd": ("pandas", None),
-    "ENCODINGS": (".categorical", "ENCODINGS"),
-    "LEGACY": (".categorical", "LEGACY"),
-    "GROUP": (".domain_selection", "GROUP"),
-    "DOMAIN": (".domain_selection", "DOMAIN"),
     "MAX_ROWS": (".data", "MAX_ROWS"),
     "make_materials_fixture": (".data", "make_materials_fixture"),
     "benchmark": (".evaluation", "benchmark"),
@@ -68,7 +65,6 @@ OUTPUT_NAMES = ("report.html", "manifest.json", "summary.json", "predictions.csv
 
 
 def _add_protocol(parser, *, outer=True, output=True, domain_selection=False):
-    _load_dependencies("ENCODINGS", "LEGACY", "GROUP", "DOMAIN")
     if output:
         parser.add_argument("--out", type=Path, required=True, help="Local output directory")
     if outer:
@@ -331,7 +327,6 @@ def main(argv=None) -> int:
         # Keep one parser and evaluator for both entry points, including errors.
         from .interval_evaluation import main as evaluate_intervals
         return evaluate_intervals(argv[1:])
-    _load_dependencies(*_DEPENDENCIES)
     parser = argparse.ArgumentParser(
         prog="groupbench",
         description=("ML Super Calculator: grouped regression for local tables.\n"
@@ -412,6 +407,7 @@ The groupbench command is an alias for the same CLI.""",
     from .binary.cli import add_binary_parser, run_binary
     add_binary_parser(sub)
     args = parser.parse_args(argv)
+    _load_dependencies(*_DEPENDENCIES)
     try:
         if args.command == "binary":
             return run_binary(args)

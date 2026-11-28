@@ -5,9 +5,8 @@ import pandas as pd
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import FunctionTransformer
 
-LEGACY = "legacy-v1"
-DISTINCT = "distinct-v2"
-ENCODINGS = (LEGACY, DISTINCT)
+from . import _CATEGORICAL_ENCODINGS as ENCODINGS
+from . import _DISTINCT_ENCODING as DISTINCT, _LEGACY_ENCODING as LEGACY
 MISSING_MARKER = "__GROUPBENCH_MISSING__"
 
 

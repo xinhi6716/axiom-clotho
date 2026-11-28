@@ -113,7 +113,8 @@ print(absent + owned)
                 cwd=directory, env=env, capture_output=True, text=True, timeout=15)
             self.assertEqual((probe.returncode, probe.stdout, probe.stderr),
                              (0, "(True, True, True, True, True)\n", ""))
-            for args in (("--help",), ("binary", "--help"), ("run", "PRIVATE.csv", "--out", "PRIVATE_OUT")):
+            for args in (("run", "PRIVATE.csv", "--target", "y", "--group", "g", "--out", "PRIVATE_OUT"),
+                         ("binary", "run", "PRIVATE.csv", "--target", "y", "--group", "g", "--out", "PRIVATE_OUT")):
                 with self.subTest(command=args[0]):
                     result = subprocess.run(
                         [sys.executable, "-S", "-m", "mlworkflow", "tabular", *args],
@@ -140,8 +141,28 @@ assert not any(name in sys.modules for name in ('groupbench', 'numpy', 'pandas',
                 env=dict(os.environ, PYTHONPATH=package_root, PYTHONDONTWRITEBYTECODE="1"),
                 capture_output=True, text=True, timeout=15)
             self.assertEqual((result.returncode, result.stderr), (0, ""))
-            self.assertIn("Most delegated tabular commands, including general tabular help", result.stdout)
+            self.assertIn("General tabular help and version need no ML import", result.stdout)
             self.assertIn("Metadata-only plan-group-forward-windows and its help", result.stdout)
+            self.assertEqual(list(Path(directory).iterdir()), [])
+
+
+    def test_actual_help_and_version_work_without_numerical_dependencies(self):
+        with package_only_path() as package_root, tempfile.TemporaryDirectory() as directory:
+            env = dict(os.environ, PYTHONPATH=package_root, PYTHONDONTWRITEBYTECODE="1")
+            routes = [("groupbench", ()), ("mlworkflow", ("tabular",))]
+            for module, prefix in routes:
+                for args, expected in [
+                    (("--help",), "validate-evaluation-bundle"),
+                    (("--version",), "0.3.0b"),
+                    (("run", "--help"), "leave_one_domain_out"),
+                    (("binary", "plan", "predict", "--help"), "categorical-encoding"),
+                    (("validate-evaluation-bundle", "--help"), "require-run-key"),
+                ]:
+                    with self.subTest(module=module, args=args):
+                        out = subprocess.run([sys.executable, "-S", "-m", module, *prefix, *args],
+                                             cwd=directory, env=env, capture_output=True, text=True, timeout=10)
+                        self.assertEqual((out.returncode, out.stderr), (0, ""))
+                        self.assertIn(expected, out.stdout)
             self.assertEqual(list(Path(directory).iterdir()), [])
 
 

@@ -5,8 +5,8 @@ import numpy as np
 import pandas as pd
 from .data import _ordered_feature_names, prepare_data, validate_groups
 
-GROUP = "group_kfold"
-DOMAIN = "leave_one_domain_out"
+from . import _DOMAIN_STRATEGY as DOMAIN, _GROUP_STRATEGY as GROUP
+
 LIMITATION = ("Inner domains are user-declared, not discovered or scientifically verified. "
               "Selection retains the declared row/group weighting, not equal-domain weighting. "
               "Outer evaluation still holds out groups, not necessarily domains; this is not "
