@@ -11,6 +11,23 @@ remain untested. No full-OOF conversion, selected model, estimator serialization
 result-to-model loader, prediction/refit API, search, HTML report, or upload is
 added.
 
+## Command line
+
+```sh
+mlcalc validate-group-forward-bundle runs/temporal-001
+# The workflow wrapper accepts the same operation:
+clotho tabular validate-group-forward-bundle runs/temporal-001
+```
+
+On success the command emits one JSON summary with the tested and untested
+counts, retained payload digest, and explicit checked and unchecked scopes.
+It recomputes the declared plan and metrics from retained predictions with
+zero fits. Invalid or unsupported bundles exit 2 without a JSON report.
+Validation needs the package's numerical dependencies and safe local POSIX
+storage; help does not load the numerical dependencies. This is distinct from
+`mlcalc verify`, which only checks retained byte integrity, and does not
+authenticate origin or prove what was executed.
+
 ## Python API
 
 ```python

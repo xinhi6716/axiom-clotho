@@ -301,6 +301,33 @@ def _verify_main(argv):
         return 2
 
 
+def _add_group_forward_validate_parser(sub):
+    parser = sub.add_parser(
+        "validate-group-forward-bundle", allow_abbrev=False,
+        help="Check saved temporal predictions and declared plan consistency; zero fits",
+        description="Read-only temporal bundle consistency; JSON to stdout, zero fits.",
+        epilog="Requires idle POSIX no-follow storage. Not proof of training, provenance or scientific validity.",
+    )
+    parser.add_argument("run_dir", type=Path, help="Existing saved group-forward evaluation bundle")
+    return parser
+
+
+def _validate_group_forward_main(argv):
+    from dataclasses import asdict
+
+    parser = _add_group_forward_validate_parser(argparse.ArgumentParser(prog="groupbench").add_subparsers())
+    args = parser.parse_args(argv)
+    from .group_time_saved import GroupForwardBundleError, validate_group_forward_evaluation_bundle
+    try:
+        result = validate_group_forward_evaluation_bundle(args.run_dir)
+    except GroupForwardBundleError as exc:
+        print(exc, file=sys.stderr)
+        return 2
+    document = {"schema_id": "mlcalc.saved_group_forward_validation", "schema_version": 1, **asdict(result)}
+    print(json.dumps(document, indent=2, sort_keys=True, allow_nan=False))
+    return 0
+
+
 def _leaderboard_float(value):
     # Preserve nonzero scores below the fixed-decimal display resolution.
     return f"{value:.4e}" if 0 < abs(value) < 0.0001 else f"{value:.4f}"
@@ -313,6 +340,8 @@ def main(argv=None) -> int:
     if argv and argv[0] == "plan-group-forward-windows":
         from .group_time_json import main as plan_group_windows
         return plan_group_windows(argv[1:])
+    if argv and argv[0] == "validate-group-forward-bundle":
+        return _validate_group_forward_main(argv[1:])
     if argv and argv[0] == "compare-predictions":
         from .saved_scoring import compare_main
         return compare_main(argv[1:])
@@ -340,6 +369,7 @@ def main(argv=None) -> int:
 
 Working with your own data:
   mlcalc plan-group-forward-windows --help  Plan declared whole-group time windows; stdout JSON, zero fits.
+  mlcalc validate-group-forward-bundle --help  Check a saved temporal bundle without refitting.
   mlcalc plan run --help     See how to preview fit counts without fitting.
   mlcalc run --help          Evaluate a local regression CSV.
   mlcalc predict --help      Fit on training data and predict new rows.
@@ -388,6 +418,7 @@ The groupbench command is an alias for the same CLI.""",
         _add_columns(preview)
         _add_protocol(preview, outer=mode == "run", output=False, domain_selection=True)
     _add_verify_parser(sub)
+    _add_group_forward_validate_parser(sub)
     schema = sub.add_parser("validate-prediction-bundle", allow_abbrev=False,
                             help="Check supported regression prediction metadata and CSV consistency",
                             description="Read-only checksum and bounded structural consistency, not scientific/model validation.",
