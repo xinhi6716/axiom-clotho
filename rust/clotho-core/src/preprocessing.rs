@@ -134,21 +134,7 @@ impl Preprocessor {
                     (FittedValues::Numeric { fill }, training_missing_count)
                 }
                 FeatureValues::Categorical(values) => {
-                    let mut observed = BTreeSet::new();
-                    let mut training_missing_count = 0;
-                    for value in values {
-                        match value {
-                            Some(value) => {
-                                observed.insert(value.as_str());
-                                // Include the reserved missing indicator.
-                                if observed.len() >= MAX_CATEGORIES {
-                                    return Err(PreprocessingError::CategoryLimit);
-                                }
-                            }
-                            None => training_missing_count += 1,
-                        }
-                    }
-                    let vocabulary: Vec<_> = observed.into_iter().map(str::to_owned).collect();
+                    let (vocabulary, training_missing_count) = categorical_vocabulary(values)?;
                     feature_names.push(format!("feature_{}__missing", source_index));
                     for index in 0..vocabulary.len() {
                         feature_names.push(format!("feature_{}__category_{}", source_index, index));
@@ -442,6 +428,64 @@ fn numeric_fill(values: &[Option<f64>], scratch: &mut Vec<f64>) -> (f64, usize) 
     (fill, missing)
 }
 
+#[inline]
+fn categorical_vocabulary(values: &[Option<String>]) -> Result<(Vec<String>, usize), PreprocessingError> {
+    // Grouped measurement columns often carry a recipe label across long
+    // runs. Short samples can enable run coalescing without paying another
+    // equality comparison on every row of interleaved inputs.
+    let has_runs = |sample: &[Option<String>]| {
+        let mut last = None;
+        let mut repeats = 0;
+        for value in sample.iter().filter_map(Option::as_deref) {
+            if last == Some(value) {
+                repeats += 1;
+                if repeats == 8 {
+                    break;
+                }
+            }
+            last = Some(value);
+        }
+        repeats == 8
+    };
+    let use_runs = values.len() >= 128 && has_runs(&values[..32])
+        && (values.len() < 256 || {
+            let middle = values.len() / 2;
+            has_runs(&values[middle..middle + 32])
+        });
+
+    let mut observed = BTreeSet::new();
+    let mut missing = 0;
+    let mut last = None;
+    let mut insert = |value| {
+        observed.insert(value);
+        // One output indicator is always reserved for missing.
+        if observed.len() >= MAX_CATEGORIES {
+            return Err(PreprocessingError::CategoryLimit);
+        }
+        Ok(())
+    };
+    if use_runs {
+        for value in values {
+            match value.as_deref() {
+                Some(value) if last != Some(value) => {
+                    insert(value)?;
+                    last = Some(value);
+                }
+                Some(_) => {}
+                None => missing += 1,
+            }
+        }
+    } else {
+        for value in values {
+            match value.as_deref() {
+                Some(value) => insert(value)?,
+                None => missing += 1,
+            }
+        }
+    }
+    Ok((observed.into_iter().map(str::to_owned).collect(), missing))
+}
+
 fn unordered_median(values: &mut [f64]) -> f64 {
     let middle = values.len() / 2;
     let odd = values.len() % 2 == 1;
@@ -498,6 +542,23 @@ fn ordered_and_reordered_transform_preserve_bits_and_validation() {
 #[cfg(test)]
 mod median_tests {
     use super::*;
+
+    #[test]
+    fn categorical_runs_preserve_lexical_codes_missingness_and_cap() {
+        let categories = |count| (0..count).rev().flat_map(|i| {
+            let value = Some(format!("狀態-{i:02}"));
+            [value.clone(), None, value.clone(), value.clone(), value]
+        }).collect::<Vec<_>>();
+        let rows = categories(63);
+        let (labels, missing) = categorical_vocabulary(&rows).unwrap();
+        assert_eq!(missing, 63);
+        assert_eq!(labels, (0..63).map(|i| format!("狀態-{i:02}")).collect::<Vec<_>>());
+        assert_eq!(categorical_vocabulary(&categories(64)), Err(PreprocessingError::CategoryLimit));
+        let train = [FeatureColumn { name: "recipe".into(), values: FeatureValues::Categorical(rows) }];
+        let fit = Preprocessor::fit(&train).unwrap();
+        assert_eq!(fit.output_feature_count(), 64);
+        assert_ne!(fit.transform(&train).unwrap()[0], fit.transform(&train).unwrap()[1]);
+    }
 
     #[test]
     fn borrowed_median_skips_scratch_and_preserves_full_sort_bits() {
