@@ -923,7 +923,7 @@ def _metadata(manifest):
     return version, n_pred, len(names), support_status
 
 
-def _predictions(raw, n_predictions, *, selected_median=None):
+def _predictions(raw, n_predictions, *, selected_median=None, selected_dummy_mean=False):
     try:
         text = raw.decode("utf-8")
         if "\0" in text:
@@ -932,6 +932,7 @@ def _predictions(raw, n_predictions, *, selected_median=None):
         if next(rows, None) != ["row_position", "prediction"]:
             _fail("CSV header must be exactly row_position,prediction.")
         count = 0
+        first_dummy_mean = None
         for row in rows:
             if count >= n_predictions or len(row) != 2 or row[0] != str(count):
                 _fail("CSV rows must match sequential zero-based positions and declared row count.")
@@ -943,11 +944,16 @@ def _predictions(raw, n_predictions, *, selected_median=None):
                 _fail("CSV predictions must be bounded finite decimal numbers.")
             if value == 0 and any(ch in "123456789" for ch in token.lower().split("e", 1)[0]):
                 _fail("nonzero CSV prediction underflows to zero in binary64.")
-            if selected_median is not None:
+            if selected_median is not None or selected_dummy_mean:
                 if token.lstrip("+-").isdigit():
                     value = int(token)
-                if value != selected_median:
+                if selected_median is not None and value != selected_median:
                     _fail("CSV predictions differ from the selected group-median refit constant.")
+                if selected_dummy_mean:
+                    if first_dummy_mean is None:
+                        first_dummy_mean = value
+                    elif value != first_dummy_mean:
+                        _fail("selected Dummy mean predictions must broadcast one constant.")
             count += 1
         if count != n_predictions:
             _fail("CSV row count differs from n_predictions.")
@@ -980,12 +986,15 @@ def _load_prediction_bundle(run_dir):
             total += size
         manifest = _manifest(payloads["manifest.json"])
         version, n_pred, n_features, support = _metadata(manifest)
-        # Only this family declares an output scalar for every query. A
-        # nonselected family audit is not a contract about the saved vector.
+        # Only audit a prediction vector against the declared selected family.
+        # Median retains a value; Dummy mean retains no training-label mean.
         selected_median = None
         if version in ("1.3", "1.4", "1.5") and manifest.get("selected_family") == "group_median":
             selected_median = manifest["family_fit_details"]["group_median"]["constant"]
-        _predictions(payloads["predictions.csv"], n_pred, selected_median=selected_median)
+        selected_dummy_mean = (manifest.get("selected_family") == "dummy"
+                               and manifest.get("selected_candidate") == "dummy_mean")
+        _predictions(payloads["predictions.csv"], n_pred, selected_median=selected_median,
+                     selected_dummy_mean=selected_dummy_mean)
         for name, signature in signatures.items():
             if _signature(os.stat(name, dir_fd=fd, follow_symlinks=False)) != signature:
                 _fail("bundle changed during validation; retry with an idle directory.")

@@ -83,6 +83,33 @@ class PredictionSchemaTests(unittest.TestCase):
                 self.assertIn("not_validated", result.unchecked_metadata)
                 self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
 
+    def test_explicit_selected_dummy_mean_requires_constant_predictions(self):
+        import pandas as pd
+        from groupbench import fit_predict
+
+        train = pd.DataFrame({"g": list("abcd") * 2, "x": range(8), "y": range(8)})
+        query = pd.DataFrame({"x": [3, 5]})
+        fit_predict(train, query, target="y", group="g", baselines=("dummy",),
+                    inner_splits=2).write(self.root, overwrite=True)
+        value = json.loads((self.root / "manifest.json").read_text())
+        self.assertEqual((value["selected_candidate"], value["selected_family"]), ("dummy_mean", "dummy"))
+        self.assertEqual(validate_prediction_bundle_schema(self.root).n_predictions, 2)
+        for csv in (b"row_position,prediction\n0,3.5\n1,4.5\n",
+                    b"row_position,prediction\n0,9007199254740992\n1,9007199254740993\n"):
+            write_bundle(self.root, value, csv=csv)
+            self.assertEqual(verify_bundle(self.root).bundle_type, "prediction")
+            before = {p.name: p.read_bytes() for p in self.root.iterdir()}
+            with self.assertRaisesRegex(ValueError, "Dummy mean predictions must broadcast"):
+                validate_prediction_bundle_schema(self.root)
+            self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
+        # The training mean itself is not retained. Optional historical
+        # omissions do not establish which refit generated the predictions.
+        write_bundle(self.root, value, csv=b"row_position,prediction\n0,-0.0\n1,0e-400\n")
+        self.assertEqual(validate_prediction_bundle_schema(self.root).n_predictions, 2)
+        value.pop("selected_candidate")
+        write_bundle(self.root, value)
+        self.assertEqual(validate_prediction_bundle_schema(self.root).n_predictions, 2)
+
     def test_unknown_metadata_is_explicitly_not_validated_or_followed(self):
         value = manifest()
         value.update(private_source_path="/never/open/this", future_metadata={"opaque": [1, "label"]})
@@ -204,7 +231,7 @@ class PredictionSchemaTests(unittest.TestCase):
 
         def publish(token):
             write_bundle(self.root, fit.manifest,
-                         csv=f"row_position,prediction\n0,{token}\n1,0.0\n".encode())
+                         csv=f"row_position,prediction\n0,{token}\n1,{token}\n".encode())
             self.assertEqual(verify_bundle(self.root).bundle_type, "prediction")
 
         for token in ("-0e-999", "5e-324", "-5e-324"):
