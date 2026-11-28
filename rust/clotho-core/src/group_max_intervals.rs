@@ -74,6 +74,32 @@ fn outward_sum(x: f64, y: f64, upward: bool) -> Result<f64, QueryIntervalError> 
     if bound.is_finite() { Ok(bound) } else { Err(QueryIntervalError::NonfiniteBound) }
 }
 
+// Declared group IDs compare independently of within-group row order.
+fn group_rosters_overlap(calibration: &[RowKey<'_>], query: &[RowKey<'_>]) -> bool {
+    if calibration.len() >= 16 && query.len() >= 16
+        && calibration.windows(2).all(|rows| rows[0].group <= rows[1].group)
+        && query.windows(2).all(|rows| rows[0].group <= rows[1].group)
+    {
+        // Ordered rosters can be checked without materializing a group set.
+        if calibration.last().unwrap().group < query[0].group
+            || query.last().unwrap().group < calibration[0].group
+        {
+            return false;
+        }
+        let (mut c, mut q) = (0, 0);
+        while c < calibration.len() && q < query.len() {
+            match calibration[c].group.cmp(query[q].group) {
+                std::cmp::Ordering::Less => c += 1,
+                std::cmp::Ordering::Greater => q += 1,
+                std::cmp::Ordering::Equal => return true,
+            }
+        }
+        return false;
+    }
+    let calibration_groups: BTreeSet<_> = calibration.iter().map(|r| r.group).collect();
+    query.iter().any(|r| calibration_groups.contains(r.group))
+}
+
 /// Validate an independently declared query roster and return bounds in that
 /// roster's order. Query inputs have no observations. Calibration and query
 /// group strings must be disjoint, even if their row components differ.
@@ -126,8 +152,7 @@ pub fn calibrate_group_max_intervals<'a>(
     }
     let cutoff = calibrate_group_max(calibration_roster, calibration_rows, numerator, denominator)
         .map_err(QueryIntervalError::Calibration)?;
-    let calibration_groups: BTreeSet<_> = calibration_roster.iter().map(|r| r.group).collect();
-    if query_roster.iter().any(|r| calibration_groups.contains(r.group)) {
+    if group_rosters_overlap(calibration_roster, query_roster) {
         return Err(QueryIntervalError::GroupOverlap);
     }
     match cutoff {
@@ -169,6 +194,24 @@ mod tests {
     const CAL: CalibrationRow<'static> = CalibrationRow {
         key: A, observed: f64::EPSILON / 4.0, prediction: 0.0,
     };
+
+    #[test]
+    fn ordered_overlap_ignores_row_ids_and_matches_unordered_fallback() {
+        let even: Vec<_> = (0..16).map(|i| format!("g{:02}", 2 * i)).collect();
+        let odd: Vec<_> = (0..16).map(|i| format!("g{:02}", 2 * i + 1)).collect();
+        let calibration: Vec<_> = even.iter().map(|g| RowKey { group: g, row: "cal" }).collect();
+        let mut query: Vec<_> = odd.iter().map(|g| RowKey { group: g, row: "query" }).collect();
+        assert!(!group_rosters_overlap(&calibration, &query));
+        query[15].group = &even[15];
+        assert!(group_rosters_overlap(&calibration, &query));
+        query.reverse();
+        assert!(group_rosters_overlap(&calibration, &query));
+        query[0].group = &odd[15];
+        assert!(!group_rosters_overlap(&calibration, &query));
+        let mut repeated = calibration.clone();
+        repeated[0].group = &even[1];
+        assert!(!group_rosters_overlap(&repeated, &query));
+    }
 
     #[test]
     fn matches_query_keys_and_emits_roster_order_with_outward_bounds() {
