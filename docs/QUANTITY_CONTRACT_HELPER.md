@@ -162,3 +162,25 @@ extra or duplicate blocks reject the audit. Success reports only block count
 and three exact contrasts as rational strings; invalid input exits 2 with
 no report. The tool does not check the actual instrument/units/dependencies,
 estimate reliability, fit models or write files.
+
+
+### CLI: compare within-group elapsed lag support
+
+```sh
+mlcalc compare-elapsed-lag-support reference.json candidate.json associations.json
+clotho tabular compare-elapsed-lag-support reference.json candidate.json associations.json
+```
+
+Each schedule declares `{"schema_version":1,"time_unit":"s","rows":[["a","group",0.1],["b","group",0.2]]}`;
+rows supply ID, group and exact JSON timestamp in the agreed time unit.
+Freeze `{"schema_version":1,"associations":[["a","group"],["b","group"]]}`
+independently of timestamps. Both schedules must match every association
+and the time-unit declaration. Row order may differ; duplicate row IDs
+reject. Distinct rows with the same timestamp contribute zero lags.
+Only unordered pairs within the same group count; multiplicities and
+group boundaries matter. Output contains aggregate support counts, not
+identifiers, timestamps or measurements. Empty pair support or more than
+100,000 pairs per schedule rejects without a report. Inputs are local
+UTF-8 JSON with at most 20,000 associations per file. Exact lag equality
+does not imply a unique schedule, verified clock, stationarity, common
+measurement history or scientific comparability. No files are written.

@@ -98,7 +98,7 @@ class PackageSourceTests(unittest.TestCase):
         installed = Path(source.__file__).parent
         self.assertEqual(tuple(sorted(source.SOURCE_FILES)), source.SOURCE_FILES)
         self.assertEqual(set(source.SOURCE_FILES), {p.relative_to(installed).as_posix() for p in installed.rglob("*.py")})
-        self.assertEqual(len(set(source.SOURCE_FILES)), 40)
+        self.assertEqual(len(set(source.SOURCE_FILES)), 41)
         self.assertIn("process_contract.py", source.SOURCE_FILES)
         self.assertIn("baselines.py", source.SOURCE_FILES)
         self.assertIn("kernel.py", source.SOURCE_FILES)
@@ -253,7 +253,7 @@ class SourceFallbackAndRenderingTests(unittest.TestCase):
                 previous.add(HISTORICAL_SOURCE_ADDITIONS[count - 28])
         self.assertEqual(
             set(source.SOURCE_FILES),
-            set(HISTORICAL_SOURCE_INVENTORIES[39]) | {"group_time_lineage.py"},
+            set(HISTORICAL_SOURCE_INVENTORIES[39]) | {"group_time_lineage.py", "elapsed_lag_support.py"},
         )
 
     @unittest.skipUnless(source._SAFE_OPEN_SUPPORTED, "Requires POSIX bundle verification")
@@ -262,7 +262,10 @@ class SourceFallbackAndRenderingTests(unittest.TestCase):
         from test_prediction_schema import manifest, write_bundle
 
         descriptors = [None]
-        inventories = tuple(HISTORICAL_SOURCE_INVENTORIES.values()) + (source.SOURCE_FILES,)
+        inventories = tuple(HISTORICAL_SOURCE_INVENTORIES.values()) + (
+            tuple(sorted(HISTORICAL_SOURCE_INVENTORIES[39] + ("group_time_lineage.py",))),
+            source.SOURCE_FILES,
+        )
         for names in inventories:
             files = {name: hashlib.sha256(("invented source: " + name).encode()).hexdigest()
                      for name in names}
@@ -271,7 +274,7 @@ class SourceFallbackAndRenderingTests(unittest.TestCase):
             canonical = json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
             descriptors.append({**body, "status": "available",
                                 "sha256": hashlib.sha256(canonical).hexdigest()})
-        self.assertEqual([len(item["files"]) for item in descriptors[1:]], [28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40])
+        self.assertEqual([len(item["files"]) for item in descriptors[1:]], [28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41])
         with tempfile.TemporaryDirectory() as temp, patch.object(source, "observe_package_source", side_effect=AssertionError("saved verification must not recapture installed source")):
             for version in ("1.0", "1.1", "1.2"):
                 for index, descriptor in enumerate(descriptors):

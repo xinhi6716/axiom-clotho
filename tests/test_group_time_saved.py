@@ -1636,10 +1636,10 @@ class SeparationSideEffectsAndCompatibilityTests(SavedFixtureTestCase):
                      "write_group_forward_evaluation_bundle", "validate_group_forward_evaluation_bundle"):
             self.assertIs(getattr(groupbench, name), getattr(saved, name))
         self.assertEqual(package_source.SOURCE_FILES, tuple(sorted(package_source.SOURCE_FILES)))
-        self.assertEqual(len(package_source.SOURCE_FILES), 40)
+        self.assertEqual(len(package_source.SOURCE_FILES), 41)
         self.assertEqual(
             set(package_source.SOURCE_FILES),
-            set(HISTORIC_37_FILES) | {"group_time_saved.py", "process_contract.py", "group_time_lineage.py"},
+            set(HISTORIC_37_FILES) | {"group_time_saved.py", "process_contract.py", "group_time_lineage.py", "elapsed_lag_support.py"},
         )
         self.assertEqual(Path(saved.__file__).resolve().parent, Path(groupbench.__file__).resolve().parent)
 
