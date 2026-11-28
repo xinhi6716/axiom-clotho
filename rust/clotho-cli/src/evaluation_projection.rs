@@ -488,6 +488,34 @@ fn binary_group(m: Bin, n: usize) -> Result<()> {
     )
 }
 
+fn auc_pair_credit(m: Bin) -> Result<(usize, usize)> {
+    // At the existing row cap, all twice-pair counts and all half-integer
+    // concordance sums are exactly representable. Only the final AUC
+    // division is rounded; converting back must recover the same lattice point.
+    let twice_pairs = 2 * m.n_positive * m.n_negative;
+    let Some(auc) = m.roc_auc else { return Ok((0, 0)); };
+    let credit = (auc * twice_pairs as f64).round() as usize;
+    require(credit <= twice_pairs && credit as f64 / twice_pairs as f64 == auc,
+        "Group ROC AUC is not a realizable pair credit")?;
+    Ok((credit, twice_pairs))
+}
+
+fn check_auc_partition(groups: &[BinGroup], pooled: Bin) -> Result<()> {
+    let (pooled_credit, total_pairs) = auc_pair_credit(pooled)?;
+    let mut within_credit = 0;
+    let mut within_pairs = 0;
+    for group in groups {
+        let (credit, pairs) = auc_pair_credit(group.metrics)?;
+        within_credit += credit;
+        within_pairs += pairs;
+    }
+    // No row memberships/rank order are retained for cross-group pairs.
+    // Their total credit can range only from zero to twice their count.
+    require(within_pairs <= total_pairs && within_credit <= pooled_credit
+        && pooled_credit - within_credit <= total_pairs - within_pairs,
+        "Group ROC AUC pair credits contradict the pooled ROC AUC")
+}
+
 fn check_binary_loss_pool(
     groups: &[BinGroup], rows: usize, pooled: f64,
     loss: impl Fn(Bin) -> f64, mismatch: &'static str,
@@ -529,6 +557,7 @@ fn project_bin(m: Manifest<Bin, BinGroup, BinFold, BinMacro>, header: BinaryHead
     }
     let pooled = m.pooled_row_weighted;
     compare(confusion, [pooled.tp, pooled.fp, pooled.tn, pooled.fn_])?;
+    check_auc_partition(&m.groups, pooled)?;
     let equal_group_weighted = BinMacro { mean_group_log_loss: mean(&losses)?, mean_group_accuracy: mean(&accuracies)?,
         mean_defined_group_balanced_accuracy: if balanced.is_empty() { None } else { Some(mean(&balanced)?) },
         balanced_accuracy_group_denominator: balanced.len() };

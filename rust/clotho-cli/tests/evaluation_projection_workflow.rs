@@ -369,3 +369,40 @@ fn rejects_group_binary_losses_that_do_not_rebuild_pooled_losses() {
         assert!(String::from_utf8_lossy(&out.stderr).contains(reason));
     }
 }
+
+#[test]
+fn validates_binary_auc_pair_credit_without_assuming_group_row_membership() {
+    let work = Work::new();
+    let csv = work.0.join("source.csv");
+    let mut source = String::from("x,y,g\n");
+    for i in 0..16 {
+        source.push_str(&format!("{},{},A\n", i + 1, i % 2));
+    }
+    source.push_str("17,0,B\n18,0,B\n");
+    fs::write(&csv, source).unwrap();
+    let bundle = work.0.join("bundle");
+    let evaluation = Command::new(env!("CARGO_BIN_EXE_clotho"))
+        .args(["evaluate", "--csv"]).arg(csv)
+        .args(["--features", "x", "--target", "y", "--group", "g",
+            "--model", "majority", "--folds", "2", "--out"])
+        .arg(&bundle).output().unwrap();
+    assert!(evaluation.status.success(), "{}", String::from_utf8_lossy(&evaluation.stderr));
+    let projection = inspect_success(&bundle);
+    assert_eq!(projection["pooled_row_weighted"]["roc_auc"], 0.4);
+
+    for (claimed, reason) in [
+        (0.501, "Group ROC AUC is not a realizable pair credit"),
+        (1.0, "Group ROC AUC pair credits contradict the pooled ROC AUC"),
+        (0.0, "Group ROC AUC pair credits contradict the pooled ROC AUC"),
+    ] {
+        alter(&bundle, |v| {
+            let groups = v["groups"].as_array_mut().unwrap();
+            let mixed = groups.iter_mut().find(|g| g["metrics"]["n_positive"] == 8).unwrap();
+            mixed["metrics"]["roc_auc"] = json!(claimed);
+        });
+        let out = inspect(&bundle);
+        assert!(!out.status.success(), "group AUC {claimed} unexpectedly passed");
+        assert!(out.stdout.is_empty());
+        assert!(String::from_utf8_lossy(&out.stderr).contains(reason));
+    }
+}
