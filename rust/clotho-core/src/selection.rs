@@ -229,14 +229,16 @@ pub fn nested_grouped_regression(
         outer_plan.into_iter().zip(inner_plans).enumerate()
     {
         let outer_y: Vec<_> = outer.train_indices.iter().map(|&i| y[i]).collect();
-        let outer_x = if uses_features { feature_rows(x, &outer.train_indices) } else { Vec::new() };
         let start_fit_count = fit_count;
         let mut scores = Vec::with_capacity(candidates.len());
         let mut best: Option<(usize, f64)> = None;
-        // The training and test complements always total outer_x.len().
-        // Move their slice boundary rather than dropping row allocations
-        // whenever inner fold sizes change.
-        let mut row_workspace = vec![Vec::new(); outer_x.len()];
+        // Borrow original rows through the outer-index roster. Materialize
+        // only the reusable estimator matrices, not a second outer copy.
+        let mut row_workspace = if uses_features {
+            vec![Vec::new(); outer.train_indices.len()]
+        } else {
+            Vec::new()
+        };
         let mut train_y = Vec::new();
         for (candidate_index, candidate) in candidates.iter().enumerate() {
             let mut score = InnerCandidateScore {
@@ -257,8 +259,8 @@ pub fn nested_grouped_regression(
                     predict_mean(&train_y, inner.test_indices.len())
                 } else {
                     let (train_x, test_x) = row_workspace.split_at_mut(inner.train_indices.len());
-                    refill_feature_rows(train_x, &outer_x, &inner.train_indices);
-                    refill_feature_rows(test_x, &outer_x, &inner.test_indices);
+                    refill_feature_rows(train_x, x, inner.train_indices.iter().map(|&i| outer.train_indices[i]));
+                    refill_feature_rows(test_x, x, inner.test_indices.iter().map(|&i| outer.train_indices[i]));
                     fit_feature_predict(*candidate, train_x, &train_y, test_x)
                 };
                 match predictions {
@@ -298,8 +300,7 @@ pub fn nested_grouped_regression(
             }
             scores.push(score);
         }
-        // Release inner scratch before allocating rows for the outer refit.
-        drop((row_workspace, train_y));
+        drop(train_y);
         let selected_candidate_index = match best {
             Some((index, _)) => index,
             None => {
@@ -315,8 +316,11 @@ pub fn nested_grouped_regression(
         let predictions = if matches!(chosen, RegressionCandidate::Mean) {
             predict_mean(&outer_y, outer.test_indices.len())
         } else {
-            let test_x = feature_rows(x, &outer.test_indices);
-            fit_feature_predict(chosen, &outer_x, &outer_y, &test_x)
+            row_workspace.resize_with(x.len(), Vec::new);
+            let (train_x, test_x) = row_workspace.split_at_mut(outer.train_indices.len());
+            refill_feature_rows(train_x, x, outer.train_indices.iter().copied());
+            refill_feature_rows(test_x, x, outer.test_indices.iter().copied());
+            fit_feature_predict(chosen, train_x, &outer_y, test_x)
         }
         .map_err(|(stage, error)| SelectionError::OuterFailure {
             outer_fold_index,
@@ -401,13 +405,13 @@ fn validate_inputs(
     Ok(())
 }
 
-fn feature_rows(x: &[Vec<f64>], indices: &[usize]) -> Vec<Vec<f64>> {
-    indices.iter().map(|&i| x[i].clone()).collect()
-}
-
-fn refill_feature_rows(out: &mut [Vec<f64>], x: &[Vec<f64>], indices: &[usize]) {
+fn refill_feature_rows(
+    out: &mut [Vec<f64>],
+    x: &[Vec<f64>],
+    indices: impl ExactSizeIterator<Item = usize>,
+) {
     debug_assert_eq!(out.len(), indices.len());
-    for (row, &index) in out.iter_mut().zip(indices) {
+    for (row, index) in out.iter_mut().zip(indices) {
         row.clone_from(&x[index]);
     }
 }
@@ -442,6 +446,21 @@ mod scratch_tests {
     use super::refill_feature_rows;
 
     #[test]
+    fn nested_refill_binds_inner_positions_to_outer_source_rows() {
+        let x = [[9.0, 1.0], [1.0, -0.0], [8.0, 2.0], [0.0, 3.0], [5.0, 4.0]].map(Vec::from);
+        let outer = [1, 3, 4];
+        let inner = [2, 0];
+        let mut workspace = vec![Vec::new(); 2];
+        refill_feature_rows(&mut workspace, &x, inner.iter().map(|&i| outer[i]));
+        assert_eq!(workspace[0], x[4]);
+        assert_eq!(workspace[1][1].to_bits(), (-0.0_f64).to_bits());
+        let old_allocation = workspace[0].as_ptr();
+        refill_feature_rows(&mut workspace, &x, [2, 0].into_iter());
+        assert_eq!(workspace, [x[2].clone(), x[0].clone()]);
+        assert_eq!(workspace[0].as_ptr(), old_allocation);
+    }
+
+    #[test]
     fn refilling_on_fold_size_changes_replaces_rows_without_stale_values() {
         let x = [[0.0, -0.0], [1.0, 2.0], [3.0, 4.0], [5.0, 6.0]].map(Vec::from);
         let mut scratch = vec![Vec::new(); x.len()];
@@ -452,8 +471,8 @@ mod scratch_tests {
             (&[1][..], &[0, 2, 3][..]),
         ] {
             let (train_x, test_x) = scratch.split_at_mut(train.len());
-            refill_feature_rows(train_x, &x, train);
-            refill_feature_rows(test_x, &x, test);
+            refill_feature_rows(train_x, &x, train.iter().copied());
+            refill_feature_rows(test_x, &x, test.iter().copied());
             for (row, &index) in scratch.iter().zip(train.iter().chain(test)) {
                 assert_eq!(
                     row.iter().map(|v| v.to_bits()).collect::<Vec<_>>(),
