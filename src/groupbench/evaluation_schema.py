@@ -441,6 +441,11 @@ def _check(manifest, summary, raw, *, require_run_key=False):
     if not isinstance(audits, list) or len(audits) != nf:
         _fail("outer fold audit coverage differs.")
     sorted_groups = sorted(membership)
+    if "group_median" in baselines and version == "1.4":
+        # Follow the producer's global nested schedule work bound before
+        # sorting any retained labels for inner median replay.
+        inner_limit = _count(config.get("inner_splits"), ng, 2)
+        _check_split_position_budget(n * nf + n * (nf - 1) * inner_limit)
     if "group_median" in baselines:
         median_inputs = (np.asarray(observed, dtype=float), np.asarray(groups, dtype=object))
         median_folds = np.asarray(folds, dtype=int)
@@ -530,6 +535,15 @@ def _check(manifest, summary, raw, *, require_run_key=False):
                 median_inputs[0][train], median_inputs[1][train])
             if constant != expected_constant:
                 _fail("group-median constant differs from retained training labels.")
+            if version == "1.4":
+                record = next(record for record in audit["inner_selection"]
+                              if record["family"] == "group_median")
+                for split, item in zip(audit["inner_folds"], record["inner_fit_details"], strict=True):
+                    training = [row for group in split["train_groups"] for row in group_rows[group]]
+                    expected_inner, _ = _lower_group_median(
+                        median_inputs[0][training], median_inputs[1][training])
+                    if item["details"]["constant"] != expected_inner:
+                        _fail("inner group-median constant differs from retained training labels.")
         # Older narrow artifacts can omit selection metadata. Whenever the
         # family is declared, the selected entry must equal that fold's
         # family refit, not a separate vector with matching scalar metrics.

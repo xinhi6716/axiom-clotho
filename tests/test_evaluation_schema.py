@@ -180,6 +180,26 @@ class EvaluationSchemaTests(unittest.TestCase):
             with self.subTest(malformed=malformed), self.assertRaisesRegex(ValueError, "expected_checksums_sha256"):
                 validate_evaluation_bundle(self.root, expected_checksums_sha256=malformed)
 
+    def test_extended_v2_replays_inner_group_median_constants(self):
+        frame = pd.DataFrame({"g": ["a", "b", "b", "c", "d", "d", "e", "f", "f"],
+                              "x": range(9), "y": [1, 3, 2, 5, 4, 8, 7, 9, 6]})
+        benchmark(frame, target="y", group="g", baselines=("group_median", "group_balanced_ridge"),
+                  outer_splits=3, inner_splits=2).write(self.root, overwrite=True)
+        self.assertEqual(validate_evaluation_bundle(self.root).schema_version, "1.4")
+
+        def replace_inner_constant(manifest):
+            outer = manifest["outer_folds"][0]
+            record = next(r for r in outer["inner_selection"] if r["family"] == "group_median")
+            first = record["inner_fit_details"][0]["details"]
+            first["constant"] += 0.5
+
+        self.mutate_json("manifest.json", replace_inner_constant)
+        self.assertEqual(verify_bundle(self.root).bundle_type, "evaluation")
+        before = {p.name: p.read_bytes() for p in self.root.iterdir()}
+        with self.assertRaisesRegex(ValueError, "inner group-median constant"):
+            validate_evaluation_bundle(self.root)
+        self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
+
     def test_rehashed_false_metrics_fail_but_byte_contract_unchanged(self):
         self.mutate_json('summary.json', lambda d: d['models']['selected']['overall'].update(mae=123456.))
         self.assertEqual(verify_bundle(self.root).bundle_type, 'evaluation')
