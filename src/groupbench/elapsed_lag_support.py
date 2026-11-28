@@ -1,4 +1,4 @@
-"""Compare exact within-group elapsed-lag multisets of two declared schedules."""
+"""Compare declared schedule support and control availability without outcomes."""
 
 import argparse
 from collections import Counter, defaultdict
@@ -33,7 +33,7 @@ def _document(doc, keys, rows_key):
     return rows
 
 
-def _roster(doc):
+def _associations(doc):
     expected = {}
     for row in _document(doc, {"associations"}, "associations"):
         if type(row) is not list or len(row) != 2:
@@ -42,6 +42,11 @@ def _roster(doc):
         if ident in expected:
             raise ValueError("Duplicate frozen row identifier")
         expected[ident] = group
+    return expected
+
+
+def _roster(doc):
+    expected = _associations(doc)
     counts = Counter(expected.values())
     pairs = sum(n * (n - 1) // 2 for n in counts.values())
     if not 1 <= pairs <= MAX_PAIRS_PER_SCHEDULE:
@@ -116,6 +121,74 @@ def main(argv=None):
         print(json.dumps(report, indent=2, sort_keys=True, allow_nan=False))
     except (ValueError, TypeError, OSError, InvalidOperation):
         print("elapsed lag support rejected: invalid, unavailable, excessive or mismatched inputs",
+              file=sys.stderr)
+        return 2
+    return 0
+
+
+def compare_control_availability(schedule, roster):
+    """Compare two information cutoffs for each frozen forecast association.
+
+    A control is counted only when its declared release precedes the cutoff
+    strictly. Equal timestamps establish no event order. This does not read
+    control values or prove the release times, sensor clock, or effect.
+    """
+    expected = _associations(roster)
+    rows = _document(schedule, {"time_unit", "rows"}, "rows")
+    _label(schedule["time_unit"])
+    seen, grouped = set(), defaultdict(list)
+    both = update_only = 0
+    for row in rows:
+        if type(row) is not list or len(row) != 6:
+            raise ValueError("Expected an association plus two cutoffs, issue and control release")
+        ident, group = map(_label, row[:2])
+        if ident in seen or expected.get(ident) != group:
+            raise ValueError("Schedule contradicts frozen associations")
+        seen.add(ident)
+        fixed, update, issue, release = (_number(value, "Timestamp") for value in row[2:])
+        if not fixed <= update <= issue:
+            raise ValueError("Cutoffs must not exceed issue time or shrink the fixed window")
+        grouped[group].append((issue, fixed, update))
+        if release < fixed:
+            both += 1
+        elif release < update:
+            update_only += 1
+    if len(seen) != len(expected):
+        raise ValueError("Schedule omits declared associations")
+
+    for entries in grouped.values():
+        entries.sort()
+        prev_issue, group_origin, prev_update = entries[0]
+        for issue, fixed, update in entries[1:]:
+            if fixed != group_origin or update < prev_update or (issue == prev_issue and update != prev_update):
+                raise ValueError("Fixed origins or ordered update cutoffs disagree")
+            prev_issue, prev_update = issue, update
+
+    return {
+        "schema_id": "mlcalc.control_availability_comparison",
+        "schema_version": 1,
+        "claim_scope": "descriptive_declared_cutoffs_only",
+        "release_rule": "strictly_before_cutoff",
+        "n_rows": len(expected),
+        "n_groups": len(grouped),
+        "n_available_to_both": both,
+        "n_available_only_to_update": update_only,
+        "n_available_to_neither": len(expected) - both - update_only,
+    }
+
+
+def control_availability_main(argv=None):
+    parser = argparse.ArgumentParser(prog="mlcalc compare-control-availability", allow_abbrev=False,
+        description="Compare fixed versus updated declared control availability; no outcomes read.")
+    parser.add_argument("schedule", type=Path, help="Local v1 paired control/cutoff schedule JSON")
+    parser.add_argument("roster", type=Path, help="Separate frozen v1 row-to-group association roster JSON")
+    args = parser.parse_args(argv)
+    try:
+        report = compare_control_availability(load_document(_read_input(args.schedule)),
+                                              load_document(_read_input(args.roster)))
+        print(json.dumps(report, indent=2, sort_keys=True, allow_nan=False))
+    except (ValueError, OSError, TypeError, InvalidOperation):
+        print("control availability comparison rejected: invalid, unavailable or mismatched inputs",
               file=sys.stderr)
         return 2
     return 0

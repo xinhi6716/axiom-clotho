@@ -184,3 +184,28 @@ identifiers, timestamps or measurements. Empty pair support or more than
 UTF-8 JSON with at most 20,000 associations per file. Exact lag equality
 does not imply a unique schedule, verified clock, stationarity, common
 measurement history or scientific comparability. No files are written.
+
+
+### CLI: fixed versus updated control availability
+
+```sh
+mlcalc compare-control-availability paired-schedule.json associations.json
+clotho tabular compare-control-availability paired-schedule.json associations.json
+```
+
+Use `{"schema_version":1,"time_unit":"s","rows":[["a","group",0,2,3,1]]}`:
+row ID, group, fixed cutoff, updated cutoff, forecast issue, and the
+one shared control-release timestamp. The independent roster uses
+`{"schema_version":1,"associations":[["a","group"]]}`. Both parties use the
+same declared time unit and clock; that common clock is not verified.
+Each row must satisfy fixed cutoff ≤ updated cutoff ≤ forecast issue.
+The fixed cutoff cannot vary within a group. Updated cutoffs cannot move
+backward as issue time advances, or differ for the same group/issue time.
+A control must be released strictly before a cutoff to count; a tie does
+not establish event order. JSON decimals are compared exactly.
+
+The command describes the same complete declared roster under both policies.
+It returns counts only, not row IDs, timestamps or measurements. Unknown or
+inconsistent declarations exit 2 without a report. Scope is at most 20,000
+associations per document. It does not score outcomes, verify actual control
+availability or show that an updated policy improves forecasts.
