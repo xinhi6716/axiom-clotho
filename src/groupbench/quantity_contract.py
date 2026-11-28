@@ -456,3 +456,75 @@ def certify_pairing_envelope(origin_counts, endpoint_counts, costs,
     if lo > hi:
         raise ValueError("Minimum exceeds maximum pairing cost.")
     return PairingEnvelope(total, lo, hi)
+
+
+@dataclass(frozen=True)
+class ElapsedCaptureSupport:
+    """Descriptive clock support in a prespecified half-open interval."""
+
+    window_id: str
+    reference_count: int
+    comparison_count: int
+    reference_span: Fraction | None
+    comparison_span: Fraction | None
+    shared_exact_timestamps: int
+    identical_observed_grid: bool
+
+
+def audit_elapsed_capture_support(reference_clock, comparison_clock, *, windows):
+    """Support only, never an outcome-based selection or inferred clock alignment.
+
+    The caller declares both monotone clocks in a common unit and known
+    common origin. Each (window_id, start, stop) is predeclared, ordered and
+    nonoverlapping; membership uses start <= time < stop. Counts include
+    empty windows with a null span; one read has span zero. Shared readings
+    count exact timestamps only, never interpolated or rounded matches.
+    No claims about elapsed-time calibration, device identity or extraction
+    causality follow from this description.
+    """
+    from bisect import bisect_left
+    # Source clocks can contain an extended densely sampled trace. Bound
+    # them separately from the smaller contract's measurement roster.
+    max_clock_rows = 100_000
+
+    def clock(values, role):
+        if type(values) not in (tuple, list) or not 1 <= len(values) <= max_clock_rows:
+            raise ValueError("Source clocks must be nonempty bounded ordered sequences.")
+        times = [_number(x, role) for x in values]
+        if any(b <= a for a, b in zip(times, times[1:])):
+            raise ValueError("Source clocks must already strictly increase without resets.")
+        return times
+
+    a = clock(reference_clock, "Reference timestamp")
+    b = clock(comparison_clock, "Comparison timestamp")
+    _values(windows)
+    known, output, previous_stop = set(), [], None
+    for item in windows:
+        if type(item) is not tuple or len(item) != 3:
+            raise ValueError("Clock windows require ID, start and exclusive stop.")
+        key, start, stop = item
+        if (type(key) is not str or not 1 <= len(key) <= 256 or key.strip() != key
+                or any(unicodedata.category(c) in ("Cc", "Cs") for c in key) or key in known):
+            raise ValueError("Clock windows require unique plain nonblank IDs.")
+        known.add(key)
+        left = _number(start, "Window start")
+        right = _number(stop, "Window stop")
+        if left >= right or (previous_stop is not None and left < previous_stop):
+            raise ValueError("Clock windows must be ordered nonoverlapping positive intervals.")
+        previous_stop = right
+        i,k = bisect_left(a,left),bisect_left(a,right)
+        j,l = bisect_left(b,left),bisect_left(b,right)
+        m,n = k-i,l-j
+        span_a = a[k-1]-a[i] if m else None
+        span_b = b[l-1]-b[j] if n else None
+        shared = 0
+        while i < k and j < l:
+            x,y = a[i],b[j]
+            if x == y:
+                shared += 1
+            if x <= y:
+                i += 1
+            if y <= x:
+                j += 1
+        output.append(ElapsedCaptureSupport(key,m,n,span_a,span_b,shared,shared==m==n and m>0))
+    return tuple(output)
