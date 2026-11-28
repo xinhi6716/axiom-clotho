@@ -579,7 +579,33 @@ def _balanced_ridge_details(value, rows, groups, alpha, group_sizes=None):
     return value
 
 
-def _extended_selection_v2(value, rows, groups, inner, seed, config, *, group_sizes=None):
+def _width_profile(feature_schema):
+    # Only interpret the normalized dtype spellings emitted by this writer.
+    # An omitted historical roster or an unrecognized dtype is not enough
+    # to recover numeric versus categorical preprocessing assignments.
+    if not isinstance(feature_schema, list) or not 1 <= len(feature_schema) <= MAX_FEATURES:
+        return None
+    numeric = 0
+    for record in feature_schema:
+        dtype = record.get("dtype") if isinstance(record, dict) else None
+        if type(dtype) is not str or dtype not in ("float64", "object"):
+            return None
+        numeric += dtype == "float64"
+    return numeric, len(feature_schema) - numeric
+
+
+def _check_transformed_width(width, fit_rows, profile):
+    if profile is None:
+        return
+    numeric, categorical = profile
+    # The frozen recipe retains even an entirely missing feature. Numeric
+    # imputation and scaling preserve one column; categorical imputation
+    # forms at least one category and one-hot encoding caps width at 64.
+    if not numeric + categorical <= width <= numeric + categorical * min(64, fit_rows):
+        _fail("extended-families-v2 preprocessing width is impossible for the retained feature roster and fit rows.")
+
+
+def _extended_selection_v2(value, rows, groups, inner, seed, config, *, group_sizes=None, feature_schema=None):
     """Strict v2 declarations and retained-count checks, without replaying fits."""
     _count(seed, 2**32 - 1)
     optional = [f for f in _EXTENDED_CAPABILITIES_V2 if f in config["baselines"]]
@@ -626,6 +652,7 @@ def _extended_selection_v2(value, rows, groups, inner, seed, config, *, group_si
     if objective not in ("mae", "group_mae"):
         _fail("extended-families-v2 selection objective differs.")
     widths, ridge_summaries, kernel_bases = {}, {}, {}
+    feature_profile = _width_profile(feature_schema)
     for record, candidate in zip(records, candidates):
         record = _object(record)
         keys = _SELECTION_RECORD_V2 | ({"inner_fit_details"} if candidate["family"] in optional else set())
@@ -677,6 +704,8 @@ def _extended_selection_v2(value, rows, groups, inner, seed, config, *, group_si
                     summary = {k: v for k, v in item["details"].items() if k != "alpha"}
                     if not _same_declaration(ridge_summaries.setdefault(fold, summary), summary):
                         _fail("group-balanced Ridge summaries differ across alphas for the same training slice.")
+    for fold, width in widths.items():
+        _check_transformed_width(width, audits[fold]["train_rows"], feature_profile)
     winner = min(records, key=lambda r: r["selection_score"])
     winners = {f: min((r for r in records if r["family"] == f), key=lambda r: r["selection_score"])
                for f in config["baselines"]}
@@ -693,6 +722,7 @@ def _extended_selection_v2(value, rows, groups, inner, seed, config, *, group_si
         final_widths.add(final[family]["transformed_features"])
     if len(final_widths) != 1:
         _fail("extended-families-v2 preprocessing widths differ for the same final training slice.")
+    _check_transformed_width(next(iter(final_widths)), rows, feature_profile)
     full = final["group_balanced_ridge"]
     for summary in ridge_summaries.values():
         # GroupKFold retains whole groups. A training subset cannot contain
@@ -897,7 +927,7 @@ def _metadata(manifest):
             _fail("extended kernel requires at least two inner folds.")
         if version == "1.5":
             _extended_selection_v2(manifest, n_train, manifest["n_training_groups"], inner,
-                                   config.get("random_state"), config)
+                                   config.get("random_state"), config, feature_schema=manifest.get("feature_schema"))
         elif optional:
             _optional_selection_metadata(manifest, n_train, manifest["n_training_groups"], inner, config.get("random_state"), optional)
         if version == "1.3":

@@ -235,6 +235,40 @@ class GroupBalancedRidgeSchemaTests(unittest.TestCase):
                 result.write(root)
                 validate(root)
 
+    def test_v2_fit_width_must_be_feasible_for_retained_features(self):
+        import pandas as pd
+        from groupbench import benchmark, fit_predict
+
+        numeric = pd.DataFrame({"g": list("abcdef") * 2, "x": range(12),
+                                "y": [i * i for i in range(12)]})
+        mixed = numeric.assign(category=["c" + str(i % 5) for i in range(12)])
+        for frame, bad_width in ((numeric, 2), (mixed, 1), (mixed, 14)):
+            features = [name for name in frame if name not in ("g", "y")]
+            opts = dict(target="y", group="g", baselines=(FAMILY,), inner_splits=2)
+            cases = ((fit_predict(frame, frame[features].iloc[:2], **opts),
+                      validate_prediction_bundle_schema),
+                     (benchmark(frame, outer_splits=3, **opts), validate_evaluation_bundle))
+            for result, validate in cases:
+                for level in ("refit", "inner"):
+                    with self.subTest(features=features, width=bad_width, validator=validate, level=level):
+                        with tempfile.TemporaryDirectory() as directory:
+                            root = Path(directory)
+                            result.write(root)
+                            validate(root)
+                            manifest = json.loads((root / "manifest.json").read_text())
+                            summary = getattr(result, "summary", None)
+                            raw = (root / "predictions.csv").read_bytes()
+                            audit = manifest if summary is None else manifest["outer_folds"][0]
+                            if level == "refit":
+                                audit["family_fit_details"][FAMILY]["transformed_features"] = bad_width
+                            else:
+                                for record in audit["inner_selection"]:
+                                    record["inner_fit_details"][0]["details"]["transformed_features"] = bad_width
+                            write_bundle(root, manifest, summary, raw)
+                            verify_bundle(root)
+                            with self.assertRaisesRegex(ValueError, "preprocessing width.*feature roster"):
+                                validate(root)
+
     def test_v2_shared_slices_require_same_kernel_basis_across_alphas(self):
         import pandas as pd
         from groupbench import benchmark, fit_predict

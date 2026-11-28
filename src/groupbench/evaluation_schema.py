@@ -544,7 +544,8 @@ def _check(manifest, summary, raw, *, require_run_key=False):
                 _fail("extended evaluation inner seed differs from the scheduled fold.")
             if version == "1.4":
                 _extended_selection_v2(audit, n-test_rows, len(train_groups), inner, expected_seed,
-                                       config, group_sizes={g: len(group_rows[g]) for g in train_groups})
+                                       config, group_sizes={g: len(group_rows[g]) for g in train_groups},
+                                       feature_schema=manifest.get("feature_schema"))
             elif optional:
                 _optional_selection_metadata(audit, n-test_rows, len(train_groups), inner, expected_seed, optional)
                 if version == "1.2":
