@@ -644,7 +644,11 @@ def _extended_selection_v2(value, rows, groups, inner, seed, config, *, group_si
         # overflow merely because a fold contains many rows or groups.
         pooled = 0.0 if scale == 0 else scale * math.fsum(
             (s / scale) * (a[count_key] / total) for s, a in zip(scores, audits))
-        if not math.isfinite(pooled) or not math.isclose(score, pooled, rel_tol=1e-10, abs_tol=1e-12):
+        # Every test population is nonempty and weights are positive.
+        # Numerical tolerance cannot turn a strictly positive fold loss
+        # into a declared zero (or a truly zero pool into a positive loss).
+        if ((score == 0) != (scale == 0) or not math.isfinite(pooled)
+                or not math.isclose(score, pooled, rel_tol=1e-10, abs_tol=1e-12)):
             _fail("extended-families-v2 selection score differs from its pooled fold scores.")
         if candidate["family"] in optional:
             details = record["inner_fit_details"]

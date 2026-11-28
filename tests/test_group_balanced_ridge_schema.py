@@ -176,6 +176,59 @@ class GroupBalancedRidgeSchemaTests(unittest.TestCase):
             result = benchmark(frame, outer_splits=3, **options)
             self.assertEqual(_check(result.manifest, result.summary, result.predictions.to_csv(index=False).encode())[0], "1.4")
 
+    def test_declared_zero_pool_requires_zero_fold_losses_in_both_artifacts(self):
+        import pandas as pd
+        from groupbench import benchmark, fit_predict
+
+        frame = pd.DataFrame({"g": list("abcdef") * 2, "x": range(12), "y": [0.] * 12})
+        opts = dict(target="y", group="g", baselines=(FAMILY,), inner_splits=2)
+        runs = ((fit_predict(frame, frame[["x"]].iloc[:2], **opts), validate_prediction_bundle_schema),
+                (benchmark(frame, outer_splits=3, **opts), validate_evaluation_bundle))
+        for result, validate in runs:
+            with tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                result.write(root)
+                validate(root)
+                saved = json.loads((root / "manifest.json").read_text())
+                summary = getattr(result, "summary", None)
+                raw = (root / "predictions.csv").read_bytes()
+                for fold_scores, score, accepted in (([5e-15, 0.0], 0.0, False),
+                                                      ([0.0, 0.0], 5e-15, False),
+                                                      ([5e-324, 5e-324], 5e-324, True)):
+                    manifest = deepcopy(saved)
+                    location = manifest if summary is None else manifest["outer_folds"][0]
+                    record = location["inner_selection"][-1]
+                    record.update(inner_fold_scores=fold_scores, selection_score=score)
+                    write_bundle(root, manifest, summary, raw)
+                    verify_bundle(root)
+                    if accepted:
+                        validate(root)
+                    else:
+                        before = {p.name: p.read_bytes() for p in root.iterdir()}
+                        with self.assertRaisesRegex(ValueError, "selection score differs from its pooled fold"):
+                            validate(root)
+                        self.assertEqual(before, {p.name: p.read_bytes() for p in root.iterdir()})
+
+    def test_writer_small_positive_fold_and_pooled_scores_remain_valid(self):
+        import pandas as pd
+        from groupbench import benchmark, fit_predict
+
+        frame = pd.DataFrame({"g": list("abcdef") * 2, "x": range(12),
+                              "y": [i * 1e-140 for i in range(12)]})
+        opts = dict(target="y", group="g", baselines=(FAMILY,), inner_splits=2)
+        runs = ((fit_predict(frame, frame[["x"]].iloc[:2], **opts), validate_prediction_bundle_schema),
+                (benchmark(frame, outer_splits=3, **opts), validate_evaluation_bundle))
+        for result, validate in runs:
+            ledger = result.manifest.get("inner_selection")
+            if ledger is None:
+                ledger = result.manifest["outer_folds"][0]["inner_selection"]
+            for record in ledger:
+                self.assertTrue(0 < record["selection_score"] < 1e-135)
+                self.assertTrue(all(0 < score < 1e-135 for score in record["inner_fold_scores"]))
+            with tempfile.TemporaryDirectory() as root:
+                result.write(root)
+                validate(root)
+
     def test_new_versions_combinations_objectives_and_encodings(self):
         for families in [(FAMILY,), ("dummy", FAMILY), (FAMILY, "ridge", "extra_trees", "group_median", "nystroem_ridge")]:
             for encoding in ("legacy-v1", "distinct-v2"):
