@@ -333,6 +333,31 @@ class EvaluationSchemaTests(unittest.TestCase):
         self.mutate_json("manifest.json", lambda m: m.pop("feature_schema"))
         self.assertEqual(replay().returncode, 0)
 
+    def test_retained_feature_missing_counts_are_bounded_but_not_recomputed(self):
+        frame = pd.DataFrame({"g": ["a", "b", "c", "d"] * 2, "x": range(8),
+                              "z": [None] * 8, "y": [float(i*i) for i in range(8)]})
+        benchmark(frame, target="y", group="g", features=("x", "z"), baselines=("dummy",),
+                  outer_splits=2, inner_splits=2).write(self.root, overwrite=True)
+        manifest = json.loads((self.root / "manifest.json").read_text())
+        self.assertEqual([f["missing_count"] for f in manifest["feature_schema"]], [0, 8])
+        self.assertEqual(validate_evaluation_bundle(self.root).n_rows, 8)
+
+        for count in (9, -1, True, 3.0, None):
+            with self.subTest(count=count):
+                self.mutate_json("manifest.json", lambda m: m["feature_schema"][0].update(missing_count=count))
+                self.assertEqual(verify_bundle(self.root).bundle_type, "evaluation")
+                before = {p.name: p.read_bytes() for p in self.root.iterdir()}
+                with self.assertRaisesRegex(ValueError, "feature missing-count"):
+                    validate_evaluation_bundle(self.root)
+                self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
+
+        # Values consistent with shape are declarations; original features
+        # cannot be reconstructed, and old records can omit the count.
+        self.mutate_json("manifest.json", lambda m: m["feature_schema"][0].update(missing_count=3))
+        self.assertEqual(validate_evaluation_bundle(self.root).n_rows, 8)
+        self.mutate_json("manifest.json", lambda m: m["feature_schema"][0].pop("missing_count"))
+        self.assertEqual(validate_evaluation_bundle(self.root).n_rows, 8)
+
     def test_cli_rejects_outer_test_group_in_inner_audit(self):
         command = [sys.executable, "-m", "groupbench.cli", "validate-evaluation-bundle", str(self.root)]
         env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1] / "src"),

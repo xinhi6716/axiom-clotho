@@ -239,7 +239,7 @@ def _check_dummy_fold_predictions(manifest, observed, folds, fold_rows, predicti
                 _fail("Dummy mean differs from retained training labels.")
 
 
-def _check_declared_feature_order(manifest, config):
+def _check_declared_feature_order(manifest, config, n_rows):
     if "feature_schema" not in manifest:
         # Narrow historical schemas need not retain a feature roster.
         return
@@ -251,6 +251,10 @@ def _check_declared_feature_order(manifest, config):
         name = record.get("name") if isinstance(record, dict) else None
         if type(name) is not str or not name or "\0" in name:
             _fail("ordered feature schema contains an invalid feature identity.")
+        if "missing_count" in record:
+            missing = record["missing_count"]
+            if type(missing) is not int or not 0 <= missing <= n_rows:
+                _fail("feature missing-count declaration exceeds the retained row bounds.")
         names.append(name)
     if len(set(names)) != len(names) or config.get("features") != names:
         _fail("ordered feature schema differs from configured feature identities.")
@@ -467,7 +471,7 @@ def _check(manifest, summary, raw, *, require_run_key=False):
         if (type(data_digest) is not str or re.fullmatch(r"[0-9a-f]{64}", data_digest) is None
                 or manifest.get("run_key") != _evaluation_run_key(data_digest, config)):
             _fail("evaluation run-key declaration differs from the saved configuration and data fingerprint.")
-    _check_declared_feature_order(manifest, config)
+    _check_declared_feature_order(manifest, config, n)
     for fold, audit in enumerate(audits):
         test_groups = sorted(fold_groups[fold])
         # These explicit lists are part of the saved format, not row rescans.
