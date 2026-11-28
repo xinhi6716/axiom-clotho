@@ -195,16 +195,21 @@ def _check_duplicate_diagnostic_bounds(manifest, observed, groups):
     by_target = defaultdict(Counter)
     for label, group in zip(observed, groups):
         by_target[label][group] += 1
-    possible_rows = possible_across_rows = possible_patterns = 0
+    possible_rows = possible_patterns = 0
+    across_target_populations = []
     for counts in by_target.values():
         total = sum(counts.values())
         if total >= 2:
             possible_rows += total
         if len(counts) >= 2:
-            possible_across_rows += total
+            across_target_populations.append(total)
             # Each distinct cross-group feature/target pattern consumes a
             # disjoint pair from different groups with the same target.
             possible_patterns += min(total // 2, total - max(counts.values()))
+    # Every cross-group duplicate pattern has exactly one target, so P
+    # patterns can draw rows from at most P target populations. Several
+    # patterns at one target still cannot consume any row more than once.
+    possible_across_rows = sum(sorted(across_target_populations, reverse=True)[:across_patterns])
     if (duplicate_rows == 1 or duplicate_rows > possible_rows
             or across_rows > min(duplicate_rows, possible_across_rows)
             or (across_rows == 0) != (across_patterns == 0)

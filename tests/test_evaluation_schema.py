@@ -116,6 +116,29 @@ class EvaluationSchemaTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "evaluation run-key declaration"):
             validate_evaluation_bundle(self.root, require_run_key=True)
 
+    def test_cross_group_duplicate_rows_cannot_spread_one_pattern_across_targets(self):
+        # Three same-target pairs from different groups. No target has
+        # enough rows to explain three duplicated rows in one pattern.
+        frame = pd.DataFrame({"g": ["a", "b", "a", "b", "c", "d"],
+                              "x": [1, 1, 2, 2, 3, 3], "y": [1, 1, 2, 2, 3, 3]})
+        benchmark(frame, target="y", group="g", baselines=("dummy",),
+                  outer_splits=2, inner_splits=2).write(self.root, overwrite=True)
+        self.assertEqual(validate_evaluation_bundle(self.root).n_rows, 6)
+
+        def claim_impossible_pattern(manifest):
+            manifest["data_diagnostics"].update(
+                identical_feature_target_rows=4, identical_feature_target_rows_across_groups=3,
+                cross_group_duplicate_patterns=1)
+
+        self.mutate_json("manifest.json", claim_impossible_pattern)
+        self.assertEqual(verify_bundle(self.root).bundle_type, "evaluation")
+        before = {p.name: p.read_bytes() for p in self.root.iterdir()}
+        with self.assertRaisesRegex(ValueError, "duplicate diagnostics are impossible"):
+            validate_evaluation_bundle(self.root)
+        self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
+        self.mutate_json("manifest.json", lambda m: m.pop("data_diagnostics"))
+        self.assertEqual(validate_evaluation_bundle(self.root).n_rows, 6)
+
     def test_rehashed_false_metrics_fail_but_byte_contract_unchanged(self):
         self.mutate_json('summary.json', lambda d: d['models']['selected']['overall'].update(mae=123456.))
         self.assertEqual(verify_bundle(self.root).bundle_type, 'evaluation')
